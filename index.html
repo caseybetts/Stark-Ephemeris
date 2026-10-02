@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071016" />
+    <meta name="description" content="A satellite operations simulator prototype." />
+    <title>Stark Ephemeris — Mission Control</title>
+  </head>
+  <body>
+    <div id="app">
+      <main class="sim-shell">
+        <section class="globe-stage" aria-label="Earth and satellite visualization">
+          <div id="globe" class="globe"></div>
+          <div class="top-bar">
+            <a class="brand" href="#" aria-label="Stark Ephemeris home">
+              <span class="brand-mark" aria-hidden="true">S</span>
+              <span>
+                <strong>STARK EPHEMERIS</strong>
+                <small>EARTH OBSERVATION SYSTEMS</small>
+              </span>
+            </a>
+            <div class="mission-clock">
+              <span class="live-dot" aria-hidden="true"></span>
+              <span id="run-state">SIMULATION RUNNING</span>
+              <span class="clock-divider"></span>
+              <time id="sim-clock">T+00:00:00</time>
+            </div>
+            <div class="top-actions">
+              <button class="icon-button" id="track-toggle" type="button" aria-pressed="true">
+                <span class="track-icon" aria-hidden="true">⌁</span>
+                <span>ORBIT TRACK</span>
+              </button>
+              <button class="icon-button" id="pause-toggle" type="button" aria-pressed="false">
+                <span id="pause-icon" aria-hidden="true">Ⅱ</span>
+                <span id="pause-label">PAUSE</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="map-hud" aria-hidden="true">
+            <span>EARTH FIXED</span>
+            <span class="hud-separator">/</span>
+            <span>ORBITAL FRAME: SIMPLIFIED</span>
+          </div>
+
+          <div class="bottom-legend">
+            <span class="legend-item"><i class="legend-satellite"></i> SATELLITE</span>
+            <span class="legend-item"><i class="legend-station"></i> GROUND STATION</span>
+            <span class="legend-item"><i class="legend-target"></i> IMAGING MARKET</span>
+            <span class="legend-note">Surface status updates with the simulation clock</span>
+          </div>
+        </section>
+
+        <aside class="operations-panel" aria-label="Operations status">
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">FLEET OPERATIONS</p>
+              <h1>Mission Control</h1>
+            </div>
+            <button class="more-button" type="button" aria-label="More options">···</button>
+          </header>
+
+          <section class="satellite-card" aria-labelledby="satellite-name">
+            <div class="satellite-card-top">
+              <div class="satellite-identity">
+                <div class="satellite-symbol" aria-hidden="true"><span></span></div>
+                <div>
+                  <p class="eyebrow">SPACECRAFT 001</p>
+                  <h2 id="satellite-name">Asteria-1</h2>
+                </div>
+              </div>
+              <span class="status-pill status-good" id="sat-status"><i></i> TRACKED</span>
+            </div>
+            <div class="satellite-position">
+              <div>
+                <span class="metric-label">SUBSATELLITE POINT</span>
+                <strong id="sat-coordinate">—</strong>
+              </div>
+              <div class="altitude-value">
+                <span class="metric-label">ALTITUDE</span>
+                <strong id="sat-altitude">—</strong>
+              </div>
+            </div>
+            <div class="satellite-state-row">
+              <div class="state-item">
+                <span class="state-glyph sun-glyph" aria-hidden="true">☼</span>
+                <span class="state-copy"><small>POWER SOURCE</small><strong id="sat-sun-state">—</strong></span>
+              </div>
+              <div class="state-item">
+                <span class="state-glyph link-glyph" aria-hidden="true">⌁</span>
+                <span class="state-copy"><small>GROUND CONTACT</small><strong id="sat-contact-state">—</strong></span>
+              </div>
+            </div>
+          </section>
+
+          <section class="section-block" aria-labelledby="world-state-title">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">WORLD STATE</p>
+                <h2 id="world-state-title">Current conditions</h2>
+              </div>
+              <label class="time-factor" for="time-speed">TIME
+                <select id="time-speed" aria-label="Simulation speed">
+                  <option value="1">1×</option>
+                  <option value="60" selected>60×</option>
+                  <option value="300">300×</option>
+                </select>
+              </label>
+            </div>
+            <div class="condition-grid">
+              <article class="condition-card">
+                <span class="condition-icon sun-icon" aria-hidden="true">☼</span>
+                <div><small>SURFACE IN SUN</small><strong id="surface-sunlit">—</strong></div>
+              </article>
+              <article class="condition-card">
+                <span class="condition-icon eclipse-icon" aria-hidden="true">◐</span>
+                <div><small>SPACECRAFT ECLIPSE</small><strong id="eclipse-state">—</strong></div>
+              </article>
+            </div>
+            <div class="sun-indicator">
+              <div class="sun-indicator-copy"><span class="sun-ray" aria-hidden="true">☼</span><span>SUBSOLAR LONGITUDE</span></div>
+              <strong id="subsolar-longitude">—</strong>
+            </div>
+          </section>
+
+          <section class="section-block contact-block" aria-labelledby="contact-title">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">DOWNLINK NETWORK</p>
+                <h2 id="contact-title">Ground stations</h2>
+              </div>
+              <span class="network-count" id="station-count">—</span>
+            </div>
+            <div class="station-list" id="station-list" aria-live="polite"></div>
+            <p class="approximation-note">FIXED <b id="contact-radius">—</b> KM CONTACT RADIUS · NOT A RADIO LINK MODEL.</p>
+          </section>
+
+          <section class="section-block location-block" aria-labelledby="locations-title">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">SURFACE ASSETS</p>
+                <h2 id="locations-title">Locations</h2>
+              </div>
+              <span class="network-count" id="location-count">—</span>
+            </div>
+            <div class="location-list" id="location-list" aria-live="polite"></div>
+          </section>
+
+          <footer class="panel-footer">
+            <span class="footer-live"><i></i> WORLD MODEL ACTIVE</span>
+            <span>PROTOTYPE 0.1</span>
+          </footer>
+        </aside>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

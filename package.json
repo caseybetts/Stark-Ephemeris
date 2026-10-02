@@ -1,0 +1,31 @@
+{
+  "name": "stark-ephemeris",
+  "version": "1.0.0",
+  "description": "Earth-imagery satellite operations simulator prototype",
+  "scripts": {
+    "predev": "node scripts/copy-cesium-assets.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/copy-cesium-assets.mjs",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caseybetts/Stark-Ephemeris.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/caseybetts/Stark-Ephemeris/issues"
+  },
+  "homepage": "https://github.com/caseybetts/Stark-Ephemeris#readme",
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2"
+  },
+  "dependencies": {
+    "cesium": "^1.146.0"
+  }
+}
