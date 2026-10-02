@@ -30,14 +30,24 @@ These are intended subject areas; the specific formulas and interactions remain 
 
 ## Interface needs
 
-The initial interface should prioritize status tabs or panels for:
+### Agreed layout and navigation
+
+- Keep the globe/visualization at the top of the screen and show the selected data view below it.
+- The data area has tabs for **Summary**, **Spacecraft**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default tab and replaces the current single readout as the overview.
+- Summary brings together fleet-wide and company information, current exceptions, and the operational indicators that need attention.
+- Use tables wherever they suit lists and comparisons, especially in Spacecraft, Orders, and Ground Stations. Selecting a row should make its subject easy to locate in the globe view.
+- The Orders view includes an order list and can control the order-count or potential-value heat map on the globe.
+
+### Information each view should support
 
 - Fleet and individual satellite state, including onboard data, energy, health, and current work.
 - Operations and exceptions requiring attention.
 - Revenue and other business performance.
 - The next growth choices available to the company.
+- Ground-station location, status, capacity, and contact activity.
+- Active order status, value, target, and collection constraints.
 
-A visual Earth with orbit paths and satellite markers is desirable context. The first version may be a simplified, primarily informational view; detailed interaction with the globe is not required by the current brief.
+A visual Earth with orbit paths and satellite markers is operational context. Detailed interaction with the globe is not required by the current brief, though selecting a row should connect its data to its location on the globe.
 
 ## Design principles
 

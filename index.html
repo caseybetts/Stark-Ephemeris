@@ -52,15 +52,29 @@
           </div>
         </section>
 
-        <aside class="operations-panel" aria-label="Operations status">
+        <section class="operations-panel" aria-label="Management data">
           <header class="panel-header">
             <div>
-              <p class="eyebrow">FLEET OPERATIONS</p>
-              <h1>Mission Control</h1>
+              <p class="eyebrow">COMPANY OPERATIONS</p>
+              <h1 id="active-view-title">Summary</h1>
             </div>
-            <button class="more-button" type="button" aria-label="More options">···</button>
+            <p class="panel-context">PROTOTYPE OPERATIONS CONSOLE</p>
           </header>
 
+          <div class="management-tabs" role="tablist" aria-label="Management views">
+            <button class="management-tab" id="tab-summary" type="button" role="tab" aria-selected="true" aria-controls="panel-summary" tabindex="0">Summary</button>
+            <button class="management-tab" id="tab-spacecraft" type="button" role="tab" aria-selected="false" aria-controls="panel-spacecraft" tabindex="-1">Spacecraft</button>
+            <button class="management-tab" id="tab-orders" type="button" role="tab" aria-selected="false" aria-controls="panel-orders" tabindex="-1">Orders</button>
+            <button class="management-tab" id="tab-ground-stations" type="button" role="tab" aria-selected="false" aria-controls="panel-ground-stations" tabindex="-1">Ground Stations</button>
+            <button class="management-tab" id="tab-finance-growth" type="button" role="tab" aria-selected="false" aria-controls="panel-finance-growth" tabindex="-1">Finance &amp; Growth</button>
+          </div>
+
+          <section class="tab-panel-stack">
+          <section class="management-tabpanel" id="panel-summary" role="tabpanel" aria-labelledby="tab-summary" tabindex="0">
+          <div class="summary-intro">
+            <p class="eyebrow">LIVE WORLD MODEL</p>
+            <p>Prototype spacecraft and Earth conditions update as the simulation runs. Company and fleet-wide metrics will appear when those systems are defined.</p>
+          </div>
           <section class="satellite-card" aria-labelledby="satellite-name">
             <div class="satellite-card-top">
               <div class="satellite-identity">
@@ -146,12 +160,27 @@
             </div>
             <div class="location-list" id="location-list" aria-live="polite"></div>
           </section>
+          </section>
+
+          <section class="management-tabpanel placeholder-panel" id="panel-spacecraft" role="tabpanel" aria-labelledby="tab-spacecraft" tabindex="0" hidden>
+            <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">◉</span><p class="eyebrow">FLEET MANAGEMENT</p><h2>Spacecraft roster is not available yet</h2><p>This view will become a fleet table when spacecraft records and multi-satellite operations are implemented. The current prototype satellite remains visible in Summary and on the globe.</p></div>
+          </section>
+          <section class="management-tabpanel placeholder-panel" id="panel-orders" role="tabpanel" aria-labelledby="tab-orders" tabindex="0" hidden>
+            <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">⌖</span><p class="eyebrow">IMAGING MARKET</p><h2>Orders are not available yet</h2><p>Order generation, acquisition, customer requirements, and the order map layer are planned systems. No order or revenue data is simulated yet.</p></div>
+          </section>
+          <section class="management-tabpanel placeholder-panel" id="panel-ground-stations" role="tabpanel" aria-labelledby="tab-ground-stations" tabindex="0" hidden>
+            <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">⌁</span><p class="eyebrow">DOWNLINK NETWORK</p><h2>Ground-station table is not available yet</h2><p>The current station definitions and approximate range calculations appear in Summary. A searchable station table is planned as a separate implementation item.</p></div>
+          </section>
+          <section class="management-tabpanel placeholder-panel" id="panel-finance-growth" role="tabpanel" aria-labelledby="tab-finance-growth" tabindex="0" hidden>
+            <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">↗</span><p class="eyebrow">COMPANY PERFORMANCE</p><h2>Finance and growth are not available yet</h2><p>Revenue, costs, customer satisfaction, launch planning, and company growth rules have not been implemented. This view will be populated when those systems are defined.</p></div>
+          </section>
+          </section>
 
           <footer class="panel-footer">
             <span class="footer-live"><i></i> WORLD MODEL ACTIVE</span>
             <span>PROTOTYPE 0.1</span>
           </footer>
-        </aside>
+        </section>
       </main>
     </div>
     <script type="module" src="/src/main.ts"></script>

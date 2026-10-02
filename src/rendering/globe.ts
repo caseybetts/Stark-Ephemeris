@@ -1,32 +1,42 @@
 import {
-  ArcType,
   Cartesian2,
   Cartesian3,
   Color,
   ConstantProperty,
   ConstantPositionProperty,
   EllipsoidTerrainProvider,
+  GeometryInstance,
   HeightReference,
   HorizontalOrigin,
   LabelStyle,
-  PolylineGlowMaterialProperty,
+  Material,
+  Matrix3,
+  Matrix4,
+  PolylineGeometry,
+  PolylineMaterialAppearance,
+  Primitive,
   TileMapServiceImageryProvider,
   VerticalOrigin,
   Viewer,
 } from "cesium";
+import { SIMULATED_DAY_SECONDS } from "../simulation/constants";
 import type { SatelliteDefinition, SurfaceObject, WorldSnapshot } from "../simulation/model";
 import { rotateInertialToEarthFixed, satellitePositionInertial } from "../simulation/world";
 import { earthFixedKilometersToCartesian, locationToCartesian } from "./coordinates";
 
 export type GlobeView = {
   viewer: Viewer;
-  update(snapshot: WorldSnapshot, satellite: SatelliteDefinition): void;
+  update(snapshot: WorldSnapshot): void;
   setTrackVisible(visible: boolean): void;
   setSurfaceObjectsVisible(visible: boolean): void;
   destroy(): void;
 };
 
-function orbitPathPositions(satellite: SatelliteDefinition, elapsedSeconds: number): Cartesian3[] {
+function inertialKilometersToCartesian(positionKm: { x: number; y: number; z: number }): Cartesian3 {
+  return new Cartesian3(positionKm.x * 1_000, positionKm.y * 1_000, positionKm.z * 1_000);
+}
+
+function orbitPathPositions(satellite: SatelliteDefinition): Cartesian3[] {
   const path: Cartesian3[] = [];
   const samples = 180;
 
@@ -36,11 +46,19 @@ function orbitPathPositions(satellite: SatelliteDefinition, elapsedSeconds: numb
       { ...satellite.orbit, initialPhaseDeg: phaseDegrees },
       0,
     );
-    const earthFixed = rotateInertialToEarthFixed(position, elapsedSeconds);
-    path.push(earthFixedKilometersToCartesian(earthFixed));
+    path.push(inertialKilometersToCartesian(position));
   }
 
   return path;
+}
+
+function orbitEarthFixedMatrix(elapsedSeconds: number): Matrix4 {
+  const earthAngle = (2 * Math.PI * elapsedSeconds) / SIMULATED_DAY_SECONDS;
+  return Matrix4.fromRotationTranslation(
+    Matrix3.fromRotationZ(-earthAngle),
+    Cartesian3.ZERO,
+    new Matrix4(),
+  );
 }
 
 function addSurfaceObject(viewer: Viewer, object: SurfaceObject) {
@@ -56,7 +74,6 @@ function addSurfaceObject(viewer: Viewer, object: SurfaceObject) {
       outlineColor: Color.fromCssColorString("#071016"),
       outlineWidth: 2,
       heightReference: HeightReference.NONE,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
     label: {
       text: object.name.toUpperCase(),
@@ -68,7 +85,6 @@ function addSurfaceObject(viewer: Viewer, object: SurfaceObject) {
       horizontalOrigin: HorizontalOrigin.LEFT,
       verticalOrigin: VerticalOrigin.CENTER,
       pixelOffset: new Cartesian2(11, 0),
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
   });
 }
@@ -128,7 +144,6 @@ export async function createGlobeView(
       outlineColor: Color.fromCssColorString("#161c0b"),
       outlineWidth: 3,
       heightReference: HeightReference.NONE,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
     label: {
       text: satellite.name.toUpperCase(),
@@ -140,23 +155,29 @@ export async function createGlobeView(
       pixelOffset: new Cartesian2(0, -22),
       horizontalOrigin: HorizontalOrigin.CENTER,
       verticalOrigin: VerticalOrigin.BOTTOM,
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
     },
   });
 
-  const orbitEntity = viewer.entities.add({
-    id: `${satellite.id}-orbit`,
-    name: `${satellite.name} orbit`,
-    polyline: {
-      positions: new ConstantProperty(orbitPathPositions(satellite, 0)),
-      width: 2,
-      material: new PolylineGlowMaterialProperty({
-        glowPower: 0.12,
-        color: Color.fromCssColorString("#e3e977").withAlpha(0.74),
+  const orbitPrimitive = viewer.scene.primitives.add(
+    new Primitive({
+      geometryInstances: new GeometryInstance({
+        geometry: new PolylineGeometry({
+          positions: orbitPathPositions(satellite),
+          width: 2,
+          vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
+        }),
       }),
-      arcType: ArcType.NONE,
-    },
-  });
+      appearance: new PolylineMaterialAppearance({
+        material: Material.fromType("PolylineGlow", {
+          color: Color.fromCssColorString("#e3e977").withAlpha(0.74),
+          glowPower: 0.12,
+        }),
+        translucent: true,
+      }),
+      modelMatrix: orbitEarthFixedMatrix(0),
+      asynchronous: false,
+    }),
+  );
 
   const surfaceEntities = surfaceObjects.map((object) => ({
     object,
@@ -165,13 +186,11 @@ export async function createGlobeView(
 
   return {
     viewer,
-    update(snapshot, activeSatellite) {
+    update(snapshot) {
       satelliteEntity.position = new ConstantPositionProperty(
         earthFixedKilometersToCartesian(snapshot.satelliteEarthFixedKm),
       );
-      orbitEntity.polyline!.positions = new ConstantProperty(
-        orbitPathPositions(activeSatellite, snapshot.elapsedSeconds),
-      );
+      orbitPrimitive.modelMatrix = orbitEarthFixedMatrix(snapshot.elapsedSeconds);
 
       for (const { object, entity } of surfaceEntities) {
         if (object.kind === "imaging-market") {
@@ -184,7 +203,7 @@ export async function createGlobeView(
       viewer.scene.requestRender();
     },
     setTrackVisible(visible) {
-      orbitEntity.show = visible;
+      orbitPrimitive.show = visible;
       viewer.scene.requestRender();
     },
     setSurfaceObjectsVisible(visible) {

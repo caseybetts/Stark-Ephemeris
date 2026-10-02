@@ -165,13 +165,22 @@ The coordinate model should make it possible to calculate distance and visibilit
 - Surface objects use their geographic coordinates, with type/attributes held as data rather than embedded in the 3D mesh.
 - Graphics support inspection of operations; they are not the primary game system.
 
-### Prototype screen
+### Agreed management layout
 
-- Main viewport: Earth globe, visible surface objects, satellite marker, optional orbit path.
+- Keep the globe/visualization at the top and the active data view below it.
+- Provide **Summary**, **Spacecraft**, **Orders**, **Ground Stations**, and **Finance & Growth** tabs, with Summary selected by default.
+- Summary includes fleet-wide and company information plus operational exceptions and key indicators that need attention.
+- Use tables wherever they work well, particularly for spacecraft, orders, and ground stations. A selected record should be identifiable on the globe.
+- The Orders tab provides list search, filters, sorting, order details, and controls for the order-count or potential-value heat map.
+
+### Current prototype slice
+
+- Globe area: Earth globe, visible surface objects, satellite marker, optional orbit path.
 - Compact controls: pause/resume, orbit-track toggle, and 1×/60×/300× speed selector, starting at 60×.
-- Compact satellite status: current latitude/longitude, altitude, solar/eclipse state, nearest station distance, and station contact.
-- World-state status: subsolar longitude and which sample surface points/markets are in daylight.
-- Later tabs/panels: fleet, operations, revenue, and growth, as described in the gameplay brief. Their detailed layouts and metrics are open.
+- The vertical management interface has five tabs: Summary (default), Spacecraft, Orders, Ground Stations, and Finance & Growth.
+- Summary presents the current prototype satellite status, world-state status, approximate station range, and daylight state of sample points/markets. It explicitly notes that company and fleet-wide metrics are not yet modeled.
+- Spacecraft, Orders, Ground Stations, and Finance & Growth currently show labeled placeholders until their corresponding gameplay systems or table views are implemented.
+- Changing tabs only changes visible interface content; it does not restart or pause the simulation.
 
 The prototype has a fixed initial camera, labeled sample markers, responsive CSS, and a simple map layer. Advanced camera interactions, selecting multiple satellites, image footprints, true day/night shading, and accessibility polish remain to be designed.
 

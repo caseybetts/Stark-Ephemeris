@@ -141,7 +141,48 @@ function renderSnapshot(snapshot: ReturnType<typeof createWorldSnapshot>): void 
   renderLocations(snapshot);
 }
 
+function setupManagementTabs(): void {
+  const tabs = [...document.querySelectorAll<HTMLButtonElement>("[role='tab']")];
+  const panels = [...document.querySelectorAll<HTMLElement>("[role='tabpanel']")];
+  const activeViewTitle = document.querySelector<HTMLElement>("#active-view-title");
+
+  const selectTab = (selectedTab: HTMLButtonElement, moveFocus = false) => {
+    tabs.forEach((tab) => {
+      const selected = tab === selectedTab;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      const panel = document.getElementById(tab.getAttribute("aria-controls") ?? "");
+      if (panel) panel.hidden = !selected;
+    });
+    if (activeViewTitle) activeViewTitle.textContent = selectedTab.textContent?.trim() ?? "Summary";
+    if (moveFocus) selectedTab.focus();
+  };
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => selectTab(tab));
+    tab.addEventListener("keydown", (event: KeyboardEvent) => {
+      let nextIndex: number | undefined;
+      if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+      if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+      if (event.key === "Home") nextIndex = 0;
+      if (event.key === "End") nextIndex = tabs.length - 1;
+      if (nextIndex !== undefined) {
+        event.preventDefault();
+        selectTab(tabs[nextIndex], true);
+      }
+    });
+  });
+
+  const initiallySelected = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+  if (initiallySelected) selectTab(initiallySelected);
+  panels.forEach((panel) => {
+    const selectedTab = tabs.find((tab) => tab.getAttribute("aria-controls") === panel.id);
+    panel.hidden = !selectedTab || selectedTab !== initiallySelected;
+  });
+}
+
 async function start(): Promise<void> {
+  setupManagementTabs();
   elements.contactRadius.textContent = EFFECTIVE_CONTACT_RADIUS_KM.toLocaleString();
   elements.stationList.innerHTML = '<div class="loading-row">CALCULATING ACCESS WINDOWS…</div>';
 
@@ -180,7 +221,7 @@ async function start(): Promise<void> {
 
     if (frameMilliseconds - previousUiUpdate > 120) {
       const snapshot = createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds);
-      globe.update(snapshot, satellite);
+      globe.update(snapshot);
       renderSnapshot(snapshot);
       previousUiUpdate = frameMilliseconds;
     }
@@ -189,7 +230,7 @@ async function start(): Promise<void> {
   };
 
   const firstSnapshot = createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds);
-  globe.update(firstSnapshot, satellite);
+  globe.update(firstSnapshot);
   renderSnapshot(firstSnapshot);
   requestAnimationFrame(animate);
 }

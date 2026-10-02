@@ -10,6 +10,7 @@ This folder contains the shared brief for product, gameplay, and implementation 
 | [Gameplay](GAMEPLAY.md) | Player loop, simulation systems, interface needs, and unresolved design questions |
 | [Technical strategy](TECHNICAL_STRATEGY.md) | Browser/deployment constraints, architecture direction, data and persistence approach |
 | [Implementation outline](IMPLEMENTATION_OUTLINE.md) | Code boundaries, coordinate and orbit calculations, candidate first slice, and gaps an implementation agent must resolve |
+| [Pending Changes](PENDING_CHANGES.md) | User-selectable implementation work items, dependencies, and open design decisions |
 
 ## Keeping the brief useful
 

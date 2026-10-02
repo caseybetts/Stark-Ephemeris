@@ -20,6 +20,22 @@ This document records implementation constraints and architecture direction. The
 - Build the app as a static client-side bundle suitable for GitHub Pages. Avoid adding a backend unless a future requirement needs hosted persistence, user accounts, or shared state.
 - If local saves are added, version the save format so later builds can detect or migrate older data.
 
+## Management interface
+
+### Agreed direction
+
+- Preserve the macro layout with the globe/visualization at the top and the active data view below it.
+- The data view uses tabs for **Summary**, **Spacecraft**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default and replaces the current single readout as the overview.
+- Summary combines fleet-wide state, company information, operational exceptions, and key indicators that need attention.
+- Prefer tables for lists and comparisons, especially spacecraft, orders, and ground stations. Selecting a row should connect that record to its object or location on the globe.
+- The Orders view includes the searchable, filterable, sortable order list and order details. Its heat-map controls select active-order count or aggregate potential order value.
+
+### Open interface decisions
+
+- Exact columns, summary metrics, sorting defaults, and detail-panel contents for each tab.
+- How selected table rows focus or highlight objects in the globe, and how that interaction works on narrow screens.
+- Whether tables should support bulk actions as fleet and order volumes grow.
+
 ## Earth coordinates and orbit display
 
 ### Agreed direction
@@ -38,6 +54,40 @@ This document records implementation constraints and architecture direction. The
 - Keep the concepts of a 3D orbital path and a surface ground track distinct. The initial optional line is the 3D orbit path; a projected ground track can be added separately if it helps explain coverage.
 - Use the same game-time/world model as the basis for later sunlight and eclipse calculations.
 - If using CesiumJS, wrap its coordinate helpers so game code uses named fields and explicit units rather than positional arguments or library-specific types.
+
+## Revenue orders and imaging opportunities
+
+### Agreed direction
+
+- Orders are demand records, separate from images a satellite actually collects. An order can be fulfilled only after a qualifying acquisition and whatever later delivery steps the gameplay rules require.
+- The first order targets are geographic points, authored with latitude/longitude. A captured image is nominally a 20 km by 20 km ground footprint.
+- Order terms include monetary value, cloud-cover tolerance, maximum off-nadir angle, and minimum acceptable Sun elevation. Exact evaluation and payout rules remain open.
+- Each satellite has a slew-speed capability. A paid upgrade applies to satellites launched afterward; slew-speed units, upgrade cost, and the capability increase remain to be specified.
+- Order distribution should be controllable using weights for urban versus rural locations, continent, and coastal versus inland locations. The distribution logic should be replaceable and configurable so different market patterns can be explored and can change over the course of a scenario.
+- A toggleable, cell-based globe heat map should support both active-order count and aggregate potential order value as display metrics. Potential value must be identified as uncollected demand, separate from earned revenue.
+- Provide an Orders tab with a searchable, filterable, sortable list and an order detail view, alongside the globe heat map. Use paging or list virtualization if the active deck grows enough to make rendering every row inefficient.
+
+### Proposed implementation shape
+
+- Keep order generation in a simulation/domain module that accepts an explicit distribution profile rather than embedding geography weights in UI code. Profiles can combine geographic classifications with time-dependent weights; the exact combination and transition rules are open.
+- Generate order targets from a seeded scenario stream so distribution experiments can be reproduced. A profile change should affect future generation; already-issued orders retain the terms they were generated with unless an explicit gameplay rule changes them.
+- Keep order demand and acquisition records as separate domain data. An acquisition record describes the satellite, time, aimpoint, footprint, and observed conditions; order fulfillment logic compares that record with active order requirements.
+- Use a geographic cell index to query nearby orders during an imaging opportunity and to aggregate heat-map values. Thousands of active orders are a reasonable prototype target when they are spatially indexed and evaluated at simulation opportunities rather than scanned on every rendered frame. Do not create one globe entity per order by default.
+- Draw the heat map as a toggleable cell layer. Its initial cell size, color normalization, and exact rendering representation are open tuning choices.
+- When a satellite images a target, show a temporary line from the satellite to the aimpoint; a footprint outline can be shown as a compact cue. Do not render image pixels in the initial implementation.
+
+### Open implementation and gameplay decisions
+
+- How the nominal 20 km by 20 km footprint changes, if at all, when imaging off-nadir; the first implementation may use a fixed ground footprint and treat off-nadir as an access/quality constraint.
+- The point-matching rule between an order and an image footprint, including whether one acquisition may satisfy multiple orders.
+- Whether orders expire, have deadlines, or require delivery by a specific time, and when their value becomes earned revenue.
+- The cloud model and the meaning of cloud-cover tolerance over a footprint.
+- How Sun elevation is measured for a point target and how it interacts with image quality or value.
+- Slew-speed units, the time required to retarget, whether pointing limits are separate from slew speed, and the effects of an upgrade on procurement and future spacecraft capability.
+- The source, format, resolution, and license for population/urban, continent, and coastal classifications.
+- How distribution weights combine, how profiles transition over time, and whether the player receives advance notice of market shifts.
+- Heat-map cell resolution and normalization; order count and aggregate potential value may have very different numeric ranges.
+- Active-order capacity.
 
 ### Provisional prototype conventions
 
