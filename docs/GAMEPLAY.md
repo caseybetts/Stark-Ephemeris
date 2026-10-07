@@ -95,16 +95,37 @@ A visual Earth with orbit paths and satellite markers is operational context. De
 - Recalculate VAM immediately when simulation time, market cadence, or player-set priority rates change. Treat payout and priority points as calculated values, not stored balances. An optional cell-level `atMaximum` cache is true only when all contributing categories are fully recovered; invalidate it whenever relevant market data changes.
 - A successful collection completion calculates and records the payout, credits company money once, and resets the cell timestamp as one operation. A failed collection does not pay or reset the cell.
 
-#### Open curve parameters and scheduling rule
+#### Agreed scheduling behavior
 
-How the scheduler ranks available cell priority against access, collection time, satellite constraints, and payout remains **Open**. The player-set category priority rates themselves are the priority controls; there is no additional emphasis setting.
+- Scheduling uses both geometry and time. Geometry determines which cells are in a satellite's reachable observation opportunities; timing determines whether the satellite can turn, collect, and finish before that opportunity closes. The player's category priority rates determine which feasible work is most valuable to schedule.
+- The player does not choose among scheduler algorithms or use a separate "emphasis" control. Category priority rates already express the player's scheduling strategy.
+- While a collection is underway, the scheduler must identify and hold the next collection target. It may reconsider targets after that one. In other words, the current collection and the next collection are committed; later collections in a plan are tentative.
+- Use a rolling lookahead of two simulation minutes beyond the next collection, rather than two minutes from the collection currently underway. Replanning windows overlap: as one collection completes and the locked next collection begins, promote the following target to "next" and extend the lookahead.
+- Use the current collection, slew, and locked next collection's execution time to calculate and refresh the plan. Have the next target ready when it is needed; do not insert extra simulated waiting solely for schedule computation.
+- The lookahead's exact boundary is **Open**: whether the two minutes begin at the locked collection's start or completion has not been confirmed. The current implementation proposal is to begin the two-minute window after its completion, so the window covers follow-on opportunities after the committed collection.
+- A plan's main objective is the total available priority points expected from feasible collections completed in its lookahead. Predict VAM at each planned completion and apply the shared cell timestamp behavior; only planned successful captures reset that cell's timestamp in the projected plan. Payout remains visible to the player but does not get multiplied into this scheduling score.
+- A short, bounded search should compare several plausible target sequences instead of enumerating every possible combination. The first feasible target is committed; the remainder may change as the satellite advances, new information arrives, or the player edits category priorities. Prefer a simpler, broadly sensible plan over a search that aims to guarantee a mathematically perfect schedule.
+- Cloud cover is an unpredictable source of collection failure. The scheduler should not assume perfect weather knowledge. A future cloud forecast may help compare opportunities, but actual conditions determine the capture outcome and some opportunities will be missed by luck. A failed capture does not pay or reset VAM, as agreed above.
+
+#### Proposed scheduling method
+
+1. Generate candidate cell opportunities in the two-minute lookahead using predicted satellite position and the current access and pointing limits.
+2. Reject sequences that cannot fit the required turn and collection durations inside each opportunity. These limits and durations are still to be designed.
+3. Start with a quick greedy feasible plan, then use a bounded beam search: extend a limited set of the best partial sequences with promising next cells, and stop at the horizon or a fixed search budget. Keep the greedy result as a known feasible fallback. Search width, candidate limits, and search budget are tuning choices, not gameplay rules.
+4. Compare sequences by total expected available priority. Candidate ranking may retain a mix of high-priority, nearby, and soon-to-close opportunities so the search does not ignore convenient multi-cell sequences. Lower total turning and waiting time can break ties.
+5. While A is executing, keep B as the locked next collection and build a tentative continuation C, D, and onward beyond B. When A finishes and B begins, promote C to the locked next collection; leave D and later choices tentative. Show an understandable reason for the locked next choice and notable skipped alternatives where the interface supports it.
+
+If cloud forecast data is available, one proposed comparison is `available priority × estimated probability of a usable capture`. This estimate affects selection only; it does not change the displayed cell priority or the payout formula. Do not reroll the same forecast every time the scheduler revisits a candidate. The weather model, forecast accuracy, cloud threshold for a usable whole-cell image, effects of failure on time/resources, and retry policy remain **Open**.
 
 ### Open design questions
 
 - Whether to approve or revise the proposed sourced-attribute mapping and how overlapping features/categories are handled, including whether the same area can contribute to multiple categories.
 - The starting market prices, player-set category priority rates, and refresh cadences, plus how market information changes over time.
-- How the scheduler ranks total available category priority points against access, collection time, satellite constraints, and payout.
-- How collection time and image quality affect the immediate payout, and how storage/downlink costs or capacity remain relevant after sale.
+- The two-minute lookahead boundary relative to the locked next collection, the search budget, and tie-break rules.
+- Satellite access geometry, pointing limit, slew speed, collection duration, and which changes are important enough to cancel or replace the locked next target.
+- The idle reconsideration interval and the retry policy after a failed collection.
+- How cloud conditions determine usable image quality, how imperfect forecasts feed the scheduler, and how failure affects time and spacecraft resources.
+- How storage/downlink costs or capacity remain relevant after sale.
 - Whether customer contracts, deadlines, or named monitoring sites should be added as an optional layer later.
 - Where and how to present category rates, per-cell exposures and revenue contributions, calculated gross cell value, and any repeat-purchase/freshness state, including heat-map normalization.
 

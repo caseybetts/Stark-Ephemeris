@@ -97,6 +97,19 @@ This document records implementation constraints and architecture direction. The
 - Draw the market as a toggleable cell layer. Cell resolution is agreed at ¼°; color normalization, zoom-level aggregation, and exact rendering representation remain open tuning choices.
 - When a satellite collects a cell, a temporary line or compact footprint cue may connect the satellite to the collection area. Do not render image pixels in the initial implementation.
 
+### Proposed automatic cell scheduler
+
+- Keep schedule search in the simulation layer and make it deterministic from the same simulation time, orbit/access predictions, cell-market snapshot, spacecraft capabilities, and forecast inputs. It should not depend on Cesium rendering or wall-clock frame rate.
+- Treat the current collection and the next collection as committed. While collection A executes, keep B locked as the next collection and build or refresh tentative entries C onward after B. When A completes and B starts, promote C to the locked next collection; later entries remain replaceable. Roll the horizon forward so successive windows overlap.
+- Use the current collection, slew, and the locked next collection's execution time to compute the follow-on schedule. Have the next target ready before it is needed; do not impose a separate simulated planning delay.
+- The agreed lookahead length is two simulation minutes measured beyond the next collection, but whether the interval begins at that collection's start or completion remains open. Proposed initial interpretation: start after its completion.
+- Build candidate opportunities from geometric access windows and time feasibility. Include time to slew and to complete the whole-cell collection before the opportunity closes. Exact pointing limits, slew speeds, collection durations, and capability/resource constraints are not defined yet.
+- Use bounded search rather than exhaustive permutation of all opportunities. Proposed baseline: produce a quick feasible greedy plan, expand a limited beam of alternative partial sequences, and retain the best feasible schedule found within a fixed candidate/iteration budget. Commit only the first target; keep the prior feasible continuation as fallback while replanning.
+- Score a sequence by total available category priority points projected at each capture completion. Projected successful captures reset each cell's shared collection timestamp for later entries in that sequence. Category priority rates remain the player's strategic controls; do not add a separate emphasis setting or multiply payout into priority.
+- Weather is uncertain. A forecast can optionally weight expected available priority by probability of a usable capture, while a separate simulated weather outcome determines success. Do not treat forecast as perfect knowledge or reroll it on each planning pass. Failure must not credit payout or reset VAM. Failure costs, image quality thresholds, and retry behavior remain open.
+- Reconsider after an action completes and when player priorities or relevant forecasts/constraints change. An idle polling interval and thresholds for replacing a still-feasible locked target are proposals requiring tuning; a working committed action should not thrash in response to small score changes.
+- Preserve an explanation of the chosen target and main skipped alternatives so the player can understand the schedule.
+
 ### Immediate integration milestone
 
 CELL-03A in [Pending Changes](PENDING_CHANGES.md) is implemented. `src/simulation/prototypeCellMarket.ts` provides explicit sample scenario inputs; the app owns one market model and supplies its simulation time. Orders reads cell snapshots and submits player priority changes, while sample market rates remain read-only. Only the selected cell and visible table rows refresh when time or inputs change; the entire grid is not recalculated on render frames. Tab switches preserve the model instance.
@@ -111,8 +124,9 @@ Future Orders work should add sorting/filtering against calculated dollar value,
 - Whether to approve/revise the proposed geographic-to-category mapping and how its overlapping area/count/presence measures combine into category-level maximum in-game values; no adjustment solely for land fraction is planned.
 - How market category prices and refresh cadences change over time; changes immediately recalculate derived payout and priority using the existing per-cell timestamp.
 - Approval of the proposed category-to-source mapping and exact count semantics for mixed record/polygon layers; starting market prices/player priority rates/cadences and how market information changes over time.
-- How the scheduler ranks available priority points against payout, access, and satellite constraints to select the next cell.
-- How cloud cover, Sun elevation, off-nadir access, slew time, satellite capability, and collection duration affect successful cell collection and/or payout.
+- Exact horizon boundary, bounded-search method and budget, idle reconsideration interval, and rules for replacing a still-feasible locked target.
+- How Sun elevation, off-nadir access, slew limits, collection duration, and satellite resources constrain opportunities and successful cell collection.
+- How cloud forecasts estimate usable captures, how actual weather determines success, and what failure costs or retry rules apply.
 - What post-sale storage, downlink, processing, or delivery constraints and costs to model; these do not defer the agreed immediate cell-sale revenue.
 - Whether individual customer contracts, deadlines, or named monitoring sites are useful as an optional layer beyond the cell market.
 - How polar and dateline cells are represented for collection geometry, and how the heat-map layer aggregates and normalizes at different zoom levels.

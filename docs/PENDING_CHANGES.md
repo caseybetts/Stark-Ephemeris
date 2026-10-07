@@ -111,11 +111,23 @@ For each cell-category, maximum payout is applicable market unit price × eligib
 
 **Implemented preview:** CELL-03B now exposes successful and failed-attempt previews, explicit shared-clock advances, cash and category recovery readouts, and reset in Orders. The preview is a verification tool, not the automatic collection lifecycle.
 
-**Work remaining:** Final rates, market trends, starting budget, scheduler ranking, and real capture access/duration/failure rules remain separate gameplay work. Keep category approval and overlap choices from CELL-01 visible.
+**Work remaining:** Final rates, market trends, starting budget, automatic scheduler, and real capture access/duration/failure rules remain separate gameplay work. Keep category approval and overlap choices from CELL-01 visible. The current scheduler direction is recorded in [Gameplay](GAMEPLAY.md#agreed-scheduling-behavior); it is a planning brief, not an implemented scheduler.
 
 **Done when:** Per-category payout is market unit price × eligible exposure × VAM; per-category priority is player-set priority rate × eligible exposure × VAM; the two totals are inspectable separately; never-collected cells start at VAM 1; time/input changes update calculated values immediately; capture credits the sum of payouts once and resets the timestamp; market data is not player-editable; and changing priority rates affects scheduling without changing payout. Domain state and the manual Orders preview are implemented; automatic capture/scheduling is not.
 
-**Open choices:** Approval/revision of CELL-01's proposed category mapping and treatment of overlapping categories/features; starting prices, priority rates, and cadences and their trends; how the scheduler ranks available priority against payout, access, and satellite constraints; starting company cash; collection timing/cost; and the role of clouds/Sun/off-nadir/slew capability.
+**Open choices:** Approval/revision of CELL-01's proposed category mapping and treatment of overlapping categories/features; starting prices, priority rates, and cadences and their trends; starting company cash; and collection timing/cost. Scheduler details are tracked in CELL-04.
+
+### CELL-04 — Plan and schedule automatic cell collections
+
+**Status:** Design direction captured; implementation details remain open.
+
+**Agreed behavior:** Combine geometric access opportunities, time feasibility, and the player's category priority rates. The current collection and next collection are committed; later choices can change. Use a rolling two-simulation-minute lookahead measured from the next collection rather than the current one. Replanning windows overlap. The scheduler should favor valuable feasible targets without trying to guarantee a perfect plan under uncertain cloud conditions.
+
+**Proposed implementation:** Establish a fast feasible greedy plan, then run a bounded beam search over a shortlist of reachable candidates. Score sequences by projected total available priority at collection completion, with VAM and earlier planned successful captures reflected. Include slew and collection time as feasibility costs; prefer lower wait/turn time to break close ties. Commit the first target, retain the previous feasible continuation while updating, and explain the next choice in the UI. Where usable cloud estimates exist, they may weight expected priority; actual simulated weather controls capture success.
+
+**Open choices:** Whether the two-minute window begins at the locked target's start or completion (completion is the current proposal); pointing/access geometry, slew limits and rates, collection duration and resource use; beam width/candidate and iteration limits; idle reconsideration interval and replanning triggers; rules for cancelling a locked target; cloud forecast quality, usable-image threshold, failure cost, and retry timing; how schedule explanations appear; and when to extend from one satellite to a coordinated fleet scheduler.
+
+**Done when:** A single satellite repeatedly selects reachable work using category priority, accounts for time to turn and collect, can explain its next choice, adapts the tentative continuation as time or inputs change, and handles uncertain weather without invalid payouts or recovery resets on failure. Multiple satellites and resource models can extend the scheduler when separately specified.
 
 ### CELL-03 — Show the cell market in Orders
 
@@ -236,7 +248,7 @@ UI-03 is a ready but deferred table cleanup; it does not block the next simulati
 
 1. ~~Inspect the completed **CELL-03A** dollar readout and category breakdown in Orders.~~ Completed 2026-10-06.
 2. ~~Implement **CELL-03B**: inspect collection payouts, cash credit, and recovery with explicit preview controls and focused state checks.~~ Completed 2026-10-06.
-3. Review proposed **CELL-01** categories/exposures and sample balance using the GUI evidence; define real capture/access and scheduling behavior before implementing automatic **CELL-02**. Market trends and remaining **CELL-03** map layers can follow independently.
+3. Review proposed **CELL-01** categories/exposures and sample balance using the GUI evidence; settle CELL-04's open access, cloud, and search-budget choices before implementing automatic **CELL-02**. Market trends and remaining **CELL-03** map layers can follow independently.
 4. Add finance reporting and any modeled operating costs in **BIZ-01**; capture cash credits are already owned by CELL-02 and must not be applied again.
 5. **FLEET-03** can extend the current per-spacecraft orbit model; **OPS-01**, **FLEET-02**, and **BIZ-02** add operations and growth as their rules are decided.
 6. **OPS-02**, **PLATFORM-01**, and **PLATFORM-02** remain queued for selection when their dependencies and release timing are clear.
