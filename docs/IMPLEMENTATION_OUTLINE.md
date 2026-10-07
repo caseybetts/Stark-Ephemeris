@@ -168,6 +168,10 @@ Each eligible cell has category-specific geographic exposures in units matching 
 
 Whole-cell collection is the gameplay abstraction. Collection duration, resource use, and access rules remain open. Swath width, scan-strip scheduling, and partial-cell coverage are outside the current model; geographic indexing and access calculations must still handle polar and dateline cells consistently.
 
+**Visible value and recovery milestones completed:** CELL-03A/B in [Pending Changes](PENDING_CHANGES.md) supply explicitly labeled sample category rates, app-owned market state and shared simulation time, and Orders readouts for maximum/available payout and selected-cell category values. Manual preview controls record successful or failed attempts, advance time, show cash credit and per-category recovery, and reset the in-memory scenario. Focused state checks cover transaction behavior. These controls do not implement automatic capture or determine access/scheduling rules; final gameplay rules and value map layers remain later work.
+
+**Planned table and map inspection:** Extend Cell table sorting/filtering to calculated dollar value, maximum priority (all categories at VAM 1), and current/available priority (category scores with current VAM). Add selectable cell-color modes for dollar value, maximum priority, and current/available priority. Use the existing shared cell calculations and tiled/aggregated rendering approach. Palette, normalization, legend, and filter-range behavior remain open.
+
 ## 6. Rendering and interface outline
 
 ### Agreed visual direction
@@ -193,7 +197,7 @@ Whole-cell collection is the gameplay abstraction. Collection duration, resource
 - Summary presents the current prototype satellite status, world-state status, approximate station range, and daylight state of sample points/markets. It explicitly notes that company and fleet-wide metrics are not yet modeled.
 - Spacecraft presents a data-driven table and detail view backed by a fleet collection. The initial fleet still contains only Asteria-1; each configured spacecraft receives its own world snapshot, marker, and orbit, and table selection highlights the chosen marker/orbit.
 - Ground Stations presents configured station names, cities/coordinates, facility availability, and uplink/downlink rates in a wide table. The current availability and rates are configurable prototype data; rates do not yet constrain data transfer. Satellite-specific access remains in Summary until a fleet-wide contact model is designed.
-- Orders presents the land-intersecting ¼° grid with sourced attributes, search/filter/sort controls, paginated cell rows, cell details, a toggleable globe overlay, and mapped oil route geometry. Selection can outline and focus a cell or identify a pipeline route. Dollar rates remain unset; category exposure, revenue, and repeat-purchase views await the economy rules. Data provenance and code boundaries are documented in [Cell grid data](CELL_DATA.md).
+- Orders presents the land-intersecting ¼° grid with sourced attributes, search/filter/sort controls, paginated cell rows, cell details, a toggleable globe overlay, and mapped oil route geometry. Selection can outline and focus a cell or identify a pipeline route. Proposed normalized category exposure quantities are shown in cell details; category approval, dollar rates, revenue, and repeat-purchase views await the economy rules. Data provenance and code boundaries are documented in [Cell grid data](CELL_DATA.md).
 - Finance & Growth remains a labeled placeholder until its gameplay systems are implemented.
 - Changing tabs only changes visible interface content; it does not restart or pause the simulation.
 
@@ -208,7 +212,7 @@ This sequence is a proposal for an agent asked to begin coding; it is not a user
 3. **Implement pure world calculations.** Add simple time advancement, one circular orbit, Earth rotation, sunlight/eclipse state, and the approximate contact rule. Keep defaults in the simulation constants module.
 4. **Render the Earth and objects.** Use the ellipsoid/globe, Natural Earth II texture, known surface points, satellite marker, and optional 3D orbit path. Convert coordinates at a single renderer boundary.
 5. **Expose state in a small panel.** Show calculated values so frame or sunlight mistakes are visible to the user.
-6. **Add operational/gameplay systems only after the world slice is reviewable.** Storage, power budgets, cell-value collection, revenue, customer satisfaction, degradation, anomaly response, satellite design, and fleet growth need their own explicit rules.
+6. **Settle automatic collection and scheduling.** CELL-03A/B make cell payout, priority, and VAM recovery visible for inspection. Define capture access, duration, failure, resources, and how total priority interacts with access before connecting automatic collection and scheduling. Storage, power budgets, customer satisfaction, degradation, anomaly response, satellite design, and fleet growth still need their own explicit rules.
 
 Do not treat the suggested order as permission to invent missing orbital constants or game-economy formulas. For a prototype, document reversible defaults in code/config and keep them easy to tune.
 
@@ -227,7 +231,7 @@ The current prototype constants are implemented and visible in `src/simulation/c
 ### Blocking before the world model can drive the full game
 
 - Source, licensing, coverage, and preprocessing of the land mask and cell attribute datasets.
-- The ¼° cell market is the current collection abstraction. Category mapping/exposure normalization, starting market prices and player priority rates, and the scheduler's ranking rule remain open. Initial cells start at VAM 1; collection recovery timing and shared per-cell timestamp are agreed.
+- The ¼° cell market is the current collection abstraction. Proposed category mapping/exposure normalization and a pure market/recovery state engine are implemented for review; category approval and overlap treatment, scenario market prices/cadences, player priority rates, starting cash, UI/clock/capture integration, and scheduler ranking remain open. Initial cells start at VAM 1; collection recovery timing and shared per-cell timestamp are agreed.
 - What qualifies as successful imagery collection and how satellite pointing is represented.
 - Downlink bandwidth, station scheduling/capacity, and relationship to onboard data retention.
 - Energy generation/storage/use and how sunlight/eclipses change it.

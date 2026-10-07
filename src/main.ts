@@ -2,6 +2,8 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./styles.css";
 import { AVAILABLE_TIME_MULTIPLIERS, DEFAULT_TIME_MULTIPLIER, EFFECTIVE_CONTACT_RADIUS_KM, INITIAL_FLEET, SURFACE_OBJECTS } from "./simulation/constants";
 import { createWorldSnapshot } from "./simulation/world";
+import { createPrototypeCellMarket } from "./simulation/prototypeCellMarket";
+import type { CellMarketState } from "./simulation/cellMarketState";
 import type { SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
 
 declare global {
@@ -351,7 +353,42 @@ async function start(): Promise<void> {
   globe.setTrackVisible(simulation.showTrack);
 
   // Geography loads independently so a data failure does not stop the world clock.
-  void import("./ui/cellMarket").then(({ setupCellMarket }) => setupCellMarket(globe.viewer));
+  let cellMarket: CellMarketState | null = null;
+  let refreshCellMarket: (() => void) | null = null;
+  const setSimulationRunning = (running: boolean) => {
+    simulation.running = running;
+    elements.pauseToggle.setAttribute("aria-pressed", String(!running));
+    elements.pauseLabel.textContent = running ? "PAUSE" : "RESUME";
+    elements.pauseIcon.textContent = running ? "Ⅱ" : "▶";
+    elements.runState.textContent = running ? "SIMULATION RUNNING" : "SIMULATION PAUSED";
+    document.querySelector(".live-dot")?.classList.toggle("paused-dot", !running);
+  };
+  const advanceSimulationBySeconds = (seconds: number) => {
+    if (!Number.isFinite(seconds) || seconds <= 0) throw new RangeError("Preview time advance must be positive");
+    setSimulationRunning(false);
+    simulation.elapsedSeconds += seconds;
+    simulation.lastFrameMilliseconds = performance.now();
+    refreshCellMarket?.();
+  };
+  const resetPreview = () => {
+    setSimulationRunning(false);
+    simulation.elapsedSeconds = 0;
+    simulation.lastFrameMilliseconds = performance.now();
+    cellMarket?.resetPreview();
+    refreshCellMarket?.();
+  };
+  void import("./ui/cellMarket").then(({ setupCellMarket }) => setupCellMarket(
+    globe.viewer,
+    {
+      nowSeconds: () => simulation.elapsedSeconds,
+      getOrCreateMarket: grid => cellMarket ??= createPrototypeCellMarket(grid),
+      getSatelliteId: () => selectedSatelliteId,
+      pauseSimulation: () => setSimulationRunning(false),
+      advanceSimulationBySeconds,
+      resetPreview,
+    },
+    refresh => { refreshCellMarket = refresh; },
+  ));
 
   const updateFleetViews = (snapshots: readonly WorldSnapshot[]) => {
     globe.update(snapshots);
@@ -369,14 +406,7 @@ async function start(): Promise<void> {
     globe.setTrackVisible(simulation.showTrack);
   });
 
-  elements.pauseToggle.addEventListener("click", () => {
-    simulation.running = !simulation.running;
-    elements.pauseToggle.setAttribute("aria-pressed", String(!simulation.running));
-    elements.pauseLabel.textContent = simulation.running ? "PAUSE" : "RESUME";
-    elements.pauseIcon.textContent = simulation.running ? "Ⅱ" : "▶";
-    elements.runState.textContent = simulation.running ? "SIMULATION RUNNING" : "SIMULATION PAUSED";
-    document.querySelector(".live-dot")?.classList.toggle("paused-dot", !simulation.running);
-  });
+  elements.pauseToggle.addEventListener("click", () => setSimulationRunning(!simulation.running));
 
   elements.timeSpeed.value = String(simulation.timeMultiplier);
   elements.timeSpeed.addEventListener("change", () => {
@@ -397,6 +427,7 @@ async function start(): Promise<void> {
         createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds),
       );
       updateFleetViews(snapshots);
+      refreshCellMarket?.();
       previousUiUpdate = frameMilliseconds;
     }
 

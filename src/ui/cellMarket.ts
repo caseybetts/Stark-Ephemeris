@@ -2,18 +2,37 @@ import type { Viewer } from "cesium";
 import { loadCellGrid } from "../data/cells";
 import { CELL_LAYERS, UNSOURCED_ATTRIBUTES, cellBounds, cellLabel } from "../simulation/cells";
 import type { CellGrid, CellLayer } from "../simulation/cells";
+import type { CellMarketState } from "../simulation/cellMarketState";
 import { createCellLayer } from "../rendering/cellLayer";
 
 const count = (value: number) => value.toLocaleString();
+const money = (value: number) => value.toLocaleString(undefined, { style: "currency", currency: "USD" });
+const amount = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const points = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const unitLabel = (unit: string) => unit === "km2" ? "km²" : unit;
 const coordinate = (latitude: number, longitude: number) => `${Math.abs(latitude).toFixed(3)}°${latitude >= 0 ? "N" : "S"}, ${Math.abs(longitude).toFixed(3)}°${longitude >= 0 ? "E" : "W"}`;
 const PAGE_SIZE = 10;
 
-export async function setupCellMarket(viewer: Viewer): Promise<void> {
+type CellMarketActions = {
+  nowSeconds: () => number;
+  getOrCreateMarket: (grid: CellGrid) => CellMarketState;
+  getSatelliteId: () => string;
+  pauseSimulation: () => void;
+  advanceSimulationBySeconds: (seconds: number) => void;
+  resetPreview: () => void;
+};
+
+export async function setupCellMarket(
+  viewer: Viewer,
+  actions: CellMarketActions,
+  onMounted: (refresh: () => void) => void,
+): Promise<void> {
   const panel = document.querySelector<HTMLElement>("#panel-orders")!;
   const toggle = document.querySelector<HTMLButtonElement>("#cell-grid-toggle")!;
   panel.innerHTML = '<p class="cell-loading" role="status">Loading geographic cell data…</p>';
   try {
-    await mount(viewer, await loadCellGrid(), panel, toggle);
+    const grid = await loadCellGrid();
+    onMounted(await mount(viewer, grid, actions, actions.getOrCreateMarket(grid), panel, toggle));
   } catch (error) {
     console.error("Cell market initialization failed", error);
     panel.replaceChildren();
@@ -23,20 +42,23 @@ export async function setupCellMarket(viewer: Viewer): Promise<void> {
     message.textContent = "The cell data could not be loaded. The rest of the simulation is still available.";
     const retry = document.createElement("button");
     retry.type = "button"; retry.className = "cell-button"; retry.textContent = "Retry cell data";
-    retry.addEventListener("click", () => void setupCellMarket(viewer));
+    retry.addEventListener("click", () => void setupCellMarket(viewer, actions, onMounted));
     panel.append(message, retry);
   }
 }
 
-async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle: HTMLButtonElement) {
+async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions, market: CellMarketState, panel: HTMLElement, toggle: HTMLButtonElement): Promise<() => void> {
+  const { nowSeconds } = actions;
   panel.innerHTML = `
-    <div class="cell-market-heading"><div><p class="eyebrow">GEOGRAPHIC MARKET</p><h2>Coverage & attributes</h2></div><span class="cell-tag">¼° × ¼° CELLS</span></div>
+    <div class="cell-market-heading"><div><p class="eyebrow">GEOGRAPHIC MARKET</p><h2>Coverage & cell values</h2></div><span class="cell-tag">¼° × ¼° CELLS</span></div>
     <div class="cell-summary">
       <div><span>ELIGIBLE CELLS</span><strong id="cell-count"></strong></div>
       <div><span>COASTAL CELLS INCLUDED</span><strong id="cell-coast-count"></strong></div>
       <div><span>SOURCED DATASETS</span><strong id="cell-source-count"></strong></div>
-      <div><span>DOLLAR VALUES</span><strong class="cell-unset">Not set</strong></div>
+      <div><span>MARKET SCENARIO</span><strong class="cell-sample-label">Sample rates</strong></div>
+      <div><span>PREVIEW CASH</span><strong id="cell-preview-cash">$0</strong></div>
     </div>
+    <section class="cell-market-rates" aria-label="Prototype market rates"><div class="cell-market-rates-heading"><div><p class="eyebrow">PROTOTYPE MARKET — SAMPLE RATES</p><h3>Category market readout</h3></div><p>Prices and cadences are sample market data. Priority rates calculate scheduling scores; automatic scheduling is not active yet. Candidate categories and overlap rules are still under review.</p></div><div class="table-scroll"><table class="operations-table cell-rates-table"><thead><tr><th scope="col">Category</th><th scope="col">Market price</th><th scope="col">Refresh cadence</th><th scope="col">Priority points per unit</th></tr></thead><tbody id="cell-rate-body"></tbody></table></div></section>
     <div class="cell-controls">
       <label>Map layer<select id="cell-layer"></select></label>
       <label class="cell-search-label">Find a cell<input id="cell-search" type="search" placeholder="City, port, cell ID, or latitude, longitude" autocomplete="off" /></label>
@@ -46,17 +68,44 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
     <p class="cell-layer-note" id="cell-layer-note"></p>
     <div class="cell-workspace">
       <section class="cell-results" aria-label="Eligible market cells">
-        <div class="table-scroll"><table class="operations-table cell-table"><thead><tr><th scope="col">Cell / mapped place</th><th scope="col">Center</th><th scope="col">Cities</th><th scope="col">Ports</th><th scope="col">Urban km²</th><th scope="col">Cropland km²</th><th scope="col">Power MW</th><th scope="col">Oil routes</th><th scope="col">Mapped attributes</th><th scope="col">Special sites (M · DC · R · WH)</th></tr></thead><tbody id="cell-table-body"></tbody></table></div>
+        <div class="table-scroll"><table class="operations-table cell-table"><thead><tr><th scope="col">Cell / mapped place</th><th scope="col">Center</th><th scope="col">Maximum payout</th><th scope="col">Available payout</th><th scope="col">Cities</th><th scope="col">Ports</th><th scope="col">Urban km²</th><th scope="col">Cropland km²</th><th scope="col">Power MW</th><th scope="col">Oil routes</th><th scope="col">Mapped attributes</th><th scope="col">Special sites (M · DC · R · WH)</th></tr></thead><tbody id="cell-table-body"></tbody></table></div>
         <div class="cell-pagination"><span id="cell-results-count" role="status"></span><div><button id="cell-prev" type="button" class="cell-button">Previous</button><span id="cell-page"></span><button id="cell-next" type="button" class="cell-button">Next</button></div></div>
       </section>
       <aside class="cell-detail" aria-label="Selected cell"><p class="eyebrow">SELECTED CELL</p><div id="cell-detail-content"><h3>Select a cell</h3><p>Click an eligible cell on the globe or choose a row to inspect its attributes. Zoom in to see the ¼° boundaries.</p></div></aside>
     </div>
-    <details class="cell-data-notes"><summary>Data coverage & sources</summary><p>These mapped features are a geographic baseline. Zero means no feature recorded in these datasets; it does not prove none exists. Dollar values and collection rules will be added after the value model is defined.</p><div id="cell-sources"></div><ul id="cell-limitations"></ul></details>
+    <details class="cell-data-notes"><summary>Data coverage & sources</summary><p>Zero means no feature recorded in these datasets; it does not prove none exists. Dollar values use sample rates and candidate categories for checking the formula; they are not final market balance. Automatic collection has not been connected.</p><div id="cell-sources"></div><ul id="cell-limitations"></ul></details>
   `;
   const element = <T extends HTMLElement>(id: string) => panel.querySelector<T>(`#${id}`)!;
   element("cell-count").textContent = count(grid.ids.length);
   element("cell-coast-count").textContent = count(grid.metadata.statistics.coastalCells);
   element("cell-source-count").textContent = count(grid.metadata.sources.length);
+  const marketRates = market.getMarketReadout();
+  const rateById = new Map(marketRates.map(rate => [rate.id, rate]));
+  const priorityById = new Map(market.getPlayerPriorityRates().map(rate => [rate.categoryId, rate]));
+  const priorityInputs = new Map<string, HTMLInputElement>();
+  const rateRows = market.exposures.definitions.map(definition => {
+    const price = rateById.get(definition.id)!;
+    const priority = priorityById.get(definition.id)!;
+    const row = document.createElement("tr");
+    const name = document.createElement("th"); name.scope = "row"; name.textContent = definition.label;
+    const marketPrice = document.createElement("td"); marketPrice.textContent = `${money(price.marketPriceUsdPerUnit)} / ${unitLabel(price.unit)}`;
+    const cadence = document.createElement("td"); cadence.textContent = `${amount(price.cadenceSeconds / 86_400)} days`;
+    const control = document.createElement("td");
+    const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.step = "any";
+    input.value = String(priority.pointsPerUnit);
+    priorityInputs.set(definition.id, input);
+    input.setAttribute("aria-label", `Priority points per ${unitLabel(priority.unit)} for ${definition.label}`);
+    input.addEventListener("input", () => {
+      const next = Number(input.value);
+      if (!input.value.trim() || !Number.isFinite(next) || next < 0) { input.setCustomValidity("Enter a non-negative number"); return; }
+      input.setCustomValidity("");
+      market.updatePlayerPriorityRates(market.getPlayerPriorityRates().map(rate =>
+        rate.categoryId === definition.id ? { ...rate, pointsPerUnit: next } : rate));
+      refreshEconomy(true);
+    });
+    control.append(input); row.append(name, marketPrice, cadence, control); return row;
+  });
+  element("cell-rate-body").replaceChildren(...rateRows);
   const selectLayer = element<HTMLSelectElement>("cell-layer");
   for (const [key, layer] of Object.entries(CELL_LAYERS)) selectLayer.add(new Option(layer.label, key));
   const mapKey = document.createElement("aside");
@@ -68,6 +117,8 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
   let visible = true;
   let page = 0;
   let filtered = new Uint32Array();
+  let visiblePayouts: { index: number; maximum: HTMLElement; available: HTMLElement }[] = [];
+  let lastRefreshedAt = Number.NaN;
   const ranks = new Map<string, Uint32Array>();
   const map = await createCellLayer(viewer, grid, (index, route) => {
     selectCell(index, false, route);
@@ -117,6 +168,7 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
   function renderRows() {
     const body = element<HTMLTableSectionElement>("cell-table-body");
     const rows = [];
+    visiblePayouts = [];
     for (const index of filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
       const id = grid.ids[index], bounds = cellBounds(id);
       const row = document.createElement("tr");
@@ -130,6 +182,10 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
       place.textContent = mapped ? [...new Set(mapped.map(p => p.name))].join(" · ") : "No named place in source";
       name.append(button, place);
       const position = document.createElement("td"); position.textContent = coordinate(bounds.latitudeDeg, bounds.longitudeDeg);
+      const cellValue = market.calculateCell(index, nowSeconds());
+      const maximum = document.createElement("td"); maximum.textContent = money(cellValue.maximumPayoutUsd);
+      const available = document.createElement("td"); available.textContent = money(cellValue.availablePayoutUsd);
+      visiblePayouts.push({ index, maximum, available });
       const cities = document.createElement("td"); cities.textContent = count(grid.cityCounts[index]);
       const ports = document.createElement("td"); ports.textContent = count(grid.portCounts[index]);
       const urban = document.createElement("td"); urban.textContent = (grid.urbanAreaDeciKm2[index] / 10).toLocaleString(undefined, { maximumFractionDigits: 1 });
@@ -144,10 +200,10 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
       const sites = document.createElement("td");
       sites.textContent = `M ${count(grid.militarySiteCounts[index])} · DC ${count(grid.dataCenterCounts[index])} · R ${count(grid.researchSiteCounts[index])} · WH ${count(grid.monumentCounts[index])}`;
       sites.title = "Military · data center · NOAA research · World Heritage record counts";
-      row.append(name, position, cities, ports, urban, crops, power, pipelines, types, sites); rows.push(row);
+      row.append(name, position, maximum, available, cities, ports, urban, crops, power, pipelines, types, sites); rows.push(row);
     }
     if (!rows.length) {
-      const row = document.createElement("tr"), message = document.createElement("td"); message.colSpan = 10;
+      const row = document.createElement("tr"), message = document.createElement("td"); message.colSpan = 12;
       message.textContent = "No eligible cells match. Try a mapped city, port, cell ID, or latitude, longitude.";
       row.append(message); rows.push(row);
     }
@@ -157,6 +213,64 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
     element("cell-page").textContent = `${page + 1} / ${count(pages)}`;
     element<HTMLButtonElement>("cell-prev").disabled = page === 0;
     element<HTMLButtonElement>("cell-next").disabled = page + 1 === pages;
+  }
+
+  function renderSelectedEconomy() {
+    if (selected < 0) return;
+    const target = element("cell-economy-values");
+    const snapshot = market.calculateCell(selected, nowSeconds());
+    const currentRates = new Map(market.getMarketReadout().map(rate => [rate.id, rate]));
+    const priorityRates = new Map(market.getPlayerPriorityRates().map(rate => [rate.categoryId, rate]));
+    const definitions = new Map(market.exposures.definitions.map(definition => [definition.id, definition]));
+    target.replaceChildren();
+    const heading = document.createElement("h4"); heading.textContent = "Calculated cell value";
+    const totals = document.createElement("dl"); totals.className = "cell-attributes";
+    const entries: [string, string][] = [
+      ["Maximum payout", money(snapshot.maximumPayoutUsd)],
+      ["Available payout", money(snapshot.availablePayoutUsd)],
+      ["Available priority", `${points(snapshot.availablePriorityPoints)} points`],
+      ["Last collection", snapshot.lastCollectedAtSeconds === null ? "Never collected" : `${amount(snapshot.lastCollectedAtSeconds / 86_400)} simulation days`],
+    ];
+    for (const [label, value] of entries) {
+      const term = document.createElement("dt"), detail = document.createElement("dd");
+      term.textContent = label; detail.textContent = value; totals.append(term, detail);
+    }
+    const note = document.createElement("p");
+    note.textContent = "Each category uses its own cadence and VAM. Amounts below use sample prices; rounded lines may differ from the total by a cent.";
+    const list = document.createElement("div"); list.className = "cell-category-values";
+    for (const category of snapshot.categories.filter(value => value.quantity > 0)) {
+      const definition = definitions.get(category.categoryId)!;
+      const marketRate = currentRates.get(category.categoryId)!;
+      const priorityRate = priorityRates.get(category.categoryId)!;
+      const card = document.createElement("section"); card.className = "cell-category-value";
+      const title = document.createElement("h5"); title.textContent = definition.label;
+      const exposure = document.createElement("p");
+      exposure.textContent = `${amount(category.quantity)} ${unitLabel(category.unit)} × ${money(marketRate.marketPriceUsdPerUnit)} / ${unitLabel(category.unit)} = ${money(category.maximumPayoutUsd)} maximum`;
+      const payout = document.createElement("p");
+      payout.textContent = `${amount(marketRate.cadenceSeconds / 86_400)} day cadence · VAM ${amount(category.valueAvailabilityMultiplier * 100)}% → ${money(category.availablePayoutUsd)} available`;
+      const priority = document.createElement("p");
+      priority.textContent = `${amount(category.quantity)} × ${amount(priorityRate.pointsPerUnit)} points / ${unitLabel(category.unit)} × ${amount(category.valueAvailabilityMultiplier)} VAM = ${points(category.availablePriorityPoints)} points`;
+      card.append(title, exposure, payout, priority); list.append(card);
+    }
+    if (!list.children.length) {
+      const empty = document.createElement("p"); empty.textContent = "No candidate category has a mapped exposure in this cell. Its calculated payout is $0.00.";
+      list.append(empty);
+    }
+    target.replaceChildren(heading, totals, note, list);
+  }
+
+  function refreshEconomy(force = false) {
+    if (panel.hidden && !force) return;
+    const now = nowSeconds();
+    if (!force && now === lastRefreshedAt) return;
+    lastRefreshedAt = now;
+    element("cell-preview-cash").textContent = money(market.companyCashUsd);
+    for (const display of visiblePayouts) {
+      const value = market.calculateCell(display.index, now);
+      display.maximum.textContent = money(value.maximumPayoutUsd);
+      display.available.textContent = money(value.availablePayoutUsd);
+    }
+    renderSelectedEconomy();
   }
 
   function selectCell(index: number, fly: boolean, route?: { name: string; url?: string; latitudeDeg: number; longitudeDeg: number }) {
@@ -178,6 +292,55 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
     location.textContent = coordinate(cell.bounds.latitudeDeg, cell.bounds.longitudeDeg);
     const zoom = document.createElement("button"); zoom.type = "button"; zoom.className = "cell-button"; zoom.textContent = "Focus on globe ↗";
     zoom.addEventListener("click", () => { setVisible(true); map.select(index, true); });
+    const economy = document.createElement("div"); economy.id = "cell-economy";
+    const economyValues = document.createElement("div"); economyValues.id = "cell-economy-values";
+    const preview = document.createElement("section"); preview.className = "cell-preview";
+    const previewHeading = document.createElement("div"); previewHeading.className = "cell-preview-heading";
+    const previewTitle = document.createElement("h4"); previewTitle.textContent = "Collection & recovery preview";
+    const previewTag = document.createElement("span"); previewTag.textContent = "MANUAL PREVIEW · NOT AUTOMATIC COLLECTION";
+    previewHeading.append(previewTitle, previewTag);
+    const previewControls = document.createElement("div"); previewControls.className = "cell-preview-controls";
+    const capture = document.createElement("button"); capture.type = "button"; capture.className = "cell-button cell-preview-primary"; capture.textContent = "Record successful capture";
+    const fail = document.createElement("button"); fail.type = "button"; fail.className = "cell-button"; fail.textContent = "Preview failed attempt";
+    const durationLabel = document.createElement("label"); durationLabel.textContent = "Advance by";
+    const duration = document.createElement("select"); duration.setAttribute("aria-label", "Days to advance in the preview");
+    for (const days of [10, 45, 90]) duration.add(new Option(`${days} days`, String(days)));
+    durationLabel.append(duration);
+    const advance = document.createElement("button"); advance.type = "button"; advance.className = "cell-button"; advance.textContent = "Advance time";
+    const reset = document.createElement("button"); reset.type = "button"; reset.className = "cell-button"; reset.textContent = "Reset preview";
+    previewControls.append(capture, fail, durationLabel, advance, reset);
+    const previewStatus = document.createElement("p"); previewStatus.className = "cell-preview-status"; previewStatus.setAttribute("role", "status");
+    previewStatus.textContent = "Select a duration to inspect how VAM recovers after a capture.";
+    capture.addEventListener("click", () => {
+      actions.pauseSimulation();
+      try {
+        const event = market.completeCellCapture(index, actions.getSatelliteId(), `cell-preview-${Date.now()}-${Math.random()}`, nowSeconds());
+        previewStatus.textContent = `Successful capture recorded at day ${amount(event.completedAtSeconds / 86_400)}. Payout: ${money(event.revenueUsd)} · Preview cash: ${money(market.companyCashUsd)}.`;
+        refreshEconomy(true);
+      } catch (error) {
+        previewStatus.textContent = error instanceof Error ? error.message : "Capture preview could not be recorded.";
+      }
+    });
+    fail.addEventListener("click", () => {
+      previewStatus.textContent = "Failed attempt previewed: no payout was credited and the cell recovery clock did not reset.";
+    });
+    advance.addEventListener("click", () => {
+      const days = Number(duration.value);
+      actions.advanceSimulationBySeconds(days * 86_400);
+      previewStatus.textContent = `Preview clock advanced by ${days} days to day ${amount(nowSeconds() / 86_400)}. Inspect VAM and available payout above.`;
+      refreshEconomy(true);
+    });
+    reset.addEventListener("click", () => {
+      actions.resetPreview();
+      for (const rate of market.getPlayerPriorityRates()) {
+        const input = priorityInputs.get(rate.categoryId);
+        if (input) { input.value = String(rate.pointsPerUnit); input.setCustomValidity(""); }
+      }
+      previewStatus.textContent = "Preview reset: cells are available at maximum value, cash is restored, and simulation time is day 0.";
+      refreshEconomy(true);
+    });
+    preview.append(previewHeading, previewControls, previewStatus);
+    economy.append(economyValues, preview);
     const metrics = document.createElement("dl"); metrics.className = "cell-attributes";
     const entries: [string, string][] = [
       ["Cities & towns", count(cell.attributes.cityCount)], ["Mapped city population", count(cell.attributes.cityPopulation)],
@@ -189,13 +352,13 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
       ["Mapped major oil pipeline routes", count(cell.attributes.oilPipelineCount)],
       ["Military installations", count(cell.attributes.militarySiteCount)], ["Data centers", count(cell.attributes.dataCenterCount)],
       ["NOAA research stations", count(cell.attributes.researchSiteCount)], ["UNESCO World Heritage sites", count(cell.attributes.monumentCount)],
-      ["Maximum value", "Not set"], ["Available value", "Not set"], ["Last collection", "Not modeled"], ["Recovery duration", "Not set"],
     ];
     for (const [name, value] of entries) {
       const term = document.createElement("dt"), detail = document.createElement("dd");
       term.textContent = name; detail.textContent = value; metrics.append(term, detail);
     }
-    content.append(heading, location, zoom, metrics);
+    content.append(heading, location, zoom, economy, metrics);
+    renderSelectedEconomy();
     if (route) {
       const note = document.createElement("p");
       note.className = "cell-route-selection";
@@ -242,4 +405,5 @@ async function mount(viewer: Viewer, grid: CellGrid, panel: HTMLElement, toggle:
   excluded.textContent = `${grid.metadata.statistics.excludedPointFeatures.cities} city, ${grid.metadata.statistics.excludedPointFeatures.ports} port, ${grid.metadata.statistics.excludedPoints.researchSites} NOAA research-site, and ${grid.metadata.statistics.excludedPoints.monuments} World Heritage point records fall outside eligible land cells and are excluded.`;
   element("cell-limitations").append(excluded);
   applyFilters();
+  return () => refreshEconomy();
 }

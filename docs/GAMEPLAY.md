@@ -23,7 +23,7 @@ These are intended subject areas; the specific formulas and interactions remain 
 - **Satellite design:** A constrained set of hardware choices, with money as a major limit. Candidate dimensions include imaging capability, onboard storage, energy generation and storage, pointing agility, processing, communications, and expected service life.
 - **Operations:** Capture opportunities, power use, onboard storage, and downlink availability.
 - **Data and value:** A successful capture realizes the cell's currently available market value immediately; the game has no archive market for selling old imagery later. Whether raw image data still occupies storage or incurs transfer/processing costs is a separate operational rule.
-- **Cell-based imaging market:** Geographic cells contain different category exposures. Market prices, average customer refresh cadences, player-set category priority rates, and the agreed VAM recovery curve determine available payout and cell priority; category mapping and initial market/priority rates remain open.
+- **Cell-based imaging market:** Geographic cells contain different category exposures. Market prices, average customer refresh cadences, player-set category priority rates, and the agreed VAM recovery curve determine available payout and cell priority. A candidate exposure mapping is implemented for review; category approval and initial market/priority rates remain open.
 - **Customers and revenue:** Individual contracts, monitoring sites, and project fulfillment are possible later layers. They are not required for the initial market and collection loop.
 - **Asset health:** Degradation and anomalies affect a satellite’s capability or risk. The player monitors fleet health and decides when to investigate, change operations, or accept a loss.
 - **Company resources:** Cash and operational capacity constrain what can be built, launched, supported, and promised.
@@ -65,7 +65,7 @@ A visual Earth with orbit paths and satellite markers is operational context. De
 - Use a regular **¼° latitude/longitude grid** as the market and collection unit. A cell is the smallest collection unit; the simulation treats collection as imaging the entire cell. Swath width is abstracted away. Collection time, resource use, and access limits remain to be defined at the cell level.
 - Include cells that intersect land, including mixed land-and-sea coastal cells. Exclude cells with no land so remote open-ocean areas such as the central Pacific do not fill the market map. Do not calculate fractional land coverage as a requirement for cell eligibility or value.
 - Each eligible cell has category-specific geographic exposures, expressed in the unit used by that category's price (for example, eligible square kilometres or feature count). The cell's gross price is calculated from the current category rates and those exposures, then the category contributions are summed.
-- Geographic attributes such as urban footprint area, infrastructure counts, agriculture, and conservation areas may contribute to category exposures. Market rates are tunable in-game assumptions, not literal real-world customer prices.
+- Geographic attributes such as urban footprint area, infrastructure counts, and agriculture may contribute to category exposures. The currently implemented candidate mapping is listed in [Cell grid data](CELL_DATA.md); it converts measured area to km² and retains count/presence source measures for sites and routes. It is **Proposed** pending review, including treatment of overlapping crop/pasture, plant-count/capacity, and polygon/presence measures. Market rates are tunable in-game assumptions, not literal real-world customer prices.
 - The market grid and cell-value rules belong to the simulation/domain model and remain independent of the globe renderer.
 
 ### Market information, cell revenue, and scheduling
@@ -101,14 +101,18 @@ How the scheduler ranks available cell priority against access, collection time,
 
 ### Open design questions
 
-- How sourced attributes map to market categories and matching area/count exposures, including how overlapping features/categories are handled and whether the same area can contribute to multiple categories.
+- Whether to approve or revise the proposed sourced-attribute mapping and how overlapping features/categories are handled, including whether the same area can contribute to multiple categories.
 - The starting market prices, player-set category priority rates, and refresh cadences, plus how market information changes over time.
 - How the scheduler ranks total available category priority points against access, collection time, satellite constraints, and payout.
 - How collection time and image quality affect the immediate payout, and how storage/downlink costs or capacity remain relevant after sale.
 - Whether customer contracts, deadlines, or named monitoring sites should be added as an optional layer later.
 - Where and how to present category rates, per-cell exposures and revenue contributions, calculated gross cell value, and any repeat-purchase/freshness state, including heat-map normalization.
 
-The current prototype exposes the geographic grid in Orders and on the globe, with sourced city, port, per-cell urban footprint area, border, coast, cropland, pasture, power plant, major oil pipeline, military installation, data-center, NOAA research-site, and UNESCO World Heritage attributes. Large urban footprints span their mapped cells; a city-point population label does not concentrate the entire city's market value in one cell. Dollar rates remain unset by request; category exposure normalization, collection revenue, and repeat-capture behavior are future work. See [Cell grid data](CELL_DATA.md) for source coverage and limits.
+**Agreed delivery priority (2026-10-06):** Cell dollar values and a manual collection/recovery preview are visible in Orders. [Pending Changes](PENDING_CHANGES.md) records CELL-03A/B as implemented. The sample rates are **Proposed** preview inputs, not approved game balance; preview controls do not define satellite access rules. Market prices and cadences remain read-only to the player; category priority rates remain the intended scheduling controls.
+
+**Agreed future inspection tools (2026-10-06):** The Cell table should eventually sort and filter on cell dollar value, maximum priority, and current/available priority, alongside geographic attributes. Globe cells should offer color modes for those same three metrics so players can compare market payout potential with the scheduling score. Maximum priority is calculated at VAM 1; current priority applies the categories' current VAM values. Exact color ramps and numeric normalization remain open presentation choices.
+
+The current prototype exposes the geographic grid in Orders and on the globe, with sourced city, port, per-cell urban footprint area, border, coast, cropland, pasture, power plant, major oil pipeline, military installation, data-center, NOAA research-site, and UNESCO World Heritage attributes. Large urban footprints span their mapped cells; a city-point population label does not concentrate the entire city's market value in one cell. Proposed normalized category exposures and sample-priced values are inspectable in Orders. The app connects the market model to simulation time, but has no automatic capture or market trend simulation yet. See [Cell grid data](CELL_DATA.md) for source coverage, candidate category mapping, and limits.
 
 ## Open design questions
 
