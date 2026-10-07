@@ -26,7 +26,8 @@ import { earthFixedKilometersToCartesian, locationToCartesian } from "./coordina
 
 export type GlobeView = {
   viewer: Viewer;
-  update(snapshot: WorldSnapshot): void;
+  update(snapshots: readonly WorldSnapshot[]): void;
+  setSelectedSatellite(satelliteId: string): void;
   setTrackVisible(visible: boolean): void;
   setSurfaceObjectsVisible(visible: boolean): void;
   destroy(): void;
@@ -90,7 +91,7 @@ function addSurfaceObject(viewer: Viewer, object: SurfaceObject) {
 }
 
 export async function createGlobeView(
-  satellite: SatelliteDefinition,
+  satellites: readonly SatelliteDefinition[],
   surfaceObjects: readonly SurfaceObject[],
 ): Promise<GlobeView> {
   const viewer = new Viewer("globe", {
@@ -113,7 +114,7 @@ export async function createGlobeView(
   viewer.scene.globe.baseColor = Color.fromCssColorString("#102c39");
   viewer.scene.globe.enableLighting = false;
   if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
-  viewer.scene.screenSpaceCameraController.minimumZoomDistance = 7_000_000;
+  viewer.scene.screenSpaceCameraController.minimumZoomDistance = 15_000;
   viewer.scene.screenSpaceCameraController.maximumZoomDistance = 45_000_000;
   viewer.scene.globe.depthTestAgainstTerrain = false;
 
@@ -130,54 +131,61 @@ export async function createGlobeView(
     orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
   });
 
-  const satelliteEntity = viewer.entities.add({
-    id: satellite.id,
-    name: satellite.name,
-    position: new ConstantPositionProperty(
-      earthFixedKilometersToCartesian(
-        rotateInertialToEarthFixed(satellitePositionInertial(satellite.orbit, 0), 0),
+  const satelliteColors = ["#f4f870", "#72d7ff", "#ff9b76", "#c4a7ff", "#7ce2a4"];
+  const satelliteVisuals = new Map(satellites.map((satellite, index) => {
+    const color = Color.fromCssColorString(satelliteColors[index % satelliteColors.length]);
+    const selectedInitially = index === 0;
+    const entity = viewer.entities.add({
+      id: satellite.id,
+      name: satellite.name,
+      position: new ConstantPositionProperty(
+        earthFixedKilometersToCartesian(
+          rotateInertialToEarthFixed(satellitePositionInertial(satellite.orbit, 0), 0),
+        ),
       ),
-    ),
-    point: {
-      pixelSize: 13,
-      color: Color.fromCssColorString("#f4f870"),
-      outlineColor: Color.fromCssColorString("#161c0b"),
-      outlineWidth: 3,
-      heightReference: HeightReference.NONE,
-    },
-    label: {
-      text: satellite.name.toUpperCase(),
-      font: "700 11px Inter, sans-serif",
-      fillColor: Color.fromCssColorString("#f4f870"),
-      outlineColor: Color.fromCssColorString("#071016"),
-      outlineWidth: 4,
-      style: LabelStyle.FILL_AND_OUTLINE,
-      pixelOffset: new Cartesian2(0, -22),
-      horizontalOrigin: HorizontalOrigin.CENTER,
-      verticalOrigin: VerticalOrigin.BOTTOM,
-    },
-  });
-
-  const orbitPrimitive = viewer.scene.primitives.add(
-    new Primitive({
-      geometryInstances: new GeometryInstance({
-        geometry: new PolylineGeometry({
-          positions: orbitPathPositions(satellite),
-          width: 2,
-          vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
+      point: {
+        pixelSize: selectedInitially ? 13 : 9,
+        color,
+        outlineColor: Color.fromCssColorString("#071016"),
+        outlineWidth: selectedInitially ? 3 : 2,
+        heightReference: HeightReference.NONE,
+      },
+      label: {
+        text: satellite.name.toUpperCase(),
+        show: selectedInitially,
+        font: "700 11px Inter, sans-serif",
+        fillColor: color,
+        outlineColor: Color.fromCssColorString("#071016"),
+        outlineWidth: 4,
+        style: LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cartesian2(0, -22),
+        horizontalOrigin: HorizontalOrigin.CENTER,
+        verticalOrigin: VerticalOrigin.BOTTOM,
+      },
+    });
+    const orbit = viewer.scene.primitives.add(
+      new Primitive({
+        geometryInstances: new GeometryInstance({
+          geometry: new PolylineGeometry({
+            positions: orbitPathPositions(satellite),
+            width: 2,
+            vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
+          }),
         }),
-      }),
-      appearance: new PolylineMaterialAppearance({
-        material: Material.fromType("PolylineGlow", {
-          color: Color.fromCssColorString("#e3e977").withAlpha(0.74),
-          glowPower: 0.12,
+        appearance: new PolylineMaterialAppearance({
+          material: Material.fromType("PolylineGlow", {
+            color: color.withAlpha(selectedInitially ? 0.74 : 0.4),
+            glowPower: 0.12,
+          }),
+          translucent: true,
         }),
-        translucent: true,
+        modelMatrix: orbitEarthFixedMatrix(0),
+        asynchronous: false,
       }),
-      modelMatrix: orbitEarthFixedMatrix(0),
-      asynchronous: false,
-    }),
-  );
+    );
+    return [satellite.id, { entity, orbit }];
+  }));
+  let selectedSatelliteId = satellites[0]?.id;
 
   const surfaceEntities = surfaceObjects.map((object) => ({
     object,
@@ -186,24 +194,46 @@ export async function createGlobeView(
 
   return {
     viewer,
-    update(snapshot) {
-      satelliteEntity.position = new ConstantPositionProperty(
-        earthFixedKilometersToCartesian(snapshot.satelliteEarthFixedKm),
-      );
-      orbitPrimitive.modelMatrix = orbitEarthFixedMatrix(snapshot.elapsedSeconds);
+    update(snapshots) {
+      for (const snapshot of snapshots) {
+        const visual = satelliteVisuals.get(snapshot.satelliteId);
+        if (!visual) continue;
+        visual.entity.position = new ConstantPositionProperty(
+          earthFixedKilometersToCartesian(snapshot.satelliteEarthFixedKm),
+        );
+        visual.orbit.modelMatrix = orbitEarthFixedMatrix(snapshot.elapsedSeconds);
+      }
 
-      for (const { object, entity } of surfaceEntities) {
-        if (object.kind === "imaging-market") {
-          const state = snapshot.surfaceObjects.find((item) => item.object.id === object.id);
-          const color = state?.sunlit ? "#73d7c1" : "#547f78";
-          entity.point!.color = new ConstantProperty(Color.fromCssColorString(color));
+      const surfaceSnapshot = snapshots[0];
+      if (surfaceSnapshot) {
+        for (const { object, entity } of surfaceEntities) {
+          if (object.kind === "imaging-market") {
+            const state = surfaceSnapshot.surfaceObjects.find((item) => item.object.id === object.id);
+            const color = state?.sunlit ? "#73d7c1" : "#547f78";
+            entity.point!.color = new ConstantProperty(Color.fromCssColorString(color));
+          }
         }
       }
 
       viewer.scene.requestRender();
     },
+    setSelectedSatellite(satelliteId) {
+      if (!satelliteVisuals.has(satelliteId)) return;
+      selectedSatelliteId = satelliteId;
+      satellites.forEach((satellite, index) => {
+        const visual = satelliteVisuals.get(satellite.id);
+        if (!visual) return;
+        const selected = satellite.id === selectedSatelliteId;
+        const color = Color.fromCssColorString(satelliteColors[index % satelliteColors.length]);
+        visual.entity.point!.pixelSize = new ConstantProperty(selected ? 13 : 9);
+        visual.entity.point!.outlineWidth = new ConstantProperty(selected ? 3 : 2);
+        visual.entity.label!.show = new ConstantProperty(selected);
+        visual.orbit.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.74 : 0.4);
+      });
+      viewer.scene.requestRender();
+    },
     setTrackVisible(visible) {
-      orbitPrimitive.show = visible;
+      for (const visual of satelliteVisuals.values()) visual.orbit.show = visible;
       viewer.scene.requestRender();
     },
     setSurfaceObjectsVisible(visible) {

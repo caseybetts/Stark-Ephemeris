@@ -1,8 +1,8 @@
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./styles.css";
-import { AVAILABLE_TIME_MULTIPLIERS, DEFAULT_SATELLITE, DEFAULT_TIME_MULTIPLIER, EFFECTIVE_CONTACT_RADIUS_KM, SURFACE_OBJECTS } from "./simulation/constants";
+import { AVAILABLE_TIME_MULTIPLIERS, DEFAULT_TIME_MULTIPLIER, EFFECTIVE_CONTACT_RADIUS_KM, INITIAL_FLEET, SURFACE_OBJECTS } from "./simulation/constants";
 import { createWorldSnapshot } from "./simulation/world";
-import type { SurfaceObject } from "./simulation/model";
+import type { SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
 
 declare global {
   interface Window {
@@ -23,6 +23,8 @@ const elements = {
   timeSpeed: document.querySelector<HTMLSelectElement>("#time-speed")!,
   satCoordinate: document.querySelector<HTMLElement>("#sat-coordinate")!,
   satAltitude: document.querySelector<HTMLElement>("#sat-altitude")!,
+  satelliteName: document.querySelector<HTMLElement>("#satellite-name")!,
+  satelliteIdentifier: document.querySelector<HTMLElement>("#satellite-identifier")!,
   satSunState: document.querySelector<HTMLElement>("#sat-sun-state")!,
   satContactState: document.querySelector<HTMLElement>("#sat-contact-state")!,
   surfaceSunlit: document.querySelector<HTMLElement>("#surface-sunlit")!,
@@ -30,13 +32,24 @@ const elements = {
   subsolarLongitude: document.querySelector<HTMLElement>("#subsolar-longitude")!,
   stationCount: document.querySelector<HTMLElement>("#station-count")!,
   stationList: document.querySelector<HTMLElement>("#station-list")!,
+  stationTableCount: document.querySelector<HTMLElement>("#station-table-count")!,
+  stationTableBody: document.querySelector<HTMLTableSectionElement>("#station-table-body")!,
+  spacecraftCount: document.querySelector<HTMLElement>("#spacecraft-count")!,
+  spacecraftTableBody: document.querySelector<HTMLTableSectionElement>("#spacecraft-table-body")!,
+  spacecraftDetailTitle: document.querySelector<HTMLElement>("#spacecraft-detail-title")!,
+  spacecraftDetailState: document.querySelector<HTMLElement>("#spacecraft-detail-state")!,
+  spacecraftDetailAltitude: document.querySelector<HTMLElement>("#spacecraft-detail-altitude")!,
+  spacecraftDetailInclination: document.querySelector<HTMLElement>("#spacecraft-detail-inclination")!,
+  spacecraftDetailCoordinate: document.querySelector<HTMLElement>("#spacecraft-detail-coordinate")!,
+  spacecraftDetailStation: document.querySelector<HTMLElement>("#spacecraft-detail-station")!,
   contactRadius: document.querySelector<HTMLElement>("#contact-radius")!,
   locationCount: document.querySelector<HTMLElement>("#location-count")!,
   locationList: document.querySelector<HTMLElement>("#location-list")!,
 };
 
-const satellite = DEFAULT_SATELLITE;
+const fleet: readonly SatelliteDefinition[] = INITIAL_FLEET.satellites;
 const surfaceObjects = SURFACE_OBJECTS as readonly SurfaceObject[];
+let selectedSatelliteId = fleet[0]!.id;
 const simulation = {
   elapsedSeconds: 0,
   timeMultiplier: DEFAULT_TIME_MULTIPLIER,
@@ -44,6 +57,17 @@ const simulation = {
   showTrack: true,
   lastFrameMilliseconds: performance.now(),
 };
+
+type SpacecraftTableRow = {
+  row: HTMLTableRowElement;
+  selectButton: HTMLButtonElement;
+  coordinate: HTMLElement;
+  altitude: HTMLElement;
+  lighting: HTMLElement;
+  stationAccess: HTMLElement;
+};
+
+const spacecraftTableRows = new Map<string, SpacecraftTableRow>();
 
 const formatCoordinate = (latitude: number, longitude: number): string => {
   const latDirection = latitude >= 0 ? "N" : "S";
@@ -85,7 +109,137 @@ function renderStations(snapshot: ReturnType<typeof createWorldSnapshot>): void 
       return row;
     }),
   );
+  renderNearestStationContact(stations);
+}
 
+function renderGroundStationTable(): void {
+  const groundStations = surfaceObjects.filter((object) => object.kind === "ground-station");
+  const operationalCount = groundStations.filter(
+    (station) => station.groundStationDetails?.operationalStatus === "available",
+  ).length;
+  elements.stationTableCount.textContent = `${operationalCount} / ${groundStations.length} OPERATIONAL`;
+  elements.stationTableBody.replaceChildren(
+    ...groundStations.map((station) => {
+      const row = document.createElement("tr");
+      const stationCell = document.createElement("th");
+      stationCell.scope = "row";
+      stationCell.textContent = station.name;
+
+      const locationCell = document.createElement("td");
+      const locationName = document.createElement("strong");
+      locationName.className = "table-location-name";
+      locationName.textContent = station.description.replace(/^Ground station · /, "");
+      const coordinates = document.createElement("small");
+      coordinates.className = "table-coordinate";
+      coordinates.textContent = formatCoordinate(
+        station.location.latitudeDeg,
+        station.location.longitudeDeg,
+      );
+      locationCell.append(locationName, coordinates);
+
+      const contactCell = document.createElement("td");
+      const state = document.createElement("span");
+      const isOperational = station.groundStationDetails?.operationalStatus === "available";
+      state.className = `table-status ${isOperational ? "table-status-active" : ""}`;
+      state.textContent = station.groundStationDetails
+        ? isOperational ? "AVAILABLE" : "DOWN"
+        : "UNCONFIGURED";
+      contactCell.append(state);
+
+      const uplinkCell = document.createElement("td");
+      uplinkCell.className = "table-rate";
+      uplinkCell.textContent = station.groundStationDetails
+        ? station.groundStationDetails.uplinkRateMbps.toLocaleString()
+        : "UNCONFIGURED";
+
+      const downlinkCell = document.createElement("td");
+      downlinkCell.className = "table-rate";
+      downlinkCell.textContent = station.groundStationDetails
+        ? station.groundStationDetails.downlinkRateMbps.toLocaleString()
+        : "UNCONFIGURED";
+
+      row.append(stationCell, locationCell, contactCell, uplinkCell, downlinkCell);
+      return row;
+    }),
+  );
+}
+
+function buildSpacecraftTable(onSelect: (satelliteId: string) => void): void {
+  elements.spacecraftCount.textContent = `${fleet.length} SPACECRAFT`;
+  spacecraftTableRows.clear();
+  elements.spacecraftTableBody.replaceChildren(
+    ...fleet.map((satellite) => {
+      const row = document.createElement("tr");
+      const identityCell = document.createElement("th");
+      identityCell.scope = "row";
+      const selectButton = document.createElement("button");
+      selectButton.type = "button";
+      selectButton.className = "spacecraft-select";
+      selectButton.textContent = satellite.name;
+      selectButton.setAttribute("aria-label", `Select ${satellite.name}`);
+      selectButton.addEventListener("click", () => onSelect(satellite.id));
+      identityCell.append(selectButton);
+
+      const coordinate = document.createElement("td");
+      const altitude = document.createElement("td");
+      altitude.className = "table-rate";
+      const lighting = document.createElement("td");
+      const stationAccess = document.createElement("td");
+      row.append(identityCell, coordinate, altitude, lighting, stationAccess);
+      spacecraftTableRows.set(satellite.id, {
+        row,
+        selectButton,
+        coordinate,
+        altitude,
+        lighting,
+        stationAccess,
+      });
+      return row;
+    }),
+  );
+}
+
+function renderSpacecraftTable(snapshots: readonly WorldSnapshot[]): void {
+  for (const snapshot of snapshots) {
+    const row = spacecraftTableRows.get(snapshot.satelliteId);
+    if (!row) continue;
+    const satellite = fleet.find(({ id }) => id === snapshot.satelliteId);
+    if (!satellite) continue;
+
+    row.row.classList.toggle("spacecraft-row-selected", satellite.id === selectedSatelliteId);
+    row.selectButton.setAttribute("aria-pressed", String(satellite.id === selectedSatelliteId));
+    row.coordinate.textContent = formatCoordinate(
+      snapshot.subSatellitePoint.latitudeDeg,
+      snapshot.subSatellitePoint.longitudeDeg,
+    );
+    row.altitude.textContent = `${Math.round(satellite.orbit.altitudeKm).toLocaleString()} km`;
+    row.lighting.textContent = snapshot.satelliteEclipsed ? "EARTH ECLIPSE" : "SUNLIT";
+    const accessibleStation = snapshot.stationContacts.find((contact) => contact.available);
+    row.stationAccess.textContent = accessibleStation
+      ? `IN RANGE · ${accessibleStation.station.name}`
+      : "NO CONTACT";
+  }
+}
+
+function renderSelectedSpacecraft(satellite: SatelliteDefinition, snapshot: WorldSnapshot): void {
+  elements.satelliteName.textContent = satellite.name;
+  elements.satelliteIdentifier.textContent = `SPACECRAFT · ${satellite.id.toUpperCase()}`;
+  elements.spacecraftDetailTitle.textContent = satellite.name;
+  elements.spacecraftDetailState.textContent = snapshot.satelliteEclipsed ? "EARTH ECLIPSE" : "SUNLIT";
+  elements.spacecraftDetailState.classList.toggle("table-status-active", !snapshot.satelliteEclipsed);
+  elements.spacecraftDetailAltitude.textContent = `${Math.round(satellite.orbit.altitudeKm).toLocaleString()} km`;
+  elements.spacecraftDetailInclination.textContent = `${satellite.orbit.inclinationDeg.toFixed(1)}°`;
+  elements.spacecraftDetailCoordinate.textContent = formatCoordinate(
+    snapshot.subSatellitePoint.latitudeDeg,
+    snapshot.subSatellitePoint.longitudeDeg,
+  );
+  const nearestStation = [...snapshot.stationContacts].sort((left, right) => left.distanceKm - right.distanceKm)[0];
+  elements.spacecraftDetailStation.textContent = nearestStation
+    ? `${nearestStation.station.name} · ${formatDistance(nearestStation.distanceKm)}${nearestStation.available ? " · IN RANGE" : ""}`
+    : "NONE CONFIGURED";
+}
+
+function renderNearestStationContact(stations: ReturnType<typeof createWorldSnapshot>["stationContacts"]): void {
   const nearestContact = [...stations].sort((left, right) => left.distanceKm - right.distanceKm)[0];
   if (nearestContact) {
     elements.satContactState.textContent = nearestContact.available
@@ -118,13 +272,13 @@ function renderLocations(snapshot: ReturnType<typeof createWorldSnapshot>): void
   );
 }
 
-function renderSnapshot(snapshot: ReturnType<typeof createWorldSnapshot>): void {
+function renderSnapshot(snapshot: WorldSnapshot, currentSatellite: SatelliteDefinition): void {
   const lat = snapshot.subSatellitePoint.latitudeDeg;
   const lon = snapshot.subSatellitePoint.longitudeDeg;
 
   elements.simClock.textContent = formatDuration(snapshot.elapsedSeconds);
   elements.satCoordinate.textContent = formatCoordinate(lat, lon);
-  elements.satAltitude.textContent = `${Math.round(satellite.orbit.altitudeKm)} km`;
+  elements.satAltitude.textContent = `${Math.round(currentSatellite.orbit.altitudeKm)} km`;
 
   const illuminated = !snapshot.satelliteEclipsed;
   elements.satSunState.textContent = illuminated ? "SOLAR ARRAY LIT" : "EARTH ECLIPSE";
@@ -183,12 +337,31 @@ function setupManagementTabs(): void {
 
 async function start(): Promise<void> {
   setupManagementTabs();
+  renderGroundStationTable();
   elements.contactRadius.textContent = EFFECTIVE_CONTACT_RADIUS_KM.toLocaleString();
   elements.stationList.innerHTML = '<div class="loading-row">CALCULATING ACCESS WINDOWS…</div>';
 
   const { createGlobeView } = await import("./rendering/globe");
-  const globe = await createGlobeView(satellite, surfaceObjects);
+  const globe = await createGlobeView(fleet, surfaceObjects);
+  buildSpacecraftTable((satelliteId) => {
+    selectedSatelliteId = satelliteId;
+    globe.setSelectedSatellite(satelliteId);
+  });
+  globe.setSelectedSatellite(selectedSatelliteId);
   globe.setTrackVisible(simulation.showTrack);
+
+  // Geography loads independently so a data failure does not stop the world clock.
+  void import("./ui/cellMarket").then(({ setupCellMarket }) => setupCellMarket(globe.viewer));
+
+  const updateFleetViews = (snapshots: readonly WorldSnapshot[]) => {
+    globe.update(snapshots);
+    renderSpacecraftTable(snapshots);
+    const selectedSnapshot = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId);
+    const selectedSatellite = fleet.find(({ id }) => id === selectedSatelliteId);
+    if (!selectedSnapshot || !selectedSatellite) return;
+    renderSnapshot(selectedSnapshot, selectedSatellite);
+    renderSelectedSpacecraft(selectedSatellite, selectedSnapshot);
+  };
 
   elements.trackToggle.addEventListener("click", () => {
     simulation.showTrack = !simulation.showTrack;
@@ -220,18 +393,20 @@ async function start(): Promise<void> {
     if (simulation.running) simulation.elapsedSeconds += elapsedRealSeconds * simulation.timeMultiplier;
 
     if (frameMilliseconds - previousUiUpdate > 120) {
-      const snapshot = createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds);
-      globe.update(snapshot);
-      renderSnapshot(snapshot);
+      const snapshots = fleet.map((satellite) =>
+        createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds),
+      );
+      updateFleetViews(snapshots);
       previousUiUpdate = frameMilliseconds;
     }
 
     requestAnimationFrame(animate);
   };
 
-  const firstSnapshot = createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds);
-  globe.update(firstSnapshot);
-  renderSnapshot(firstSnapshot);
+  const firstSnapshots = fleet.map((satellite) =>
+    createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds),
+  );
+  updateFleetViews(firstSnapshots);
   requestAnimationFrame(animate);
 }
 

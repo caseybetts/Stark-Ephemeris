@@ -28,13 +28,27 @@ This document records implementation constraints and architecture direction. The
 - The data view uses tabs for **Summary**, **Spacecraft**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default and replaces the current single readout as the overview.
 - Summary combines fleet-wide state, company information, operational exceptions, and key indicators that need attention.
 - Prefer tables for lists and comparisons, especially spacecraft, orders, and ground stations. Selecting a row should connect that record to its object or location on the globe.
-- The Orders view includes the searchable, filterable, sortable order list and order details. Its heat-map controls select active-order count or aggregate potential order value.
+- The Orders view includes a searchable, filterable, sortable cell-market list and cell details. Its map controls can show category exposure, calculated cell value, or repeat-purchase state once defined.
+- The Spacecraft view presents one row per configured satellite, current modeled position and state, and a detail view for the selected spacecraft. Selection highlights that spacecraft's globe marker and orbit.
 
 ### Open interface decisions
 
-- Exact columns, summary metrics, sorting defaults, and detail-panel contents for each tab.
+- Exact columns, summary metrics, sorting defaults, and detail-panel contents for each tab. The Spacecraft prototype uses orbit altitude, subsatellite point, sunlight/eclipse, and approximate station access; its detail view also shows inclination. The Ground Stations prototype uses facility status, site location/coordinates, and uplink/downlink rates, without satellite-specific contact data.
 - How selected table rows focus or highlight objects in the globe, and how that interaction works on narrow screens.
 - Whether tables should support bulk actions as fleet and order volumes grow.
+
+### Fleet prototype data
+
+- Keep spacecraft as a collection keyed by stable satellite IDs. The current initial fleet contains only Asteria-1, preserving the intended one-spacecraft start; no additional satellite or launch cost is invented for the prototype.
+- Calculate a separate world snapshot per spacecraft from the shared simulation clock and surface-object set. Drive each table row, selected detail view, marker, and orbit from that spacecraft's definition and snapshot.
+- The selected spacecraft is highlighted with a larger marker, visible label, and brighter orbit path. Health, onboard storage, battery state, camera capability, and cell-market revenue remain absent until their gameplay systems are implemented.
+
+### Ground-station prototype data
+
+- Keep facility operational status separate from a satellite's contact window. A station may be marked available or down independently of any spacecraft.
+- Store uplink and downlink bit rates in Mbps on each station definition. Both sample stations currently use configurable placeholder defaults of 10 Mbps uplink and 100 Mbps downlink; these are not real-site specifications and do not yet affect simulated transfer capacity or timing.
+- The sample station statuses are static configuration. Outages, maintenance, and status changes over time have not been modeled.
+- Location, facility availability, uplink rate, and downlink rate are the initial site fields shown in the table. Antenna count, simultaneous-link capacity, supported bands, and maintenance state remain future design options.
 
 ## Earth coordinates and orbit display
 
@@ -51,43 +65,53 @@ This document records implementation constraints and architecture direction. The
 - Keep geography in named latitude, longitude, and height fields at authoring boundaries. Use geographic points for locations such as cities and ground stations; use geographic boundaries/polygons for areas such as countries when area targets are needed.
 - Keep the simulation independent of the renderer's coordinate conventions. A small geography/visualization adapter converts named geographic inputs and satellite positions to the renderer's Earth-centered coordinates.
 - Model satellite motion from a simple orbit description and game time in an Earth-centered inertial-like frame, then transform the current position into the Earth-fixed frame used to draw it on a stationary globe. A simplified Earth-rotation angle is sufficient initially; high-precision astrodynamics is not a goal for the first build.
+- Keep orbit configuration and propagation per spacecraft. The initial fleet may use a shared provisional orbit profile, but simulation and visualization APIs must accept each spacecraft's own orbit parameters and calculate its state independently. Put propagation behind a model boundary so additional orbit classes or fidelity levels can be added without changing fleet/UI logic; the supported future orbit types and their accuracy remain open.
 - Keep the concepts of a 3D orbital path and a surface ground track distinct. The initial optional line is the 3D orbit path; a projected ground track can be added separately if it helps explain coverage.
 - Use the same game-time/world model as the basis for later sunlight and eclipse calculations.
 - If using CesiumJS, wrap its coordinate helpers so game code uses named fields and explicit units rather than positional arguments or library-specific types.
 
-## Revenue orders and imaging opportunities
+## Cell market and imaging opportunities
 
 ### Agreed direction
 
-- Orders are demand records, separate from images a satellite actually collects. An order can be fulfilled only after a qualifying acquisition and whatever later delivery steps the gameplay rules require.
-- The first order targets are geographic points, authored with latitude/longitude. A captured image is nominally a 20 km by 20 km ground footprint.
-- Order terms include monetary value, cloud-cover tolerance, maximum off-nadir angle, and minimum acceptable Sun elevation. Exact evaluation and payout rules remain open.
-- Each satellite has a slew-speed capability. A paid upgrade applies to satellites launched afterward; slew-speed units, upgrade cost, and the capability increase remain to be specified.
-- Order distribution should be controllable using weights for urban versus rural locations, continent, and coastal versus inland locations. The distribution logic should be replaceable and configurable so different market patterns can be explored and can change over the course of a scenario.
-- A toggleable, cell-based globe heat map should support both active-order count and aggregate potential order value as display metrics. Potential value must be identified as uncollected demand, separate from earned revenue.
-- Provide an Orders tab with a searchable, filterable, sortable list and an order detail view, alongside the globe heat map. Use paging or list virtualization if the active deck grows enough to make rendering every row inefficient.
+- Use a regular **¼° latitude/longitude grid** as the market and collection unit. A cell is the smallest collection unit, and the simulation treats collection as imaging the entire cell. Swath width is abstracted away; collection time, resource use, and access limits remain to be defined at the cell level.
+- Include every grid cell that intersects land, including mixed land-and-sea coastal cells; exclude cells with no land. Do not calculate land-area fraction as an eligibility or value requirement. This avoids creating market cells across remote open ocean while retaining coastal areas where ports, harbors, ships, and other activity can be valuable.
+- Each eligible cell has category-specific exposures, such as eligible area or feature count. For each category, maximum payout is its applicable unit price multiplied by the cell's exposure, then multiplied by the current VAM. Sum category payouts and credit that amount to company money when a successful whole-cell capture completes. The initial market has no archive sale; storage/downlink simulation is a separate operating constraint or cost.
+- Geographic attributes (candidate examples include urban footprints, military sites, data centers, energy infrastructure, farmland, sensitive ecological areas, borders, research sites, and monuments) may contribute to category exposures. These attributes and market rates are tunable in-game assumptions, not verified real-world prices.
+- The Orders tab presents the cell market and offers globe layers for category exposure, calculated gross value, and repeat-purchase/freshness state once that state is defined. Individual customer orders, point targets, and project contracts are not required for this initial economic loop; they may be added later as a separate layer.
+- Each satellite has a slew-speed capability. A paid upgrade applies to satellites launched afterward; slew-speed units, upgrade cost, and capability increase remain to be specified.
 
 ### Proposed implementation shape
 
-- Keep order generation in a simulation/domain module that accepts an explicit distribution profile rather than embedding geography weights in UI code. Profiles can combine geographic classifications with time-dependent weights; the exact combination and transition rules are open.
-- Generate order targets from a seeded scenario stream so distribution experiments can be reproduced. A profile change should affect future generation; already-issued orders retain the terms they were generated with unless an explicit gameplay rule changes them.
-- Keep order demand and acquisition records as separate domain data. An acquisition record describes the satellite, time, aimpoint, footprint, and observed conditions; order fulfillment logic compares that record with active order requirements.
-- Use a geographic cell index to query nearby orders during an imaging opportunity and to aggregate heat-map values. Thousands of active orders are a reasonable prototype target when they are spatially indexed and evaluated at simulation opportunities rather than scanned on every rendered frame. Do not create one globe entity per order by default.
-- Draw the heat map as a toggleable cell layer. Its initial cell size, color normalization, and exact rendering representation are open tuning choices.
-- When a satellite images a target, show a temporary line from the satellite to the aimpoint; a footprint outline can be shown as a compact cue. Do not render image pixels in the initial implementation.
+- Keep the grid, geographic attribute layers, per-cell category exposures, market state, repeat-purchase state, and collection updates in simulation/domain data, separate from Cesium and UI components.
+- The complete ¼° grid contains 1,036,800 cells before the land mask. Compact typed arrays or equivalent packed data are expected to keep static attributes and dynamic value state inexpensive. Do not create one globe entity per cell; render a tiled/grid layer and aggregate at display resolution when useful.
+- Preprocess sourced geographic datasets into the cell grid or load suitable static datasets; do not query external data services during simulation steps. Record source, version/date, resolution, attribution, and license for each distributed data layer.
+- Use one last-collection simulation timestamp per cell. Every category in that cell derives VAM from the shared elapsed time and its own cadence. A never-collected cell starts fully available (VAM 1). A successful whole-cell capture computes/records payout, credits company money once, and resets the timestamp as one domain operation; a failed capture does neither.
+- Store geographic attributes and derived category exposures separately from time-varying market rates and dynamic repeat-purchase state. Keep collection events traceable for revenue accounting.
+- **Agreed market and priority model:** Keep time-varying, read-only category prices and average customer refresh durations in market state and show them in a player-visible readout. The player sets a priority rate in points per matching unit for each category; these rates are the scheduling controls. Convert area exposures to square kilometres as needed (for example, stored hectares ÷ 100), and retain genuine feature counts for count-based categories. Do not invent area footprints for point or route records just to force a common unit. For each category use the same VAM to scale maximum payout and maximum priority. VAM is 0 through 10% of cadence, rises linearly to 1 at cadence, then stays at 1: `clamp((elapsed - 0.1 * cadence) / (0.9 * cadence), 0, 1)`. A never-collected cell starts at VAM 1. Recalculate derived payout and priority immediately when elapsed time or market/priority inputs change. Store one last-collection timestamp per cell, shared by its categories. Whole-cell capture resets that timestamp for every category, including slower-refresh categories in mixed cells. An optional cell-level `atMaximum` cache means every contributing category has VAM 1 and must be invalidated when relevant market data changes. A successful capture completion credits company money once and resets the timestamp as one domain operation; failed capture does neither. See [Gameplay](GAMEPLAY.md#market-information-cell-revenue-and-scheduling).
+- Cell aggregation uses a regular lat/lon index. Its geographic cell area varies with latitude; value layers must have an explicit interpretation (for example per-cell market value) and must not accidentally treat raw feature counts as comparable dollar prices.
+- Represent collection as a whole-cell operation. Swath width, scan-strip sequencing, and partial-cell coverage are outside the current model. Whole-cell completion does not imply instantaneous or cost-free collection; timing and resource rules remain open.
+- Draw the market as a toggleable cell layer. Cell resolution is agreed at ¼°; color normalization, zoom-level aggregation, and exact rendering representation remain open tuning choices.
+- When a satellite collects a cell, a temporary line or compact footprint cue may connect the satellite to the collection area. Do not render image pixels in the initial implementation.
 
 ### Open implementation and gameplay decisions
 
-- How the nominal 20 km by 20 km footprint changes, if at all, when imaging off-nadir; the first implementation may use a fixed ground footprint and treat off-nadir as an access/quality constraint.
-- The point-matching rule between an order and an image footprint, including whether one acquisition may satisfy multiple orders.
-- Whether orders expire, have deadlines, or require delivery by a specific time, and when their value becomes earned revenue.
-- The cloud model and the meaning of cloud-cover tolerance over a footprint.
-- How Sun elevation is measured for a point target and how it interacts with image quality or value.
-- Slew-speed units, the time required to retarget, whether pointing limits are separate from slew speed, and the effects of an upgrade on procurement and future spacecraft capability.
-- The source, format, resolution, and license for population/urban, continent, and coastal classifications.
-- How distribution weights combine, how profiles transition over time, and whether the player receives advance notice of market shifts.
-- Heat-map cell resolution and normalization; order count and aggregate potential value may have very different numeric ranges.
-- Active-order capacity.
+- Which additional attribute layers to include and their source, version, resolution, license, and attribution requirements.
+- How geographic features and attributes combine into category-level maximum in-game values; how area-based and point/presence-based layers are normalized and balanced across regions and market types; no adjustment solely for land fraction is planned.
+- How market category prices and refresh cadences change over time; changes immediately recalculate derived payout and priority using the existing per-cell timestamp.
+- Category-to-source mapping, exact count semantics, unit conversions, starting market prices/player priority rates/cadences, and how market information changes over time.
+- How the scheduler ranks available priority points against payout, access, and satellite constraints to select the next cell.
+- How cloud cover, Sun elevation, off-nadir access, slew time, satellite capability, and collection duration affect successful cell collection and/or payout.
+- What post-sale storage, downlink, processing, or delivery constraints and costs to model; these do not defer the agreed immediate cell-sale revenue.
+- Whether individual customer contracts, deadlines, or named monitoring sites are useful as an optional layer beyond the cell market.
+- How polar and dateline cells are represented for collection geometry, and how the heat-map layer aggregates and normalizes at different zoom levels.
+### Implemented geographic foundation (2026-10-05)
+
+- The initial dataset contains 363,779 cells intersecting Natural Earth land polygons at ¼° resolution, including mixed coastal cells. Eligibility uses all touched cells and does not calculate land fraction.
+- Fourteen geographic datasets are currently sourced: six Natural Earth layers for land, coastline, populated places/population, ports, urban areas, and boundaries; two circa-2015 agricultural rasters; WRI power plants; generalized Global Energy Monitor oil routes; NTAD military installation polygons; a Gigawatt Map data-center snapshot; NOAA GML research-monitoring stations; and UNESCO World Heritage points. Natural gas pipelines, grid lines/substations, sensitive ecological areas, and ships remain unsourced/null. See [Cell grid data](CELL_DATA.md) for provenance and caveats.
+- Per the user's choice, dollar rates remain unset. Category exposure normalization, collection revenue, and repeat-purchase cadence effects are not simulated in this slice.
+- The Orders view supports search, attribute filters, sorting, pagination, and cell details. An on-demand geographic tile overlay shows eligibility and real attributes; cell selection links the globe and table. Category exposure/value and repeat-purchase views remain future work.
+- Provenance, source limitations, packed data format, indexing rules, and rebuild steps are maintained in [Cell grid data](CELL_DATA.md).
 
 ### Provisional prototype conventions
 
@@ -120,6 +144,7 @@ Use Vite's static output and publish the generated site with GitHub Pages throug
 
 - Whether to retain TypeScript, Vite, and CesiumJS beyond the prototype.
 - Whether to replace the spherical gameplay Earth with WGS84 ellipsoid calculations.
+- Which additional orbit classes (for example, different circular altitudes/inclinations or non-circular orbits) and propagation fidelity to support after the starter circular orbit. Preserve per-spacecraft orbit inputs and a replaceable propagator boundary in the meantime.
 - Whether to add axial tilt, date/season effects, twilight, and a more precise Sun ephemeris.
 - Whether to replace the cylindrical eclipse rule and fixed station radius with exact geometry and link constraints.
 - How simulation time should map to calendar time and how time state should be saved.

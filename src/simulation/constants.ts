@@ -1,3 +1,5 @@
+import type { FleetState } from "./model";
+
 export const EARTH_MEAN_RADIUS_KM = 6_371.0;
 export const EARTH_GRAVITATIONAL_PARAMETER_KM3_S2 = 398_600.4418;
 
@@ -27,6 +29,12 @@ export const DEFAULT_SATELLITE: {
   },
 };
 
+// The player begins with the one configured spacecraft; the collection supports future fleet growth.
+export const INITIAL_FLEET: FleetState = {
+  satellites: [DEFAULT_SATELLITE],
+};
+
+// Prototype site data only. Rates are configurable placeholders and do not yet affect downlink simulation.
 export const SURFACE_OBJECTS = [
   {
     id: "colorado-relay",
@@ -34,6 +42,11 @@ export const SURFACE_OBJECTS = [
     kind: "ground-station",
     location: { latitudeDeg: 38.8339, longitudeDeg: -104.8214 },
     description: "Ground station · Colorado Springs",
+    groundStationDetails: {
+      operationalStatus: "available",
+      uplinkRateMbps: 10,
+      downlinkRateMbps: 100,
+    },
   },
   {
     id: "svalbard-relay",
@@ -41,6 +54,11 @@ export const SURFACE_OBJECTS = [
     kind: "ground-station",
     location: { latitudeDeg: 78.2232, longitudeDeg: 15.6469 },
     description: "Ground station · Longyearbyen",
+    groundStationDetails: {
+      operationalStatus: "available",
+      uplinkRateMbps: 10,
+      downlinkRateMbps: 100,
+    },
   },
   {
     id: "singapore-market",

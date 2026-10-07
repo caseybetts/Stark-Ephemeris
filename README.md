@@ -20,8 +20,9 @@ Vite prints a local URL to open in a browser. The first load uses the bundled Ce
 - Configurable time speed, pause/resume, and optional 3D orbit path.
 - Simple solar illumination, cylindrical eclipse, and fixed-radius ground-station contact readouts.
 - Satellite and world state calculations live separately from Cesium rendering.
+- A land-intersecting ¼° grid with 363,779 cells, a toggleable globe overlay, and a searchable Orders view for sourced city, port, per-cell urban footprint area, border, coast, agriculture, power plant, and mapped oil pipeline attributes.
 
-Orbit, solar, and contact constants are provisional scenario values in `src/simulation/constants.ts`. This prototype does not yet implement imaging requests, storage, power budgets, revenue, customer satisfaction, degradation, or anomaly handling.
+Orbit, solar, and contact constants are provisional scenario values in `src/simulation/constants.ts`. Cell dollar values remain unset. Collection, value recovery, storage, power budgets, revenue, customer satisfaction, degradation, and anomaly handling are not implemented. See [cell data and visualization](docs/CELL_DATA.md) for sources, limitations, and regeneration instructions.
 
 ## Build for static hosting
 

@@ -86,7 +86,7 @@ Cities and ground stations can be represented as points. Country or other area t
 
 ### Satellite data
 
-The first model needs an identity and enough orbit information to calculate a position at a requested game time. A common initial altitude is agreed, but the full satellite schema is not. Additional attributes such as storage, power, camera, health, or customer value should be added as explicit fields/components when their gameplay rules are designed; no final extensible attribute schema has been chosen.
+The first model needs an identity and enough orbit information to calculate a position at a requested game time. A common initial altitude is agreed as a prototype default, but orbit parameters belong to each spacecraft. Keep orbit configuration/state independent per satellite and call a propagation boundary with `(orbitDefinition, simulationTime)` to get its propagated state. The starter implementation can use a circular-orbit propagator; later propagators may support different altitudes, inclinations, eccentricities, or other orbit classes without changing fleet tables, cell-market logic, or renderer-facing satellite identity. Do not assume one shared altitude or phase in fleet-level APIs. Exact orbit types and fidelity remain open. Additional attributes such as storage, power, camera, health, or customer value should be added as explicit fields/components when their gameplay rules are designed; no final extensible attribute schema has been chosen.
 
 ### Coordinate spaces
 
@@ -114,6 +114,8 @@ Open choices: WGS84 versus a spherical gameplay Earth, height reference, and met
 The satellite position must be a deterministic function of simulation time and its orbit data. A stationary globe with a moving satellite requires transforming the orbit position into the Earth-fixed display frame as time advances.
 
 **Provisional starter orbit:** a circular orbit at 550 km altitude and 53° inclination, with 12° ascending-node orientation and 8° initial phase. Calculate period from altitude and Earth's gravitational parameter, propagate phase from elapsed simulation seconds, calculate the inertial Cartesian position, then rotate about Earth's polar axis by the 24-hour prototype Earth-rotation angle to obtain an Earth-fixed position. Transform that position to Cesium coordinates only when drawing.
+
+**Extensibility requirement:** store these values in the selected spacecraft's orbit definition rather than global constants. Keep the current circular propagator behind an orbit propagation module/interface. Position snapshots, orbit drawing, station access, and future imaging calculations consume per-spacecraft propagated state or orbit definition; none encode the assumption that every spacecraft follows Asteria-1's path. Adding another propagator is future work, not a requirement for high-fidelity orbital mechanics now.
 
 This is a low-complexity prototype model, not a final orbit-system decision. Time speed options are 1×, 60×, and 300×, initially 60×. The project does not model perturbations, precession, high-precision ephemerides, or a real-world epoch.
 
@@ -153,8 +155,18 @@ Later choices: whether the threshold should vary by altitude/class and whether c
 The coordinate model should make it possible to calculate distance and visibility between a satellite and any surface object. The meaning of a relationship must be chosen per mechanic:
 
 - Station downlink contact uses the effective contact rule above.
-- Imaging access likely needs target footprint, sensor swath, pointing constraints, and illumination, none of which have been specified.
+- Imaging access applies to whole cells. Pointing limits, illumination requirements, and the rule for a cell to be reachable remain open; swath width is abstracted away.
 - Generic proximity, line of sight, communications link quality, and customer-value association are distinct rules and should not be conflated into one universal `isNear` test.
+
+### 5.8 Cell market and collection
+
+**Agreed gameplay rule:** Use a regular ¼° latitude/longitude grid as the market and collection unit. Every grid cell intersecting land is eligible, including mixed land-and-sea coastal cells; cells with no land are excluded. Do not require a land-fraction calculation. The complete global grid has 1,036,800 cells before masking. The simulation treats each collection as a complete cell image, with swath width abstracted away.
+
+Each eligible cell has category-specific geographic exposures in units matching the market price and player priority rate. Convert area to km² as needed; count discrete sites/routes as counts unless sourced measures support another unit. Per cell-category, maximum payout is applicable market unit price × eligible exposure; maximum priority is player-set category priority rate × eligible exposure. Apply the same Value Availability Multiplier (VAM) to both. A never-collected cell starts at VAM 1. After collection, VAM is `clamp((elapsed - 0.1 × cadence) / (0.9 × cadence), 0, 1)`, where elapsed is since the cell's single last-collection timestamp. This keeps VAM at 0 for the first 10% of cadence, ramps linearly to 1 by the end of cadence, and stays capped at 1 thereafter. Cadence, market price, and player priority rate changes immediately affect calculated values. Sum available category payouts and credit company money once when capture completes; sum available category priority points separately for scheduling. Market rates and geographic exposures are in-game assumptions, not claims of real-world prices.
+
+**Candidate implementation shape:** Keep static cell attributes and derived category exposures separate from dynamic market rates, player-set category priority rates, and one last-collection timestamp per cell. Store the regular grid in compact arrays and index each cell by row/column or stable ID. Calculate payout and priority from the current inputs when needed rather than updating every cell on render frames. An optional cached `atMaximum` flag means all contributing categories in the cell have VAM 1 and must be invalidated when cadence changes. Whole-cell completion resets the timestamp for every category in the cell, including slower-refresh categories. The globe renderer should draw tiled or aggregated cell layers rather than one Cesium entity per cell. A capture event may include a temporary satellite-to-cell line or a compact footprint cue.
+
+Whole-cell collection is the gameplay abstraction. Collection duration, resource use, and access rules remain open. Swath width, scan-strip scheduling, and partial-cell coverage are outside the current model; geographic indexing and access calculations must still handle polar and dateline cells consistently.
 
 ## 6. Rendering and interface outline
 
@@ -170,8 +182,8 @@ The coordinate model should make it possible to calculate distance and visibilit
 - Keep the globe/visualization at the top and the active data view below it.
 - Provide **Summary**, **Spacecraft**, **Orders**, **Ground Stations**, and **Finance & Growth** tabs, with Summary selected by default.
 - Summary includes fleet-wide and company information plus operational exceptions and key indicators that need attention.
-- Use tables wherever they work well, particularly for spacecraft, orders, and ground stations. A selected record should be identifiable on the globe.
-- The Orders tab provides list search, filters, sorting, order details, and controls for the order-count or potential-value heat map.
+- Use tables wherever they work well, particularly for spacecraft, the cell market, and ground stations. A selected record should be identifiable on the globe.
+- The Orders tab provides a searchable, filterable, sortable cell-market list and cell details, with controls for category exposure, calculated value, or repeat-purchase state layers.
 
 ### Current prototype slice
 
@@ -179,7 +191,10 @@ The coordinate model should make it possible to calculate distance and visibilit
 - Compact controls: pause/resume, orbit-track toggle, and 1×/60×/300× speed selector, starting at 60×.
 - The vertical management interface has five tabs: Summary (default), Spacecraft, Orders, Ground Stations, and Finance & Growth.
 - Summary presents the current prototype satellite status, world-state status, approximate station range, and daylight state of sample points/markets. It explicitly notes that company and fleet-wide metrics are not yet modeled.
-- Spacecraft, Orders, Ground Stations, and Finance & Growth currently show labeled placeholders until their corresponding gameplay systems or table views are implemented.
+- Spacecraft presents a data-driven table and detail view backed by a fleet collection. The initial fleet still contains only Asteria-1; each configured spacecraft receives its own world snapshot, marker, and orbit, and table selection highlights the chosen marker/orbit.
+- Ground Stations presents configured station names, cities/coordinates, facility availability, and uplink/downlink rates in a wide table. The current availability and rates are configurable prototype data; rates do not yet constrain data transfer. Satellite-specific access remains in Summary until a fleet-wide contact model is designed.
+- Orders presents the land-intersecting ¼° grid with sourced attributes, search/filter/sort controls, paginated cell rows, cell details, a toggleable globe overlay, and mapped oil route geometry. Selection can outline and focus a cell or identify a pipeline route. Dollar rates remain unset; category exposure, revenue, and repeat-purchase views await the economy rules. Data provenance and code boundaries are documented in [Cell grid data](CELL_DATA.md).
+- Finance & Growth remains a labeled placeholder until its gameplay systems are implemented.
 - Changing tabs only changes visible interface content; it does not restart or pause the simulation.
 
 The prototype has a fixed initial camera, labeled sample markers, responsive CSS, and a simple map layer. Advanced camera interactions, selecting multiple satellites, image footprints, true day/night shading, and accessibility polish remain to be designed.
@@ -193,7 +208,7 @@ This sequence is a proposal for an agent asked to begin coding; it is not a user
 3. **Implement pure world calculations.** Add simple time advancement, one circular orbit, Earth rotation, sunlight/eclipse state, and the approximate contact rule. Keep defaults in the simulation constants module.
 4. **Render the Earth and objects.** Use the ellipsoid/globe, Natural Earth II texture, known surface points, satellite marker, and optional 3D orbit path. Convert coordinates at a single renderer boundary.
 5. **Expose state in a small panel.** Show calculated values so frame or sunlight mistakes are visible to the user.
-6. **Add operational/gameplay systems only after the world slice is reviewable.** Storage, power budgets, imagery requests, revenue, customer satisfaction, degradation, anomaly response, satellite design, and fleet growth need their own explicit rules.
+6. **Add operational/gameplay systems only after the world slice is reviewable.** Storage, power budgets, cell-value collection, revenue, customer satisfaction, degradation, anomaly response, satellite design, and fleet growth need their own explicit rules.
 
 Do not treat the suggested order as permission to invent missing orbital constants or game-economy formulas. For a prototype, document reversible defaults in code/config and keep them easy to tune.
 
@@ -211,13 +226,13 @@ The current prototype constants are implemented and visible in `src/simulation/c
 
 ### Blocking before the world model can drive the full game
 
-- Source and licensing of city, country, landmass, and customer-area data.
-- Point versus polygon/area order targets and the capture-footprint/coverage rule.
+- Source, licensing, coverage, and preprocessing of the land mask and cell attribute datasets.
+- The ¼° cell market is the current collection abstraction. Category mapping/exposure normalization, starting market prices and player priority rates, and the scheduler's ranking rule remain open. Initial cells start at VAM 1; collection recovery timing and shared per-cell timestamp are agreed.
 - What qualifies as successful imagery collection and how satellite pointing is represented.
 - Downlink bandwidth, station scheduling/capacity, and relationship to onboard data retention.
 - Energy generation/storage/use and how sunlight/eclipses change it.
 - Which satellite attributes are part of the first satellite design and how they affect behavior.
-- Customer request format, delivery deadlines, revenue, satisfaction, and retention value.
+- How to record immediate whole-cell capture revenue and which post-sale storage, downlink, processing, or delivery costs/constraints to model; whether customer contracts, deadlines, satisfaction, and retention are later needed.
 - Degradation, anomalies, diagnostic certainty, and repair/intervention choices.
 - Time units, pausing/acceleration semantics, save/load, and first-playable milestone.
 

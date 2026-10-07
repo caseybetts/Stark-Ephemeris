@@ -1,0 +1,11 @@
+{
+  "cities": [
+    {
+      "name": "Tasiusaq",
+      "longitude": -56.0598137,
+      "latitude": 73.3690023,
+      "cellId": 95535
+    }
+  ],
+  "ports": []
+}

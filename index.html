@@ -27,6 +27,9 @@
               <time id="sim-clock">T+00:00:00</time>
             </div>
             <div class="top-actions">
+              <button class="icon-button" id="cell-grid-toggle" type="button" aria-pressed="false" disabled>
+                <span aria-hidden="true">▦</span><span>CELL GRID</span>
+              </button>
               <button class="icon-button" id="track-toggle" type="button" aria-pressed="true">
                 <span class="track-icon" aria-hidden="true">⌁</span>
                 <span>ORBIT TRACK</span>
@@ -47,7 +50,7 @@
           <div class="bottom-legend">
             <span class="legend-item"><i class="legend-satellite"></i> SATELLITE</span>
             <span class="legend-item"><i class="legend-station"></i> GROUND STATION</span>
-            <span class="legend-item"><i class="legend-target"></i> IMAGING MARKET</span>
+            <span class="legend-item"><i class="legend-target"></i> SAMPLE SITE</span>
             <span class="legend-note">Surface status updates with the simulation clock</span>
           </div>
         </section>
@@ -80,7 +83,7 @@
               <div class="satellite-identity">
                 <div class="satellite-symbol" aria-hidden="true"><span></span></div>
                 <div>
-                  <p class="eyebrow">SPACECRAFT 001</p>
+                  <p class="eyebrow" id="satellite-identifier">SPACECRAFT 001</p>
                   <h2 id="satellite-name">Asteria-1</h2>
                 </div>
               </div>
@@ -162,14 +165,73 @@
           </section>
           </section>
 
-          <section class="management-tabpanel placeholder-panel" id="panel-spacecraft" role="tabpanel" aria-labelledby="tab-spacecraft" tabindex="0" hidden>
-            <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">◉</span><p class="eyebrow">FLEET MANAGEMENT</p><h2>Spacecraft roster is not available yet</h2><p>This view will become a fleet table when spacecraft records and multi-satellite operations are implemented. The current prototype satellite remains visible in Summary and on the globe.</p></div>
+          <section class="management-tabpanel spacecraft-panel" id="panel-spacecraft" role="tabpanel" aria-labelledby="tab-spacecraft" tabindex="0" hidden>
+            <header class="fleet-view-header">
+              <div>
+                <p class="eyebrow">FLEET MANAGEMENT</p>
+                <h2>Spacecraft roster</h2>
+              </div>
+              <span class="network-count" id="spacecraft-count">—</span>
+            </header>
+            <p class="table-explainer">Select a spacecraft to highlight its marker and orbit. Values reflect modeled orbit, sunlight, eclipse, and approximate station access; storage, battery, health, and revenue are not modeled yet.</p>
+            <div class="table-scroll fleet-table-scroll" role="region" aria-label="Spacecraft fleet table" tabindex="0">
+              <table class="operations-table fleet-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Spacecraft</th>
+                    <th scope="col">Subsatellite point</th>
+                    <th scope="col">Altitude</th>
+                    <th scope="col">Lighting</th>
+                    <th scope="col">Station access</th>
+                  </tr>
+                </thead>
+                <tbody id="spacecraft-table-body"></tbody>
+              </table>
+            </div>
+            <section class="spacecraft-detail" aria-labelledby="spacecraft-detail-title">
+              <div class="spacecraft-detail-heading">
+                <div>
+                  <p class="eyebrow">SELECTED SPACECRAFT</p>
+                  <h3 id="spacecraft-detail-title">—</h3>
+                </div>
+                <span class="table-status table-status-active" id="spacecraft-detail-state">—</span>
+              </div>
+              <div class="spacecraft-detail-grid">
+                <div><span>ORBIT ALTITUDE</span><strong id="spacecraft-detail-altitude">—</strong></div>
+                <div><span>INCLINATION</span><strong id="spacecraft-detail-inclination">—</strong></div>
+                <div><span>SUBSATELLITE POINT</span><strong id="spacecraft-detail-coordinate">—</strong></div>
+                <div><span>NEAREST STATION</span><strong id="spacecraft-detail-station">—</strong></div>
+              </div>
+            </section>
           </section>
-          <section class="management-tabpanel placeholder-panel" id="panel-orders" role="tabpanel" aria-labelledby="tab-orders" tabindex="0" hidden>
-            <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">⌖</span><p class="eyebrow">IMAGING MARKET</p><h2>Orders are not available yet</h2><p>Order generation, acquisition, customer requirements, and the order map layer are planned systems. No order or revenue data is simulated yet.</p></div>
+          <section class="management-tabpanel cell-market-panel" id="panel-orders" role="tabpanel" aria-labelledby="tab-orders" tabindex="0" hidden>
+            <p class="cell-loading" role="status">Loading geographic cell data…</p>
           </section>
           <section class="management-tabpanel placeholder-panel" id="panel-ground-stations" role="tabpanel" aria-labelledby="tab-ground-stations" tabindex="0" hidden>
-            <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">⌁</span><p class="eyebrow">DOWNLINK NETWORK</p><h2>Ground-station table is not available yet</h2><p>The current station definitions and approximate range calculations appear in Summary. A searchable station table is planned as a separate implementation item.</p></div>
+            <section class="section-block stations-table-block" aria-labelledby="station-network-title">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">DOWNLINK NETWORK</p>
+                  <h2 id="station-network-title">Configured ground stations</h2>
+                </div>
+                <span class="network-count" id="station-table-count">—</span>
+              </div>
+              <p class="table-explainer">Site status is independent of spacecraft contact. Bit rates are configurable prototype defaults and do not yet constrain data transfer.</p>
+              <div class="table-scroll" role="region" aria-label="Ground station status table" tabindex="0">
+                <table class="operations-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Station</th>
+                      <th scope="col">Location</th>
+                      <th scope="col">Site status</th>
+                      <th scope="col">Uplink rate (Mbps)</th>
+                      <th scope="col">Downlink rate (Mbps)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="station-table-body"></tbody>
+                </table>
+              </div>
+            </section>
           </section>
           <section class="management-tabpanel placeholder-panel" id="panel-finance-growth" role="tabpanel" aria-labelledby="tab-finance-growth" tabindex="0" hidden>
             <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">↗</span><p class="eyebrow">COMPANY PERFORMANCE</p><h2>Finance and growth are not available yet</h2><p>Revenue, costs, customer satisfaction, launch planning, and company growth rules have not been implemented. This view will be populated when those systems are defined.</p></div>

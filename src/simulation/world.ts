@@ -139,6 +139,7 @@ export function createWorldSnapshot(
   const sunDirectionEarthFixed = rotateInertialToEarthFixed(sunDirectionInertial, elapsedSeconds);
 
   return {
+    satelliteId: satellite.id,
     elapsedSeconds,
     satelliteInertialKm,
     satelliteEarthFixedKm,

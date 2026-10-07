@@ -14,6 +14,7 @@ This is the project's on-deck menu of implementation work. It turns discussed fe
 
 - **Ready:** The first implementation slice is sufficiently described.
 - **Needs design:** The direction is agreed, but important rules or data sources need user decisions before the full feature can be implemented.
+- **Partial:** A usable slice is implemented; the item lists remaining work and decisions.
 
 ## Already implemented
 
@@ -25,100 +26,87 @@ Do not select these as pending work unless a new defect is reported:
 - Prototype sunlight, satellite eclipse, sub-satellite coordinates, and approximate ground-station range calculations with status readouts.
 - Orbit-track flicker fix and Earth occlusion for satellite and surface markers.
 - UI-01 management tabs and Summary view completed 2026-10-02: the globe sits above Summary, Spacecraft, Orders, Ground Stations, and Finance & Growth; switching tabs leaves the running simulation intact.
+- UI-02 Ground Stations table completed 2026-10-02: configured stations show site availability, location coordinates, and configurable uplink/downlink prototype rates, independent of spacecraft contact.
+- FLEET-01 Spacecraft table and selection view completed 2026-10-02: the starting fleet remains one spacecraft, while the collection, per-spacecraft world snapshots, table/detail views, and globe marker/orbit selection support additional configured spacecraft.
+- CELL-01/CELL-03 geographic foundation completed 2026-10-05: 363,779 eligible ¼° land/coastal cells and fourteen sourced datasets, including military installations, data centers, NOAA research stations, and UNESCO World Heritage points. Orders has search, filters, sorting, pagination, cell details, and sixteen cell map modes. Category exposure normalization, dollar rates, collection revenue, cadence behavior, and the market dashboard remain unfinished; see the partial CELL-01/02/03 items below.
 
-## Ready for a bounded first slice
+## Ready for implementation
 
-### UI-02 — Build the Ground Stations table
+### UI-03 — Use station location as the table identifier
 
 **Status:** Ready  
-**Agreed:** Ground Stations is a tab, and tables are preferred for station lists.
+**Agreed:** The Ground Stations table does not need a separate station-name column when its location already identifies the site. If more than one station is in a city, distinguish those sites with numbers.
 
-**Work:** Show the existing station definitions and live range calculations in a table. Include station name, geographic location, current range/contact state, and distance from the satellite. Keep the table driven by domain state, not hard-coded rendered rows.
+**Work:** Remove the standalone station-name column and use city/location as the primary identifier. If a city has multiple stations, append stable, deterministic numbering to distinguish them. Preserve internal station IDs and the other site-specific columns.
 
-**Done when:** The configured stations appear in a readable table and their state updates with simulation time. Selecting a station identifies it on the globe if the shared row-to-globe interaction is available.
+**Done when:** The table identifies each station by its location; duplicate-city locations receive unambiguous numbering; station identity in simulation data is unchanged.
 
-**Dependencies/open choices:** Station capacity, antenna/link limits, contact scheduling, and bulk station operations are not defined. Leave those fields out until their rules exist.
+## Cell market and imaging system
 
-## Order and imaging system
+### CELL-01 — Prepare the land-intersecting cell market
 
-### ORD-01 — Define order and acquisition records
+**Status:** Partial — geographic foundation implemented 2026-10-05; valuation remains open.
+**Implemented:** 363,779 eligible cells with fourteen sourced datasets: six Natural Earth layers; cropland and pasture area; power plant counts/capacity; mapped major oil pipeline routes; military installation polygons; data-center records; NOAA research-monitoring stations; and UNESCO World Heritage entries. A reproducible build pipeline records provenance and keeps remaining unsourced attributes null. The user requested that dollar values remain unset. See [Cell grid data](CELL_DATA.md).
 
-**Status:** Needs design  
-**Agreed:** Orders are point targets and are separate from images collected. The nominal ground image footprint is 20 km by 20 km. Order attributes include value, cloud-cover tolerance, maximum off-nadir angle, and minimum Sun elevation.
+**Agreed:** Use a regular ¼° latitude/longitude grid. Cells that intersect any land are eligible, including mixed land-and-sea coastal cells; cells with no land are excluded. Do not require a land-fraction calculation. Geographic feature layers may contribute to each eligible cell's maximum in-game collection value.
 
-**Work:** Add Cesium-independent domain types for an order, an acquisition record, and their lifecycle. Keep order demand distinct from the image event that may satisfy it. An acquisition should be able to record satellite, simulation time, aimpoint, footprint, and observed conditions.
+**Work:** Map the sourced attributes into market categories and define how area-based versus per-site/count attributes contribute to each cell. Keep static geographic exposures reproducible and separate from time-varying market rates, repeat-purchase state, and runtime simulation/UI logic.
 
-**Done when:** Domain data can represent orders and captures without importing UI or Cesium types, and an order can be associated with a qualifying acquisition through an isolated rule function.
+**Done when:** Every eligible cell's category exposures can be inspected and normalized independently of Cesium, ready for the dynamic market and value rules in CELL-02.
 
-**Open choices:** Point-in-footprint tolerance, deadlines/expiry, delivery steps and payout timing, cloud model, whether one acquisition can fulfill multiple orders, and how off-nadir changes the ground footprint. Use configurable prototype values only after those choices are recorded.
+**Open choices:** Whether to add more geographic layers; which attributes belong to each market category; and how area-based and per-site attributes are normalized. Sources and licenses for all fourteen datasets are recorded.
 
-### ORD-02 — Add a configurable order distribution system
-
-**Status:** Needs design  
-**Agreed:** Order generation must be changeable and able to evolve during a scenario. Distribution controls include weights for urban/rural, continent, and coastal/inland locations. A seeded scenario stream and profiles that affect future orders are proposed implementation choices in the technical strategy.
-
-**Work:** Isolate order generation behind a distribution-profile interface. Keep generated orders independent of the renderer and preserve the terms on already-issued orders when future distribution settings change. Add a small prototype deck only after suitable sample classifications or an approved data source are available.
-
-**Done when:** A profile can specify the distribution strategy and weights separately from order creation, and a profile change can affect future order generation without rewriting existing orders.
-
-**Open choices:** Data source and licensing for population, continent, and coastal classifications; how weights combine and normalize; generation rate, active-order cap, profile-transition timing, and whether the player receives notice of shifts.
-
-### ORD-03 — Implement imaging opportunity evaluation and capture feedback
+### CELL-02 — Calculate whole-cell revenue and repeat-purchase behavior
 
 **Status:** Needs design  
-**Agreed:** Orders are points; imaging is nominally a 20 km by 20 km ground footprint; orders can specify cloud, Sun-elevation, and off-nadir tolerances. A temporary line from satellite to aimpoint is desired during imaging; a footprint outline is an optional visual cue.
+**Agreed:** The ¼° cell is the smallest collection unit, and collection is treated as imaging the entire cell. Swath width is abstracted away; timing, resource use, and access rules are defined at the cell level. Successful capture pays the sum of currently available per-category payouts and credits company money immediately on completion.
 
-**Work:** Add an imaging-opportunity calculation that evaluates reachable order targets at simulation opportunities, creates an acquisition record when collection succeeds, and gives visible feedback with a satellite-to-target line. Keep the calculation in the simulation layer and the line/footprint in the visualization layer.
+**Agreed:** The market sets each category's current imagery price and average customer refresh cadence. These values change over time, are visible in a read-only market dashboard, and are not player-editable. Rates use category-appropriate units, such as dollars per square kilometre or dollars per counted feature. The player sets an editable priority rate in points per matching unit for each category. These category priority rates determine per-cell priority from that cell's area/count exposure; there is no separate category or cell emphasis control. Priority rates do not change market prices, cadence, or payout.
 
-**Done when:** A valid opportunity can be evaluated without checking every order on every render frame; successful capture creates a separate acquisition event; the line appears only during the capture event and is occluded by Earth when appropriate.
+**Agreed recovery curve and state:** A never-collected cell starts at VAM 1. Store one last-collection timestamp per cell; all categories in that cell share elapsed time but apply their own cadence. The minimum refresh period is 10% of cadence. VAM is 0 through that time, rises linearly to 1 at the full cadence, and stays there: `VAM = clamp((elapsed - 0.1 * cadence) / (0.9 * cadence), 0, 1)`. For example, with a 100-day cadence, VAM stays 0 through day 10 and reaches 1 at day 100. Durations use explicit simulation units (internally seconds); calendar months are not a simulation unit. Recalculate VAM and derived payout/priority immediately when time, cadence, market price, or player priority rates change. Values are calculated scores, not balances. A whole-cell collection resets the shared timestamp for all categories in the cell, including slower-refresh categories; this is accepted. An optional per-cell `atMaximum` cache is true only when all contributing categories are at VAM 1 and is invalidated when relevant market data changes.
 
-**Open choices:** Off-nadir access/quality formula, fixed versus distorted footprint, cloud sampling, Sun-angle quality effects, pointing constraints, and order matching. Avoid implementing detailed attitude dynamics unless separately selected.
+For each cell-category, maximum payout is applicable market unit price × eligible area/count and available payout is maximum payout × VAM. Maximum priority is player-set category priority rate × eligible area/count and available priority is maximum priority × VAM. Sum payouts and priority points separately. Successful capture completion calculates and records payout, credits company money exactly once, and resets the cell timestamp as one operation. Failed capture does not pay or reset.
 
-### ORD-04 — Add the Orders table and detail view
+**Work:** Add Cesium-independent market state for time-varying category prices and refresh cadences, player-set category priority rates, per-cell category area/count exposures, and one last-collection timestamp per cell. Implement deterministic VAM, payout, priority-point calculation, and an atomic whole-cell collection event recording satellite/time/cell and immediate company revenue.
+
+**Done when:** Per-category payout is market unit price × eligible exposure × VAM; per-category priority is player-set priority rate × eligible exposure × VAM; the two totals are inspectable separately; never-collected cells start at VAM 1; time/input changes update calculated values immediately; capture credits the sum of payouts once and resets the timestamp; market data is not player-editable; and changing priority rates affects scheduling without changing payout.
+
+**Open choices:** Category mapping and exposure normalization; treatment of overlapping categories/features; starting prices, priority rates, and cadences and their trends; how the scheduler ranks available priority against payout, access, and satellite constraints; starting company cash; collection timing/cost; and the role of clouds/Sun/off-nadir/slew capability.
+
+### CELL-03 — Show the cell market in Orders
+
+**Status:** Partial — geographic visualization implemented 2026-10-05; market/revenue modes await CELL-02.
+**Implemented:** Toggleable imagery tiles for eligibility and fourteen sourced geographic datasets, plus a mapped oil pipeline route overlay, cell selection on the globe, search, filters, sorting, pagination, and details in Orders. Dollar fields are explicitly unset. No globe entity is created for each cell.
+
+**Agreed:** The Orders tab presents the cell market, with toggleable globe layers for category exposure, calculated cell value, or repeat-purchase/freshness state once defined. The grid has about 1.04 million cells before land masking; the renderer must not create one globe entity per cell.
+
+**Work:** Add a market dashboard with read-only category imagery prices and average customer refresh cadences, plus player-editable category priority rates. Add a searchable, filterable, sortable cell view with location/ID, per-category exposure, available payout and priority contributions, cell payout and priority totals, and VAM/recovery state. Render tiled or aggregated cell layers and connect selected cells in the table to the globe.
+
+**Done when:** The view and globe map reflect the same simulation state, support cell selection, and remain separate from geographic data preparation and collection rules.
+
+**Remaining:** Add the market dashboard for read-only category prices/cadences and editable category priority rates; per-cell exposure, payout, and priority readouts; and payout/priority/VAM map layers. Geographic display conventions and source caveats are recorded in [Cell grid data](CELL_DATA.md).
+
+### FLEET-03 — Support additional orbit models
 
 **Status:** Needs design  
-**Agreed:** Orders has a tab with a searchable, filterable, sortable list and order details.
+**Agreed:** Orbit definitions and propagation are per spacecraft. Fleet-level simulation and rendering must not assume all spacecraft share one altitude, phase, or path. The current circular orbit is a provisional starter model; future orbit classes should fit behind a replaceable propagation boundary.
 
-**Work:** Present the active order deck in a table with target location, value, status, and agreed collection constraints. Add search, filters, sorting, and a detail view. Selecting an order should identify its point on the globe when feasible.
+**Work:** Introduce or refine an orbit-definition/propagation boundary so each spacecraft can provide its own orbit parameters and produce position/state at simulation time. Keep current circular propagation as the first model. Add additional orbit classes only when selected and specified; do not require high-fidelity astrodynamics as part of the abstraction work.
 
-**Done when:** The list is generated from order domain state; sort/filter behavior is clear; order selection links the row, detail, and map selection without duplicating business rules in the UI.
+**Done when:** Two spacecraft can use different supported orbit definitions and independently produce correct snapshots and rendered paths without special cases in fleet tables or UI. Simulation/domain types remain Cesium-independent.
 
-**Open choices:** Final columns, default sort, statuses, expiry treatment, paging/virtualization threshold, and order capacity.
+**Open choices:** Which orbit classes to support first, required accuracy, how orbit parameters are authored or acquired, epoch/time conventions, and whether perturbations or external ephemeris formats are needed.
 
-**Dependency:** ORD-01.
-
-### ORD-05 — Draw the order-density heat map
-
-**Status:** Needs design  
-**Agreed:** The globe should have a toggleable cell-based heat map with selectable active-order count or aggregate potential order value. Potential value must be labeled as uncollected demand, not earned revenue.
-
-**Work:** Aggregate orders by geographic cell and render a clear-to-red layer. Keep aggregation independent from Cesium and let the visualization convert cell values to rendered shapes/colors. Do not add one Cesium entity per order.
-
-**Done when:** The layer can be toggled; users can switch between order count and potential value; cells update when the active order deck changes; map rendering remains separate from order generation.
-
-**Open choices:** Cell size, count/value color normalization, selected-cell details, and behavior at different zoom levels.
-
-**Dependencies:** ORD-01 and ORD-02.
+**Dependency:** Existing per-spacecraft fleet definitions and world snapshots.
 
 ## Fleet, operations, and company systems
-
-### FLEET-01 — Build the Spacecraft table and selection view
-
-**Status:** Needs design  
-**Agreed:** Spacecraft is a tab intended to support a large fleet, with tables used wherever practical. Satellite state should include explicit operating attributes rather than values embedded in UI components.
-
-**Work:** Add a fleet collection to simulation state and show one row per satellite. Provide a detail view for the selected spacecraft and connect selection to its globe marker/orbit. Start with attributes that have actual simulation rules; do not create decorative values for unimplemented systems.
-
-**Done when:** Multiple satellite definitions can be represented and selected independently; table and detail views derive from the same domain state; adding spacecraft does not require new UI markup per satellite.
-
-**Open choices:** Initial table columns, satellite classes, fleet policies, and which attributes are implemented in each subsequent feature.
 
 ### FLEET-02 — Add slew speed and future-launch upgrades
 
 **Status:** Needs design  
 **Agreed:** Slew speed is a satellite capability. A paid upgrade affects satellites launched afterward.
 
-**Work:** Add slew speed to satellite capability data and make imaging scheduling account for the time needed to retarget between targets. Model upgrade purchases as company configuration applied to future launches, not retroactive changes to existing spacecraft.
+**Work:** Add slew speed to satellite capability data and make cell-collection scheduling account for time needed to retarget between cells. Model upgrade purchases as company configuration applied to future launches, not retroactive changes to existing spacecraft.
 
 **Done when:** Different slew capabilities can change retarget time and opportunity throughput; newly launched satellites receive the selected upgrade level; existing satellite specifications remain stable.
 
@@ -146,16 +134,16 @@ Do not select these as pending work unless a new defect is reported:
 
 **Open choices:** Failure rates, hidden versus visible information, diagnosis process, repair costs, intervention choices, and whether anomalies can permanently disable a satellite.
 
-### BIZ-01 — Add order revenue and customer satisfaction
+### BIZ-01 — Connect imagery collection to company finances
 
 **Status:** Needs design  
-**Agreed:** Customer work has monetary value, service expectations, revenue outcomes, and satisfaction consequences. Potential order value remains separate from earned revenue.
+**Agreed:** On successful whole-cell capture completion, the cell's calculated currently available market payout is credited exactly once. CELL-02 owns the collection calculation, company cash transaction, and recovery reset as one domain event. BIZ-01 adds finance reporting and any later operating costs; it must not credit the capture a second time. The initial market has no archive sales for old imagery. Individual customer contracts and satisfaction are optional future layers.
 
-**Work:** Track order acceptance, capture, delivery, payment, and service outcome as distinct states. Show potential value separately from revenue recognized by the company. Add satisfaction changes only after service rules are documented.
+**Work:** Record cell-collection payouts at capture and connect them to company cash/income. If storage, downlink, processing, or delivery are modeled, treat their capacity and costs separately from whether the image sale occurs. Add customer satisfaction only if a later contract system defines service expectations.
 
-**Done when:** A delivered order produces a traceable revenue event; missed or failed commitments have explicit outcomes; company totals can be reconciled from order events.
+**Done when:** Each collection payout and relevant cost is traceable to simulation events and company totals reconcile from those events.
 
-**Open choices:** Contracts versus open orders, deadlines, partial payment, penalties, customer retention, satisfaction formula, and service-level rules.
+**Open choices:** Which operational costs apply after an immediate sale; whether to add contracts, deadlines, penalties, customer retention, or satisfaction later.
 
 ### BIZ-02 — Add Finance & Growth view and satellite procurement
 
@@ -164,7 +152,7 @@ Do not select these as pending work unless a new defect is reported:
 
 **Work:** Show company cash, income, costs, and available growth decisions from explicit company state. Later connect spending to satellite design, slew upgrades for future launches, launch cadence, and ground capacity.
 
-**Done when:** Every displayed financial figure is derived from recorded company/order events; purchases validate affordability and change the intended future capability or capacity.
+**Done when:** Every displayed financial figure is derived from recorded company and collection events; purchases validate affordability and change the intended future capability or capacity; income is reconciled from recorded cell-collection and other business events.
 
 **Open choices:** Starting funds, prices, recurring costs, launch cadence, financing, satellite design options, and whether growth unlocks are time- or milestone-based.
 
@@ -175,7 +163,7 @@ Do not select these as pending work unless a new defect is reported:
 **Status:** Needs design  
 **Agreed:** The prototype is a static single-player browser app; local browser persistence is the provisional direction if saves are added.
 
-**Work:** Save and restore the versioned simulation state locally, including game time and company/fleet/order state as those systems are implemented. Add migration handling before changing a released save schema.
+**Work:** Save and restore the versioned simulation state locally, including game time, repeat-purchase state, and company/fleet state as those systems are implemented. Add migration handling before changing a released save schema.
 
 **Done when:** A player can reload without losing a saved run; invalid or older data is handled without silently corrupting a save.
 
@@ -196,8 +184,11 @@ Do not select these as pending work unless a new defect is reported:
 
 This is a dependency guide, not a commitment to start work automatically:
 
-1. **UI-02** and **FLEET-01** fill out the management tables, with fleet modeling needed for multiple spacecraft.
-2. **ORD-01** defines the order/acquisition boundary; **ORD-02** can then produce a configurable deck.
-3. **ORD-03**, **ORD-04**, and **ORD-05** add collection behavior, list management, and map aggregation.
-4. **OPS-01**, **FLEET-02**, **BIZ-01**, and **BIZ-02** make operations and growth consequential as their rules are decided.
-5. **OPS-02**, **PLATFORM-01**, and **PLATFORM-02** can be selected when their dependencies and release timing are clear.
+UI-03 is a ready but deferred table cleanup; it does not block the next simulation-system work.
+
+1. Finish **CELL-01** by agreeing the market categories and normalizing sourced attributes into inspectable per-cell area/count exposures.
+2. Define and implement **CELL-02**: time-varying market prices/cadences, player-set category priority rates, shared VAM recovery, category-based payout and priority calculation, and immediate whole-cell sales.
+3. Complete **CELL-03** with the category market dashboard, per-cell category exposure and gross value readouts, and cadence/repeat-purchase display.
+4. Add finance reporting and any modeled operating costs in **BIZ-01**; capture cash credits are recorded by CELL-02.
+5. **FLEET-03** can extend the current per-spacecraft orbit model; **OPS-01**, **FLEET-02**, and **BIZ-02** add operations and growth as their rules are decided.
+6. **OPS-02**, **PLATFORM-01**, and **PLATFORM-02** remain queued for selection when their dependencies and release timing are clear.

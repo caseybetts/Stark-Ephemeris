@@ -9,6 +9,7 @@ This folder contains the shared brief for product, gameplay, and implementation 
 | [Vision](VISION.md) | The game’s premise, intended experience, priorities, and scope boundaries |
 | [Gameplay](GAMEPLAY.md) | Player loop, simulation systems, interface needs, and unresolved design questions |
 | [Technical strategy](TECHNICAL_STRATEGY.md) | Browser/deployment constraints, architecture direction, data and persistence approach |
+| [Cell grid data](CELL_DATA.md) | Implemented geographic layers, provenance, limitations, data format, and rebuilding the cell grid |
 | [Implementation outline](IMPLEMENTATION_OUTLINE.md) | Code boundaries, coordinate and orbit calculations, candidate first slice, and gaps an implementation agent must resolve |
 | [Pending Changes](PENDING_CHANGES.md) | User-selectable implementation work items, dependencies, and open design decisions |
 
