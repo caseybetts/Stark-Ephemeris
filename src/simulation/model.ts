@@ -34,10 +34,18 @@ export type OrbitDefinition = {
   initialPhaseDeg: number;
 };
 
+export type SlewCapability = {
+  /** Prototype angular rate; gameplay tuning remains open. */
+  slewRateDegPerSecond: number;
+  /** Time added after a non-zero slew before the next operation can begin. */
+  settlingTimeSeconds: number;
+};
+
 export type SatelliteDefinition = {
   id: string;
   name: string;
   orbit: OrbitDefinition;
+  slew: SlewCapability;
 };
 
 export type FleetState = {
@@ -47,6 +55,8 @@ export type FleetState = {
 export type StationContact = {
   station: SurfaceObject;
   distanceKm: number;
+  geometricInRange: boolean;
+  stationOperational: boolean;
   available: boolean;
 };
 

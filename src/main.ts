@@ -2,9 +2,15 @@ import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./styles.css";
 import { AVAILABLE_TIME_MULTIPLIERS, DEFAULT_TIME_MULTIPLIER, EFFECTIVE_CONTACT_RADIUS_KM, INITIAL_FLEET, SURFACE_OBJECTS } from "./simulation/constants";
 import { createWorldSnapshot } from "./simulation/world";
+import { SimulationRuntime } from "./simulation/runtime";
+import { predictGroundContactWindows, type GroundContactWindow } from "./simulation/contacts";
+import { GroundOperations } from "./simulation/groundOperations";
 import { createPrototypeCellMarket } from "./simulation/prototypeCellMarket";
+import { cellLookDirectionAt, evaluateCellCaptureOpportunity, nadirPointingAt, type CellCaptureScenario } from "./simulation/cellCapture";
+import { generateGreedyCellSchedule } from "./simulation/cellScheduler";
 import type { CellMarketState } from "./simulation/cellMarketState";
-import type { SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
+import { OperationalLoop } from "./simulation/operationalLoop";
+import type { GeographicLocation, SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
 
 declare global {
   interface Window {
@@ -34,6 +40,13 @@ const elements = {
   subsolarLongitude: document.querySelector<HTMLElement>("#subsolar-longitude")!,
   stationCount: document.querySelector<HTMLElement>("#station-count")!,
   stationList: document.querySelector<HTMLElement>("#station-list")!,
+  nextContact: document.querySelector<HTMLElement>("#next-contact")!,
+  groundPlanStatus: document.querySelector<HTMLElement>("#ground-plan-status")!,
+  telStatus: document.querySelector<HTMLElement>("#tel-status")!,
+  telEvent: document.querySelector<HTMLElement>("#tel-event")!,
+  prepareTel: document.querySelector<HTMLButtonElement>("#prepare-tel")!,
+  generateGreedyTel: document.querySelector<HTMLButtonElement>("#generate-greedy-tel")!,
+  spacecraftPlanStatus: document.querySelector<HTMLElement>("#spacecraft-plan-status")!,
   stationTableCount: document.querySelector<HTMLElement>("#station-table-count")!,
   stationTableBody: document.querySelector<HTMLTableSectionElement>("#station-table-body")!,
   spacecraftCount: document.querySelector<HTMLElement>("#spacecraft-count")!,
@@ -51,9 +64,22 @@ const elements = {
 
 const fleet: readonly SatelliteDefinition[] = INITIAL_FLEET.satellites;
 const surfaceObjects = SURFACE_OBJECTS as readonly SurfaceObject[];
+const CONTACT_FORECAST_HORIZON_SECONDS = 24 * 60 * 60;
+const CONTACT_FORECAST_SAMPLE_SECONDS = 120;
+// Proposed demonstration values only; capture geometry and timing remain open gameplay choices.
+const PROPOSED_CELL_CAPTURE_SCENARIO: CellCaptureScenario = {
+  maximumOffNadirAngleDeg: 25,
+  collectionDurationSeconds: 45,
+  requireSunlitTarget: false,
+};
+// Prototype-only capacity placeholder: 100 MiB per configured spacecraft.
+// Image size and capacity remain open gameplay tuning values.
+const PROTOTYPE_STORAGE_CAPACITY_BYTES = 100 * 1024 * 1024;
 let selectedSatelliteId = fleet[0]!.id;
+const simulationRuntime = new SimulationRuntime(fleet.map(({ id }) => id));
+const groundOperations = new GroundOperations(fleet.map(({ id }) => id), simulationRuntime);
+const contactForecasts = new Map<string, { computedAt: number; window?: GroundContactWindow }>();
 const simulation = {
-  elapsedSeconds: 0,
   timeMultiplier: DEFAULT_TIME_MULTIPLIER,
   running: true,
   showTrack: true,
@@ -87,10 +113,15 @@ const formatDuration = (seconds: number): string => {
 
 const formatDistance = (distanceKm: number): string => `${Math.round(distanceKm).toLocaleString()} km`;
 
-function renderStations(snapshot: ReturnType<typeof createWorldSnapshot>): void {
+function renderStations(
+  snapshot: ReturnType<typeof createWorldSnapshot>,
+  nextWindow: GroundContactWindow | undefined,
+  groundOperations: GroundOperations,
+  runtime: SimulationRuntime,
+): void {
   const stations = snapshot.stationContacts;
   const activeCount = stations.filter((contact) => contact.available).length;
-  elements.stationCount.textContent = `${activeCount} / ${stations.length} IN RANGE`;
+  elements.stationCount.textContent = `${activeCount} / ${stations.length} IN CONTACT`;
   elements.stationList.replaceChildren(
     ...stations.map((contact) => {
       const row = document.createElement("div");
@@ -106,12 +137,23 @@ function renderStations(snapshot: ReturnType<typeof createWorldSnapshot>): void 
       copy.append(name, detail);
       const state = document.createElement("span");
       state.className = `row-state ${contact.available ? "row-state-active" : ""}`;
-      state.textContent = contact.available ? "IN RANGE" : formatDistance(contact.distanceKm);
+      state.textContent = contact.available
+        ? "IN CONTACT"
+        : contact.geometricInRange && !contact.stationOperational
+          ? "STATION DOWN"
+          : formatDistance(contact.distanceKm);
       row.append(marker, copy, state);
       return row;
     }),
   );
-  renderNearestStationContact(stations);
+  renderNearestStationContact(stations, nextWindow, snapshot.elapsedSeconds);
+  renderGroundControl(
+    snapshot.satelliteId,
+    snapshot.elapsedSeconds,
+    nextWindow,
+    groundOperations,
+    runtime,
+  );
 }
 
 function renderGroundStationTable(): void {
@@ -241,16 +283,66 @@ function renderSelectedSpacecraft(satellite: SatelliteDefinition, snapshot: Worl
     : "NONE CONFIGURED";
 }
 
-function renderNearestStationContact(stations: ReturnType<typeof createWorldSnapshot>["stationContacts"]): void {
+function renderNearestStationContact(
+  stations: ReturnType<typeof createWorldSnapshot>["stationContacts"],
+  nextWindow: GroundContactWindow | undefined,
+  nowSeconds: number,
+): void {
+  const activeContact = stations.find((contact) => contact.available);
   const nearestContact = [...stations].sort((left, right) => left.distanceKm - right.distanceKm)[0];
-  if (nearestContact) {
-    elements.satContactState.textContent = nearestContact.available
-      ? `IN RANGE · ${nearestContact.station.name.toUpperCase()}`
-      : `NO LINK · ${formatDistance(nearestContact.distanceKm)} TO ${nearestContact.station.name.toUpperCase()}`;
-    elements.satContactState.classList.toggle("state-warning", !nearestContact.available);
+  if (activeContact) {
+    elements.satContactState.textContent = `IN CONTACT · ${activeContact.station.name.toUpperCase()}`;
+    elements.satContactState.classList.remove("state-warning");
+  } else if (nearestContact?.geometricInRange && !nearestContact.stationOperational) {
+    elements.satContactState.textContent = `STATION DOWN · ${nearestContact.station.name.toUpperCase()}`;
+    elements.satContactState.classList.add("state-warning");
+  } else if (nextWindow) {
+    elements.satContactState.textContent = `NEXT · ${nextWindow.stationName.toUpperCase()} IN ${formatDuration(nextWindow.startsAtSeconds - nowSeconds)}`;
+    elements.satContactState.classList.remove("state-warning");
+  } else if (nearestContact) {
+    elements.satContactState.textContent = `NO LINK · ${formatDistance(nearestContact.distanceKm)} TO ${nearestContact.station.name.toUpperCase()}`;
+    elements.satContactState.classList.add("state-warning");
   } else {
     elements.satContactState.textContent = "NO STATIONS CONFIGURED";
+    elements.satContactState.classList.add("state-warning");
   }
+}
+
+function renderGroundControl(
+  satelliteId: string,
+  nowSeconds: number,
+  nextWindow: GroundContactWindow | undefined,
+  groundOperations: GroundOperations,
+  runtime: SimulationRuntime,
+): void {
+  const state = groundOperations.getSatelliteState(satelliteId);
+  const activeRuntimeAction = runtime.getSatelliteState(satelliteId).currentAction;
+  const activeStation = state.activeStationIds
+    .map((stationId) => surfaceObjects.find((station) => station.id === stationId)?.name)
+    .find((name): name is string => Boolean(name));
+  elements.nextContact.textContent = activeStation
+    ? `CONTACT OPEN · ${activeStation.toUpperCase()}`
+    : nextWindow
+      ? `NEXT CONTACT · ${nextWindow.stationName.toUpperCase()} IN ${formatDuration(nextWindow.startsAtSeconds - nowSeconds)}`
+      : "NO AVAILABLE CONTACT PREDICTED IN 24H";
+  elements.groundPlanStatus.textContent = state.groundPlanVersion > 0
+    ? `GROUND PLAN V${state.groundPlanVersion} · ${state.groundPlan.length} COMMANDS`
+    : "GROUND PLAN · NONE";
+  if (state.mode === "standby") {
+    elements.telStatus.textContent = state.standbyCause === "tel-exhausted"
+      ? `STANDBY · TEL V${state.onboardTelVersion} EXHAUSTED`
+      : "STANDBY · NO TEL UPLOADED";
+  } else {
+    const nextCommand = state.onboardCommands[state.nextCommandIndex];
+    const coverage = state.onboardCoverageEndsAtSeconds === null
+      ? "COVERAGE UNKNOWN"
+      : `COVERS TO ${formatDuration(state.onboardCoverageEndsAtSeconds)}`;
+    const running = activeRuntimeAction?.kind === "tel-command" ? " · COMMAND RUNNING" : "";
+    elements.telStatus.textContent =
+      `ONBOARD TEL V${state.onboardTelVersion} · ${state.nextCommandIndex + 1}/${state.onboardCommands.length} · ${nextCommand?.label ?? "READY"} · ${coverage}${running}`;
+  }
+  const latestEvent = [...groundOperations.events].reverse().find((event) => event.satelliteId === satelliteId);
+  elements.telEvent.textContent = latestEvent?.detail ?? "No ground-control events yet.";
 }
 
 function renderLocations(snapshot: ReturnType<typeof createWorldSnapshot>): void {
@@ -274,7 +366,11 @@ function renderLocations(snapshot: ReturnType<typeof createWorldSnapshot>): void
   );
 }
 
-function renderSnapshot(snapshot: WorldSnapshot, currentSatellite: SatelliteDefinition): void {
+function renderSnapshot(
+  snapshot: WorldSnapshot,
+  currentSatellite: SatelliteDefinition,
+  nextWindow: GroundContactWindow | undefined,
+): void {
   const lat = snapshot.subSatellitePoint.latitudeDeg;
   const lon = snapshot.subSatellitePoint.longitudeDeg;
 
@@ -293,7 +389,7 @@ function renderSnapshot(snapshot: WorldSnapshot, currentSatellite: SatelliteDefi
   const subsolarLongitude = (Math.atan2(snapshot.sunDirectionEarthFixed.y, snapshot.sunDirectionEarthFixed.x) * 180) / Math.PI;
   elements.subsolarLongitude.textContent = `${subsolarLongitude.toFixed(1)}°`;
 
-  renderStations(snapshot);
+  renderStations(snapshot, nextWindow, groundOperations, simulationRuntime);
   renderLocations(snapshot);
 }
 
@@ -354,7 +450,115 @@ async function start(): Promise<void> {
 
   // Geography loads independently so a data failure does not stop the world clock.
   let cellMarket: CellMarketState | null = null;
+  let cellGrid: import("./simulation/cells").CellGrid | null = null;
+  const operationalLoop = new OperationalLoop({
+    fleet,
+    stations: surfaceObjects,
+    scenario: PROPOSED_CELL_CAPTURE_SCENARIO,
+    getMarket: () => cellMarket,
+    storageCapacityBytesBySatellite: Object.fromEntries(fleet.map(({ id }) => [id, PROTOTYPE_STORAGE_CAPACITY_BYTES])),
+    runtime: simulationRuntime,
+    groundOperations,
+  });
   let refreshCellMarket: (() => void) | null = null;
+  let captureSequence = 0;
+  type DraftCapture = { id: string; cellIndex: number; target: GeographicLocation };
+  const captureDrafts = new Map<string, DraftCapture[]>();
+  const clearCaptureDraftFor = (satelliteId: string) => {
+    captureDrafts.delete(satelliteId);
+  };
+  const queueCaptureDraft = (cellIndex: number, target: GeographicLocation): string => {
+    const satellite = fleet.find(({ id }) => id === selectedSatelliteId);
+    if (!satellite) return "No spacecraft is selected.";
+    const now = simulationRuntime.elapsedSeconds;
+    const contacts = predictGroundContactWindows(
+      satellite,
+      surfaceObjects,
+      now,
+      now + 48 * 60 * 60,
+      { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 4 },
+    );
+    const nextContact = contacts[0];
+    if (!nextContact) return "No available ground-station contact is predicted in the next 48 hours.";
+
+    const draft = [...(captureDrafts.get(satellite.id) ?? []), {
+      id: `cell-capture-${captureSequence++}`,
+      cellIndex,
+      target: { ...target },
+    }];
+    let cursorSeconds = nextContact.startsAtSeconds;
+    let previousPointing = nadirPointingAt(satellite, cursorSeconds);
+    const commands = draft.map((item) => {
+      const feasibility = evaluateCellCaptureOpportunity({
+        satellite,
+        target: item.target,
+        previousPointing,
+        startsAtSeconds: cursorSeconds,
+        scenario: PROPOSED_CELL_CAPTURE_SCENARIO,
+      });
+      const durationSeconds = Math.max(1, feasibility.completesAtSeconds - cursorSeconds);
+      const command = {
+        id: item.id,
+        label: `Capture cell ${item.cellIndex}`,
+        durationSeconds,
+        cellCapture: { cellIndex: item.cellIndex, target: { ...item.target } },
+      };
+      cursorSeconds += durationSeconds;
+      previousPointing = cellLookDirectionAt(satellite, item.target, cursorSeconds);
+      return command;
+    });
+    const version = operationalLoop.reviseGroundPlan(satellite.id, commands, now);
+    clearCaptureDraftFor(satellite.id);
+    captureDrafts.set(satellite.id, draft);
+    return `Ground plan V${version}: ${draft.length} capture command(s), predicted to upload at ${nextContact.stationName}. Proposed preview: ≤25° off-nadir, 45 seconds per collection, sunlight ignored; these are not approved gameplay rules.`;
+  };
+  const clearCaptureDraft = (): string => {
+    const satellite = fleet.find(({ id }) => id === selectedSatelliteId);
+    if (!satellite) return "No spacecraft is selected.";
+    clearCaptureDraftFor(satellite.id);
+    const version = operationalLoop.reviseGroundPlan(satellite.id, [], simulationRuntime.elapsedSeconds);
+    return `Capture draft cleared. Empty ground plan V${version} will replace the onboard TEL at the next available contact.`;
+  };
+  const generateGreedyTel = (grid: import("./simulation/cells").CellGrid): string => {
+    const satellite = fleet.find(({ id }) => id === selectedSatelliteId);
+    if (!satellite || !cellMarket) return "The spacecraft or cell market is not ready.";
+    const now = simulationRuntime.elapsedSeconds;
+    const windows = predictGroundContactWindows(
+      satellite,
+      surfaceObjects,
+      now,
+      now + 48 * 60 * 60,
+      { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 4 },
+    );
+    const distinctWindows: GroundContactWindow[] = [];
+    for (const window of windows) {
+      const previous = distinctWindows.at(-1);
+      if (!previous || window.startsAtSeconds >= previous.endsAtSeconds) distinctWindows.push(window);
+      if (distinctWindows.length === 2) break;
+    }
+    if (distinctWindows.length < 2) return "Could not generate a TEL: two separate available contacts were not found within 48 hours.";
+    const uploadContact = distinctWindows[0]!;
+    const nextContact = distinctWindows[1]!;
+    const schedule = generateGreedyCellSchedule({
+      satellite,
+      grid,
+      market: cellMarket,
+      startsAtSeconds: uploadContact.startsAtSeconds,
+      endsAtSeconds: nextContact.startsAtSeconds,
+      scenario: PROPOSED_CELL_CAPTURE_SCENARIO,
+      initialPointing: operationalLoop.getLastCommandedPointing(satellite.id)
+        ?? nadirPointingAt(satellite, uploadContact.startsAtSeconds),
+    });
+    clearCaptureDraftFor(satellite.id);
+    const groundPlanVersion = operationalLoop.reviseGroundPlan(satellite.id, schedule.commands, now);
+    captureDrafts.delete(satellite.id);
+    const first = schedule.decisions[0];
+    const choiceSummary = first
+      ? ` First choice: C${first.cellId.toString().padStart(7, "0")} at ${first.availablePriorityPoints.toFixed(2)} priority points${first.alternatives[0] ? `; next alternative C${first.alternatives[0].cellId.toString().padStart(7, "0")} scored ${first.alternatives[0].availablePriorityPoints.toFixed(2)}` : ""}.`
+      : " No positive-priority feasible capture was found; the plan contains explicit idle segments.";
+    return `Generated ground plan V${groundPlanVersion}: ${schedule.decisions.length} capture(s) across ${schedule.optimizationSegments} two-minute optimization segment(s), from ${uploadContact.stationName} to ${nextContact.stationName}. Total projected available priority: ${schedule.projectedPriorityPoints.toFixed(2)}. Idle commands explain gaps.${choiceSummary} Tie-breaks are priority, earliest start, then cell ID; these scheduler details are proposed. Plan uploads only at contact.`;
+  };
+  const advanceGroundOperations = (seconds: number) => operationalLoop.advanceBy(seconds);
   const setSimulationRunning = (running: boolean) => {
     simulation.running = running;
     elements.pauseToggle.setAttribute("aria-pressed", String(!running));
@@ -366,26 +570,41 @@ async function start(): Promise<void> {
   const advanceSimulationBySeconds = (seconds: number) => {
     if (!Number.isFinite(seconds) || seconds <= 0) throw new RangeError("Preview time advance must be positive");
     setSimulationRunning(false);
-    simulation.elapsedSeconds += seconds;
+    advanceGroundOperations(seconds);
     simulation.lastFrameMilliseconds = performance.now();
     refreshCellMarket?.();
   };
   const resetPreview = () => {
     setSimulationRunning(false);
-    simulation.elapsedSeconds = 0;
+    operationalLoop.reset();
+    captureDrafts.clear();
+    captureSequence = 0;
+    contactForecasts.clear();
     simulation.lastFrameMilliseconds = performance.now();
-    cellMarket?.resetPreview();
     refreshCellMarket?.();
   };
   void import("./ui/cellMarket").then(({ setupCellMarket }) => setupCellMarket(
     globe.viewer,
     {
-      nowSeconds: () => simulation.elapsedSeconds,
-      getOrCreateMarket: grid => cellMarket ??= createPrototypeCellMarket(grid),
+      nowSeconds: () => simulationRuntime.elapsedSeconds,
+      getOrCreateMarket: grid => {
+        cellGrid = grid;
+        return cellMarket ??= createPrototypeCellMarket(grid);
+      },
       getSatelliteId: () => selectedSatelliteId,
+      hasGroundContact: () => {
+        const satellite = fleet.find(({ id }) => id === selectedSatelliteId);
+        return satellite !== undefined
+          && createWorldSnapshot(satellite, surfaceObjects, simulationRuntime.elapsedSeconds)
+            .stationContacts.some(contact => contact.available);
+      },
       pauseSimulation: () => setSimulationRunning(false),
       advanceSimulationBySeconds,
       resetPreview,
+      addCellCaptureToTel: queueCaptureDraft,
+      clearCellCaptureDraft: clearCaptureDraft,
+      enforceStorageCapacity: (satelliteId, timeSeconds) =>
+        operationalLoop.enforceStorageCapacity(satelliteId, timeSeconds),
     },
     refresh => { refreshCellMarket = refresh; },
   ));
@@ -396,7 +615,26 @@ async function start(): Promise<void> {
     const selectedSnapshot = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId);
     const selectedSatellite = fleet.find(({ id }) => id === selectedSatelliteId);
     if (!selectedSnapshot || !selectedSatellite) return;
-    renderSnapshot(selectedSnapshot, selectedSatellite);
+    let forecast = contactForecasts.get(selectedSatellite.id);
+    if (!forecast || selectedSnapshot.elapsedSeconds >= forecast.computedAt + 900
+      || (forecast.window && selectedSnapshot.elapsedSeconds > forecast.window.endsAtSeconds)) {
+      const windows = predictGroundContactWindows(
+        selectedSatellite,
+        surfaceObjects,
+        selectedSnapshot.elapsedSeconds,
+        selectedSnapshot.elapsedSeconds + CONTACT_FORECAST_HORIZON_SECONDS,
+        { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 1 },
+      );
+      const active = selectedSnapshot.stationContacts.find((contact) => contact.available);
+      forecast = {
+        computedAt: selectedSnapshot.elapsedSeconds,
+        window: active
+          ? windows.find((window) => window.stationId === active.station.id)
+          : windows[0],
+      };
+      contactForecasts.set(selectedSatellite.id, forecast);
+    }
+    renderSnapshot(selectedSnapshot, selectedSatellite, forecast.window);
     renderSelectedSpacecraft(selectedSatellite, selectedSnapshot);
   };
 
@@ -407,6 +645,44 @@ async function start(): Promise<void> {
   });
 
   elements.pauseToggle.addEventListener("click", () => setSimulationRunning(!simulation.running));
+
+  elements.prepareTel.addEventListener("click", () => {
+    const satellite = fleet.find(({ id }) => id === selectedSatelliteId);
+    if (!satellite) return;
+    const now = simulationRuntime.elapsedSeconds;
+    const windows = predictGroundContactWindows(
+      satellite,
+      surfaceObjects,
+      now,
+      now + 48 * 60 * 60,
+      { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 4 },
+    );
+    const distinctWindows: GroundContactWindow[] = [];
+    for (const window of windows) {
+      const previous = distinctWindows.at(-1);
+      if (!previous || window.startsAtSeconds >= previous.endsAtSeconds) distinctWindows.push(window);
+      if (distinctWindows.length === 2) break;
+    }
+    if (distinctWindows.length < 2) {
+      elements.spacecraftPlanStatus.textContent = `Could not prepare a TEL for ${satellite.name}: two separate contacts were not found within 48 hours.`;
+      return;
+    }
+    const coverageSeconds = distinctWindows[1]!.startsAtSeconds - distinctWindows[0]!.startsAtSeconds;
+    const version = groundOperations.getSatelliteState(satellite.id).groundPlanVersion + 1;
+    clearCaptureDraftFor(satellite.id);
+    groundOperations.reviseGroundPlan(satellite.id, [
+      { id: `authored-v${version}-1`, label: "Authored autonomous segment 1", durationSeconds: coverageSeconds / 2 },
+      { id: `authored-v${version}-2`, label: "Authored autonomous segment 2", durationSeconds: coverageSeconds / 2 },
+    ], now);
+    elements.spacecraftPlanStatus.textContent = `Ground plan V${version} prepared for ${satellite.name}'s next two predicted contacts. It will upload at contact.`;
+  });
+
+  elements.generateGreedyTel.addEventListener("click", () => {
+    setSimulationRunning(false);
+    elements.spacecraftPlanStatus.textContent = cellGrid
+      ? generateGreedyTel(cellGrid)
+      : "Cell market is still loading; the spacecraft plan is not ready yet.";
+  });
 
   elements.timeSpeed.value = String(simulation.timeMultiplier);
   elements.timeSpeed.addEventListener("change", () => {
@@ -420,11 +696,13 @@ async function start(): Promise<void> {
   const animate = (frameMilliseconds: number) => {
     const elapsedRealSeconds = Math.min((frameMilliseconds - simulation.lastFrameMilliseconds) / 1_000, 0.25);
     simulation.lastFrameMilliseconds = frameMilliseconds;
-    if (simulation.running) simulation.elapsedSeconds += elapsedRealSeconds * simulation.timeMultiplier;
+    if (simulation.running) {
+      advanceGroundOperations(elapsedRealSeconds * simulation.timeMultiplier);
+    }
 
     if (frameMilliseconds - previousUiUpdate > 120) {
       const snapshots = fleet.map((satellite) =>
-        createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds),
+        createWorldSnapshot(satellite, surfaceObjects, simulationRuntime.elapsedSeconds),
       );
       updateFleetViews(snapshots);
       refreshCellMarket?.();
@@ -435,7 +713,7 @@ async function start(): Promise<void> {
   };
 
   const firstSnapshots = fleet.map((satellite) =>
-    createWorldSnapshot(satellite, surfaceObjects, simulation.elapsedSeconds),
+    createWorldSnapshot(satellite, surfaceObjects, simulationRuntime.elapsedSeconds),
   );
   updateFleetViews(firstSnapshots);
   requestAnimationFrame(animate);

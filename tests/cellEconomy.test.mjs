@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   calculateCellEconomy,
-  settleSuccessfulCellCapture,
+  recordSuccessfulCellCapture,
   valueAvailabilityMultiplier,
 } from "../src/simulation/cellEconomy.ts";
 
@@ -53,14 +53,14 @@ test("current category inputs immediately recalculate derived values without acc
 });
 
 test("successful capture returns pre-reset payout and one updated cell timestamp", () => {
-  const settlement = settleSuccessfulCellCapture(42, categories, exposures, 55, { lastCollectedAtSeconds: 0 });
-  assert.equal(settlement.event.cellId, 42);
-  assert.equal(settlement.event.completedAtSeconds, 55);
-  assert.equal(settlement.event.revenueUsd, settlement.event.categoryPayoutsUsd.urban + settlement.event.categoryPayoutsUsd.pipeline);
-  assert.equal(settlement.priorityPointsAtCompletion, 20 + 6 * (35 / 180));
-  assert.deepEqual(settlement.nextRecoveryState, { lastCollectedAtSeconds: 55 });
+  const capture = recordSuccessfulCellCapture(42, categories, exposures, 55, { lastCollectedAtSeconds: 0 });
+  assert.equal(capture.event.cellId, 42);
+  assert.equal(capture.event.completedAtSeconds, 55);
+  assert.equal(capture.event.valuePotentialUsd, capture.event.categoryPayoutsUsd.urban + capture.event.categoryPayoutsUsd.pipeline);
+  assert.equal(capture.priorityPointsAtCompletion, 20 + 6 * (35 / 180));
+  assert.deepEqual(capture.nextRecoveryState, { lastCollectedAtSeconds: 55 });
 
-  const after = calculateCellEconomy(categories, exposures, 55, settlement.nextRecoveryState);
+  const after = calculateCellEconomy(categories, exposures, 55, capture.nextRecoveryState);
   assert.equal(after.availablePayoutUsd, 0);
   assert.equal(after.availablePriorityPoints, 0);
 });

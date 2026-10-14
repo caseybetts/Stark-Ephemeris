@@ -50,13 +50,14 @@ export type CellCaptureEvent = {
   kind: "cell-capture";
   cellId: number;
   completedAtSeconds: number;
-  revenueUsd: number;
+  /** Potential value at capture time; this is not earned revenue. */
+  valuePotentialUsd: number;
   categoryPayoutsUsd: Record<string, number>;
 };
 
-export type CellCaptureSettlement = {
+export type CellCaptureResult = {
   event: CellCaptureEvent;
-  /** Commit this recovery state and the event/revenue together in the caller. */
+  /** Commit the recovery state and capture event together in the caller. */
   nextRecoveryState: CellRecoveryState;
   /** Priority at completion, before the successful capture resets VAM. */
   priorityPointsAtCompletion: number;
@@ -166,16 +167,16 @@ export function calculateCellEconomy(
 }
 
 /**
- * Settle a successful capture at completion time. The caller commits the
- * returned event, cash delta, and recovery state together as one simulation action.
+ * Record the value and priority available at successful capture time. The
+ * caller creates imagery and commits recovery, but must not credit cash here.
  */
-export function settleSuccessfulCellCapture(
+export function recordSuccessfulCellCapture(
   cellId: number,
   categories: readonly MarketCategoryRate[],
   exposures: readonly CellCategoryExposure[],
   completedAtSeconds: number,
   recoveryState: CellRecoveryState,
-): CellCaptureSettlement {
+): CellCaptureResult {
   if (!Number.isSafeInteger(cellId) || cellId < 0) throw new RangeError("Cell ID must be a non-negative safe integer");
   const snapshot = calculateCellEconomy(categories, exposures, completedAtSeconds, recoveryState);
   const categoryPayoutsUsd = Object.fromEntries(snapshot.categories.map(category => [category.categoryId, category.availablePayoutUsd]));
@@ -185,7 +186,7 @@ export function settleSuccessfulCellCapture(
       kind: "cell-capture",
       cellId,
       completedAtSeconds,
-      revenueUsd: snapshot.availablePayoutUsd,
+      valuePotentialUsd: snapshot.availablePayoutUsd,
       categoryPayoutsUsd,
     },
     nextRecoveryState: { lastCollectedAtSeconds: completedAtSeconds },

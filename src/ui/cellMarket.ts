@@ -3,6 +3,7 @@ import { loadCellGrid } from "../data/cells";
 import { CELL_LAYERS, UNSOURCED_ATTRIBUTES, cellBounds, cellLabel } from "../simulation/cells";
 import type { CellGrid, CellLayer } from "../simulation/cells";
 import type { CellMarketState } from "../simulation/cellMarketState";
+import type { GeographicLocation } from "../simulation/model";
 import { createCellLayer } from "../rendering/cellLayer";
 
 const count = (value: number) => value.toLocaleString();
@@ -17,9 +18,13 @@ type CellMarketActions = {
   nowSeconds: () => number;
   getOrCreateMarket: (grid: CellGrid) => CellMarketState;
   getSatelliteId: () => string;
+  hasGroundContact: () => boolean;
   pauseSimulation: () => void;
   advanceSimulationBySeconds: (seconds: number) => void;
   resetPreview: () => void;
+  addCellCaptureToTel: (cellIndex: number, target: GeographicLocation) => string;
+  clearCellCaptureDraft: () => string;
+  enforceStorageCapacity: (satelliteId: string, timeSeconds: number) => number;
 };
 
 export async function setupCellMarket(
@@ -57,6 +62,10 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       <div><span>SOURCED DATASETS</span><strong id="cell-source-count"></strong></div>
       <div><span>MARKET SCENARIO</span><strong class="cell-sample-label">Sample rates</strong></div>
       <div><span>PREVIEW CASH</span><strong id="cell-preview-cash">$0</strong></div>
+      <div><span>REALIZED REVENUE</span><strong id="cell-realized-revenue">$0</strong></div>
+      <div><span>ONBOARD IMAGERY</span><strong id="cell-onboard-imagery">0</strong><small id="cell-onboard-size">0 MiB</small></div>
+      <div><span>PARTIAL DOWNLINKS</span><strong id="cell-partial-transfers">0</strong><small id="cell-transferred-bytes">0 MiB transferred</small></div>
+      <div><span>VALUE LOST TO DELETION</span><strong id="cell-lost-imagery-value">$0</strong><small id="cell-deleted-imagery-count">0 images deleted</small></div>
     </div>
     <section class="cell-market-rates" aria-label="Prototype market rates"><div class="cell-market-rates-heading"><div><p class="eyebrow">PROTOTYPE MARKET — SAMPLE RATES</p><h3>Category market readout</h3></div><p>Prices and cadences are sample market data. Priority rates calculate scheduling scores; automatic scheduling is not active yet. Candidate categories and overlap rules are still under review.</p></div><div class="table-scroll"><table class="operations-table cell-rates-table"><thead><tr><th scope="col">Category</th><th scope="col">Market price</th><th scope="col">Refresh cadence</th><th scope="col">Priority points per unit</th></tr></thead><tbody id="cell-rate-body"></tbody></table></div></section>
     <div class="cell-controls">
@@ -259,12 +268,22 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     target.replaceChildren(heading, totals, note, list);
   }
 
+  let refreshSelectedImages: (() => void) | null = null;
   function refreshEconomy(force = false) {
     if (panel.hidden && !force) return;
     const now = nowSeconds();
     if (!force && now === lastRefreshedAt) return;
     lastRefreshedAt = now;
+    refreshSelectedImages?.();
     element("cell-preview-cash").textContent = money(market.companyCashUsd);
+    const imagery = market.getImagerySummary();
+    element("cell-realized-revenue").textContent = money(imagery.realizedRevenueUsd);
+    element("cell-onboard-imagery").textContent = count(imagery.onboardCount);
+    element("cell-onboard-size").textContent = `${(imagery.onboardBytes / (1024 * 1024)).toLocaleString(undefined, { maximumFractionDigits: 1 })} MiB onboard`;
+    element("cell-partial-transfers").textContent = count(imagery.partiallyTransferredCount);
+    element("cell-transferred-bytes").textContent = `${(imagery.transferredBytes / (1024 * 1024)).toLocaleString(undefined, { maximumFractionDigits: 1 })} MiB transferred`;
+    element("cell-lost-imagery-value").textContent = money(imagery.lostValuePotentialUsd);
+    element("cell-deleted-imagery-count").textContent = `${count(imagery.deletedCount)} images deleted`;
     for (const display of visiblePayouts) {
       const value = market.calculateCell(display.index, now);
       display.maximum.textContent = money(value.maximumPayoutUsd);
@@ -296,11 +315,13 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     const economyValues = document.createElement("div"); economyValues.id = "cell-economy-values";
     const preview = document.createElement("section"); preview.className = "cell-preview";
     const previewHeading = document.createElement("div"); previewHeading.className = "cell-preview-heading";
-    const previewTitle = document.createElement("h4"); previewTitle.textContent = "Collection & recovery preview";
-    const previewTag = document.createElement("span"); previewTag.textContent = "MANUAL PREVIEW · NOT AUTOMATIC COLLECTION";
+    const previewTitle = document.createElement("h4"); previewTitle.textContent = "Collection & image lifecycle preview";
+    const previewTag = document.createElement("span"); previewTag.textContent = "MANUAL PREVIEW · CAPTURE TEL COMMANDS";
     previewHeading.append(previewTitle, previewTag);
     const previewControls = document.createElement("div"); previewControls.className = "cell-preview-controls";
     const capture = document.createElement("button"); capture.type = "button"; capture.className = "cell-button cell-preview-primary"; capture.textContent = "Record successful capture";
+    const queueCapture = document.createElement("button"); queueCapture.type = "button"; queueCapture.className = "cell-button"; queueCapture.textContent = "Add cell capture to ground TEL";
+    const clearCaptureDraft = document.createElement("button"); clearCaptureDraft.type = "button"; clearCaptureDraft.className = "cell-button"; clearCaptureDraft.textContent = "Clear capture TEL draft";
     const fail = document.createElement("button"); fail.type = "button"; fail.className = "cell-button"; fail.textContent = "Preview failed attempt";
     const durationLabel = document.createElement("label"); durationLabel.textContent = "Advance by";
     const duration = document.createElement("select"); duration.setAttribute("aria-label", "Days to advance in the preview");
@@ -308,21 +329,86 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     durationLabel.append(duration);
     const advance = document.createElement("button"); advance.type = "button"; advance.className = "cell-button"; advance.textContent = "Advance time";
     const reset = document.createElement("button"); reset.type = "button"; reset.className = "cell-button"; reset.textContent = "Reset preview";
-    previewControls.append(capture, fail, durationLabel, advance, reset);
+    previewControls.append(queueCapture, clearCaptureDraft, capture, fail, durationLabel, advance, reset);
     const previewStatus = document.createElement("p"); previewStatus.className = "cell-preview-status"; previewStatus.setAttribute("role", "status");
-    previewStatus.textContent = "Select a duration to inspect how VAM recovers after a capture.";
+    previewStatus.textContent = "Live prototype: 10 MiB images, 100 MiB spacecraft capacity, priority deletion, and contact-only downlink at station bandwidth. These settings and FIFO transfer order are proposed; the preview delivery control settles instantly using the capture quote.";
+    const imageList = document.createElement("div"); imageList.className = "cell-image-list";
+    const renderImages = () => {
+      const records = market.getImages().filter(image => image.cellId === grid.ids[index]);
+      if (records.length === 0) {
+        imageList.textContent = "No imagery recorded for this cell.";
+        return;
+      }
+      imageList.replaceChildren(...records.map(image => {
+        const row = document.createElement("div"); row.className = "cell-image-row";
+        const details = document.createElement("div");
+        const name = document.createElement("strong"); name.textContent = `${image.imageId} · ${image.status.toUpperCase()}`;
+        const meta = document.createElement("small");
+        meta.textContent = `${(image.transferredBytes / (1024 * 1024)).toFixed(1)}/${(image.sizeBytes / (1024 * 1024)).toFixed(1)} MiB downlinked · captured value potential ${money(image.valuePotentialUsdAtCapture)} · initial cell-priority score ${points(image.initialRetentionPriorityPoints)}`;
+        details.append(name, meta); row.append(details);
+        if (image.status === "onboard") {
+          const deliver = document.createElement("button"); deliver.type = "button"; deliver.className = "cell-button cell-preview-primary";
+          const contactAvailable = actions.hasGroundContact();
+          deliver.disabled = !contactAvailable;
+          deliver.textContent = contactAvailable
+            ? "Preview full downlink · capture quote"
+            : "Downlink requires ground-station contact";
+          deliver.addEventListener("click", () => {
+            actions.pauseSimulation();
+            try {
+              const event = market.downlinkImage(image.imageId, `downlink-${Date.now()}-${Math.random()}`, nowSeconds(), image.valuePotentialUsdAtCapture);
+              previewStatus.textContent = event.kind === "image-downlinked"
+                ? `Image downlinked in the preview at day ${amount(event.timeSeconds / 86_400)}. Revenue realized: ${money(event.revenueUsd)}.`
+                : "Downlink preview recorded.";
+              renderImages(); refreshEconomy(true);
+            } catch (error) {
+              previewStatus.textContent = error instanceof Error ? error.message : "Downlink preview could not be recorded.";
+            }
+          });
+          const discard = document.createElement("button"); discard.type = "button"; discard.className = "cell-button"; discard.textContent = "Preview storage deletion";
+          discard.addEventListener("click", () => {
+            actions.pauseSimulation();
+            try {
+              const event = market.deleteUndeliveredImage(image.imageId, `delete-${Date.now()}-${Math.random()}`, nowSeconds());
+              previewStatus.textContent = event.kind === "image-deleted"
+                ? `Undelivered image deleted. Lost value potential: ${money(event.lostValuePotentialUsd)}; no revenue was realized.`
+                : "Deletion preview recorded.";
+              renderImages(); refreshEconomy(true);
+            } catch (error) {
+              previewStatus.textContent = error instanceof Error ? error.message : "Image deletion preview could not be recorded.";
+            }
+          });
+          row.append(deliver, discard);
+        }
+        return row;
+      }));
+    };
+    refreshSelectedImages = renderImages;
+    queueCapture.addEventListener("click", () => {
+      actions.pauseSimulation();
+      previewStatus.textContent = actions.addCellCaptureToTel(index, {
+        latitudeDeg: cell.bounds.latitudeDeg,
+        longitudeDeg: cell.bounds.longitudeDeg,
+      });
+    });
+    clearCaptureDraft.addEventListener("click", () => {
+      previewStatus.textContent = actions.clearCellCaptureDraft();
+    });
     capture.addEventListener("click", () => {
       actions.pauseSimulation();
       try {
-        const event = market.completeCellCapture(index, actions.getSatelliteId(), `cell-preview-${Date.now()}-${Math.random()}`, nowSeconds());
-        previewStatus.textContent = `Successful capture recorded at day ${amount(event.completedAtSeconds / 86_400)}. Payout: ${money(event.revenueUsd)} · Preview cash: ${money(market.companyCashUsd)}.`;
+        const satelliteId = actions.getSatelliteId();
+        const event = market.completeCellCapture(index, satelliteId, `cell-preview-${Date.now()}-${Math.random()}`, nowSeconds());
+        const deletedCount = actions.enforceStorageCapacity(satelliteId, nowSeconds());
+        previewStatus.textContent = `Image captured at day ${amount(event.completedAtSeconds / 86_400)}. Value potential: ${money(event.valuePotentialUsd)}; no cash credited.${deletedCount ? ` Storage pressure deleted ${deletedCount} low-priority image(s).` : " The image is stored onboard."}`;
+        renderImages();
         refreshEconomy(true);
       } catch (error) {
         previewStatus.textContent = error instanceof Error ? error.message : "Capture preview could not be recorded.";
       }
     });
     fail.addEventListener("click", () => {
-      previewStatus.textContent = "Failed attempt previewed: no payout was credited and the cell recovery clock did not reset.";
+      previewStatus.textContent = "Failed attempt previewed: no image was created, no revenue was credited, and cell recovery did not reset.";
     });
     advance.addEventListener("click", () => {
       const days = Number(duration.value);
@@ -336,10 +422,12 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
         const input = priorityInputs.get(rate.categoryId);
         if (input) { input.value = String(rate.pointsPerUnit); input.setCustomValidity(""); }
       }
-      previewStatus.textContent = "Preview reset: cells are available at maximum value, cash is restored, and simulation time is day 0.";
+      previewStatus.textContent = "Preview reset: imagery is cleared, cells are available at maximum value, cash is restored, and simulation time is day 0.";
+      renderImages();
       refreshEconomy(true);
     });
-    preview.append(previewHeading, previewControls, previewStatus);
+    preview.append(previewHeading, previewControls, imageList, previewStatus);
+    renderImages();
     economy.append(economyValues, preview);
     const metrics = document.createElement("dl"); metrics.className = "cell-attributes";
     const entries: [string, string][] = [

@@ -27,21 +27,30 @@ function createMarket() {
   );
 }
 
-test("successful capture credits cash once and resets the one cell timestamp", () => {
+test("successful capture stores an image without cash and downlink settles it once", () => {
   const market = createMarket();
   const initial = market.calculateCell(newYorkIndex, 0);
   const event = market.completeCellCapture(newYorkIndex, "Asteria-1", "preview-1", 0);
 
   assert.equal(event.cellId, grid.ids[newYorkIndex]);
   assert.equal(event.satelliteId, "Asteria-1");
-  assert.equal(event.revenueUsd, initial.availablePayoutUsd);
-  assert.equal(market.companyCashUsd, 1000 + initial.availablePayoutUsd);
+  assert.equal(event.valuePotentialUsd, initial.availablePayoutUsd);
+  assert.equal(market.companyCashUsd, 1000);
+  assert.equal(market.realizedRevenueUsd, 0);
+  assert.equal(market.getImage(event.imageId).status, "onboard");
   assert.equal(market.lastCollectedAtSeconds(newYorkIndex), 0);
   assert.equal(market.calculateCell(newYorkIndex, 0).availablePayoutUsd, 0);
 
   assert.throws(() => market.completeCellCapture(newYorkIndex, "Asteria-1", "preview-1", 1), /already committed/);
-  assert.equal(market.companyCashUsd, 1000 + initial.availablePayoutUsd);
+  assert.equal(market.companyCashUsd, 1000);
   assert.equal(market.getCaptureEvents().length, 1);
+
+  market.downlinkImage(event.imageId, "delivery-1", 10, event.valuePotentialUsd);
+  assert.equal(market.companyCashUsd, 1000 + initial.availablePayoutUsd);
+  assert.equal(market.realizedRevenueUsd, initial.availablePayoutUsd);
+  assert.equal(market.getImage(event.imageId).status, "delivered");
+  assert.throws(() => market.downlinkImage(event.imageId, "delivery-2", 11, event.valuePotentialUsd), /not onboard/);
+  assert.equal(market.companyCashUsd, 1000 + initial.availablePayoutUsd);
 });
 
 test("cadence changes recalculate VAM against the existing shared timestamp", () => {
@@ -66,7 +75,11 @@ test("invalid capture attempts change neither cash nor recovery state", () => {
 test("reset restores the preview's original cash, rates, events and cell availability", () => {
   const market = createMarket();
   market.updatePlayerPriorityRates([{ categoryId: "urban", unit: "km2", pointsPerUnit: 9 }]);
-  market.completeCellCapture(newYorkIndex, "Asteria-1", "preview-1", 0);
+  const capture = market.completeCellCapture(newYorkIndex, "Asteria-1", "preview-1", 0);
+  market.deleteUndeliveredImage(capture.imageId, "delete-1", 1);
+  assert.equal(market.companyCashUsd, 1000);
+  assert.equal(market.getImagerySummary().deletedCount, 1);
+  assert.throws(() => market.downlinkImage(capture.imageId, "delivery-after-delete", 2, capture.valuePotentialUsd), /not onboard/);
 
   market.resetPreview();
 
@@ -74,5 +87,7 @@ test("reset restores the preview's original cash, rates, events and cell availab
   assert.deepEqual(market.getPlayerPriorityRates(), [{ categoryId: "urban", unit: "km2", pointsPerUnit: 2 }]);
   assert.equal(market.lastCollectedAtSeconds(newYorkIndex), null);
   assert.equal(market.getCaptureEvents().length, 0);
+  assert.equal(market.getImages().length, 0);
+  assert.equal(market.realizedRevenueUsd, 0);
   assert.equal(market.calculateCell(newYorkIndex, 0).availablePayoutUsd, market.calculateCell(newYorkIndex, 0).maximumPayoutUsd);
 });

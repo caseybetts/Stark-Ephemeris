@@ -1,7 +1,7 @@
 import type { CellGrid } from "./cells.ts";
 import {
   calculateCellEconomy,
-  settleSuccessfulCellCapture,
+  recordSuccessfulCellCapture,
   type CellCaptureEvent,
   type CellEconomySnapshot,
   type MarketCategoryRate,
@@ -34,7 +34,33 @@ export type CellMarketStateSnapshot = CellEconomySnapshot & {
 export type RecordedCellCapture = CellCaptureEvent & {
   eventId: string;
   satelliteId: string;
+  imageId: string;
+  sizeBytes: number;
+  initialRetentionPriorityPoints: number;
 };
+
+export type CellImageRecord = {
+  imageId: string;
+  captureEventId: string;
+  cellId: number;
+  satelliteId: string;
+  capturedAtSeconds: number;
+  sizeBytes: number;
+  transferredBytes: number;
+  valuePotentialUsdAtCapture: number;
+  initialRetentionPriorityPoints: number;
+  status: "onboard" | "delivered" | "deleted";
+  deliveredAtSeconds: number | null;
+  settledRevenueUsd: number | null;
+  deletedAtSeconds: number | null;
+};
+
+export type ImageLifecycleEvent =
+  | { kind: "image-transfer-progressed"; eventId: string; imageId: string; timeSeconds: number; transferredBytes: number }
+  | { kind: "image-downlinked"; eventId: string; imageId: string; timeSeconds: number; revenueUsd: number }
+  | { kind: "image-deleted"; eventId: string; imageId: string; timeSeconds: number; lostValuePotentialUsd: number };
+
+export const PROTOTYPE_CELL_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 
 /**
  * Cesium-independent current market, player priority, per-cell recovery and
@@ -48,11 +74,15 @@ export class CellMarketState {
   private playerPriorityRates: PlayerCategoryPriorityRate[];
   private readonly lastCollectedAt: Float64Array;
   private readonly collectionEvents: RecordedCellCapture[] = [];
-  private readonly eventIds = new Set<string>();
+  private readonly captureEventIds = new Set<string>();
+  private readonly lifecycleEventIds = new Set<string>();
+  private readonly images = new Map<string, CellImageRecord>();
+  private readonly lifecycleEvents: ImageLifecycleEvent[] = [];
   private readonly startingCashUsd: number;
   private readonly initialMarketReadout: MarketReadoutCategory[];
   private readonly initialPriorityRates: PlayerCategoryPriorityRate[];
   private cashUsdValue: number;
+  private realizedRevenueUsdValue = 0;
   private readonly grid: CellGrid;
 
   constructor(
@@ -77,13 +107,18 @@ export class CellMarketState {
   }
 
   get companyCashUsd(): number { return this.cashUsdValue; }
+  get realizedRevenueUsd(): number { return this.realizedRevenueUsdValue; }
 
   /** Restore the in-memory preview to its supplied scenario defaults. */
   resetPreview(): void {
     this.lastCollectedAt.fill(Number.NaN);
     this.collectionEvents.length = 0;
-    this.eventIds.clear();
+    this.captureEventIds.clear();
+    this.lifecycleEventIds.clear();
+    this.images.clear();
+    this.lifecycleEvents.length = 0;
     this.cashUsdValue = this.startingCashUsd;
+    this.realizedRevenueUsdValue = 0;
     this.marketReadout = this.initialMarketReadout.map(category => ({ ...category }));
     this.playerPriorityRates = this.initialPriorityRates.map(rate => ({ ...rate }));
   }
@@ -100,6 +135,34 @@ export class CellMarketState {
 
   getCaptureEvents(): readonly RecordedCellCapture[] {
     return this.collectionEvents.map(event => ({ ...event, categoryPayoutsUsd: { ...event.categoryPayoutsUsd } }));
+  }
+
+  getImages(): readonly CellImageRecord[] {
+    return [...this.images.values()].map(image => ({ ...image }));
+  }
+
+  getImage(imageId: string): CellImageRecord | null {
+    const image = this.images.get(imageId);
+    return image ? { ...image } : null;
+  }
+
+  getImageLifecycleEvents(): readonly ImageLifecycleEvent[] {
+    return this.lifecycleEvents.map(event => ({ ...event }));
+  }
+
+  getImagerySummary(): { onboardCount: number; onboardBytes: number; partiallyTransferredCount: number; transferredBytes: number; deletedCount: number; lostValuePotentialUsd: number; realizedRevenueUsd: number } {
+    const records = [...this.images.values()];
+    const onboard = records.filter(image => image.status === "onboard");
+    const deleted = records.filter(image => image.status === "deleted");
+    return {
+      onboardCount: onboard.length,
+      onboardBytes: onboard.reduce((total, image) => total + image.sizeBytes, 0),
+      partiallyTransferredCount: onboard.filter(image => image.transferredBytes > 0).length,
+      transferredBytes: onboard.reduce((total, image) => total + image.transferredBytes, 0),
+      deletedCount: deleted.length,
+      lostValuePotentialUsd: deleted.reduce((total, image) => total + image.valuePotentialUsdAtCapture, 0),
+      realizedRevenueUsd: this.realizedRevenueUsdValue,
+    };
   }
 
   updateMarketReadout(next: readonly MarketReadoutCategory[]): void {
@@ -120,9 +183,15 @@ export class CellMarketState {
     return Number.isNaN(timestamp) ? null : timestamp;
   }
 
-  calculateCell(cellIndex: number, nowSeconds: number): CellMarketStateSnapshot {
+  calculateCell(
+    cellIndex: number,
+    nowSeconds: number,
+    projectedLastCollectedAtSeconds?: number | null,
+  ): CellMarketStateSnapshot {
     this.validateCellIndex(cellIndex);
-    const lastCollectedAtSeconds = this.lastCollectedAtSeconds(cellIndex);
+    const lastCollectedAtSeconds = projectedLastCollectedAtSeconds === undefined
+      ? this.lastCollectedAtSeconds(cellIndex)
+      : projectedLastCollectedAtSeconds;
     const snapshot = calculateCellEconomy(
       this.combinedRates(),
       this.exposures.forCell(cellIndex),
@@ -132,23 +201,21 @@ export class CellMarketState {
     return { ...snapshot, cellId: this.grid.ids[cellIndex] };
   }
 
-  /**
-   * Complete one successful capture and commit its event, cash credit, and
-   * shared cell recovery timestamp together. Failed validation changes none.
-   * eventId makes a retried completion idempotently reject a second credit.
-   */
+  /** Create one onboard image and reset cell recovery without crediting cash. */
   completeCellCapture(
     cellIndex: number,
     satelliteId: string,
     eventId: string,
     completedAtSeconds: number,
+    sizeBytes = PROTOTYPE_CELL_IMAGE_SIZE_BYTES,
   ): RecordedCellCapture {
     this.validateCellIndex(cellIndex);
     if (!satelliteId.trim()) throw new Error("Satellite ID is required for a cell capture");
     if (!eventId.trim()) throw new Error("Capture event ID is required");
-    if (this.eventIds.has(eventId)) throw new Error(`Capture event already committed: ${eventId}`);
+    if (this.captureEventIds.has(eventId)) throw new Error(`Capture event already committed: ${eventId}`);
+    if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) throw new RangeError("Image size must be a positive safe integer number of bytes");
 
-    const settlement = settleSuccessfulCellCapture(
+    const capture = recordSuccessfulCellCapture(
       this.grid.ids[cellIndex],
       this.combinedRates(),
       this.exposures.forCell(cellIndex),
@@ -156,21 +223,108 @@ export class CellMarketState {
       { lastCollectedAtSeconds: this.lastCollectedAtSeconds(cellIndex) },
     );
     const event: RecordedCellCapture = {
-      ...settlement.event,
+      ...capture.event,
       eventId,
       satelliteId,
+      imageId: `${eventId}:image`,
+      sizeBytes,
+      initialRetentionPriorityPoints: capture.priorityPointsAtCompletion,
     };
-    const nextCashUsd = this.cashUsdValue + event.revenueUsd;
-    if (!Number.isFinite(event.revenueUsd) || !Number.isFinite(nextCashUsd)) {
-      throw new RangeError("Capture revenue and resulting company cash must remain finite");
-    }
+    const image: CellImageRecord = {
+      imageId: event.imageId,
+      captureEventId: eventId,
+      cellId: event.cellId,
+      satelliteId,
+      capturedAtSeconds: completedAtSeconds,
+      sizeBytes,
+      transferredBytes: 0,
+      valuePotentialUsdAtCapture: event.valuePotentialUsd,
+      initialRetentionPriorityPoints: event.initialRetentionPriorityPoints,
+      status: "onboard",
+      deliveredAtSeconds: null,
+      settledRevenueUsd: null,
+      deletedAtSeconds: null,
+    };
 
-    // All validation and payout calculation precede these synchronous commits.
+    // All validation and value calculation precede these synchronous commits.
     this.collectionEvents.push(event);
-    this.eventIds.add(eventId);
-    this.cashUsdValue = nextCashUsd;
-    this.lastCollectedAt[cellIndex] = settlement.nextRecoveryState.lastCollectedAtSeconds!;
+    this.captureEventIds.add(eventId);
+    this.images.set(image.imageId, image);
+    this.lastCollectedAt[cellIndex] = capture.nextRecoveryState.lastCollectedAtSeconds!;
     return { ...event, categoryPayoutsUsd: { ...event.categoryPayoutsUsd } };
+  }
+
+  /** Record cumulative bytes transferred while an image remains onboard. */
+  updateImageTransferProgress(
+    imageId: string,
+    eventId: string,
+    timeSeconds: number,
+    transferredBytes: number,
+  ): ImageLifecycleEvent {
+    const image = this.requireOnboardImage(imageId);
+    this.validateLifecycleEvent(eventId, timeSeconds, image);
+    if (!Number.isSafeInteger(transferredBytes) || transferredBytes < image.transferredBytes || transferredBytes >= image.sizeBytes) {
+      throw new RangeError("Partial transfer progress must increase and remain below the full image size");
+    }
+    const event: ImageLifecycleEvent = { kind: "image-transfer-progressed", eventId, imageId, timeSeconds, transferredBytes };
+    image.transferredBytes = transferredBytes;
+    this.lifecycleEventIds.add(eventId);
+    this.lifecycleEvents.push(event);
+    return { ...event };
+  }
+
+  /** Settle one fully delivered image exactly once using a quote supplied by the caller. */
+  downlinkImage(imageId: string, eventId: string, timeSeconds: number, revenueUsd: number): ImageLifecycleEvent {
+    const image = this.requireOnboardImage(imageId);
+    this.validateLifecycleEvent(eventId, timeSeconds, image);
+    if (!Number.isFinite(revenueUsd) || revenueUsd < 0) throw new RangeError("Settlement revenue must be finite and non-negative");
+    const nextCash = this.cashUsdValue + revenueUsd;
+    const nextRealizedRevenue = this.realizedRevenueUsdValue + revenueUsd;
+    if (!Number.isFinite(nextCash) || !Number.isFinite(nextRealizedRevenue)) throw new RangeError("Resulting revenue must remain finite");
+    const event: ImageLifecycleEvent = { kind: "image-downlinked", eventId, imageId, timeSeconds, revenueUsd };
+    image.status = "delivered";
+    image.transferredBytes = image.sizeBytes;
+    image.deliveredAtSeconds = timeSeconds;
+    image.settledRevenueUsd = revenueUsd;
+    this.cashUsdValue = nextCash;
+    this.realizedRevenueUsdValue = nextRealizedRevenue;
+    this.lifecycleEventIds.add(eventId);
+    this.lifecycleEvents.push(event);
+    return { ...event };
+  }
+
+  /** Remove an undelivered image from onboard inventory without revenue. */
+  deleteUndeliveredImage(imageId: string, eventId: string, timeSeconds: number): ImageLifecycleEvent {
+    const image = this.requireOnboardImage(imageId);
+    this.validateLifecycleEvent(eventId, timeSeconds, image);
+    const event: ImageLifecycleEvent = {
+      kind: "image-deleted",
+      eventId,
+      imageId,
+      timeSeconds,
+      lostValuePotentialUsd: image.valuePotentialUsdAtCapture,
+    };
+    image.status = "deleted";
+    image.deletedAtSeconds = timeSeconds;
+    this.lifecycleEventIds.add(eventId);
+    this.lifecycleEvents.push(event);
+    return { ...event };
+  }
+
+  private requireOnboardImage(imageId: string): CellImageRecord {
+    if (!imageId.trim()) throw new Error("Image ID is required");
+    const image = this.images.get(imageId);
+    if (!image) throw new Error(`Unknown image: ${imageId}`);
+    if (image.status !== "onboard") throw new Error(`Image is not onboard: ${imageId}`);
+    return image;
+  }
+
+  private validateLifecycleEvent(eventId: string, timeSeconds: number, image: CellImageRecord): void {
+    if (!eventId.trim()) throw new Error("Lifecycle event ID is required");
+    if (this.lifecycleEventIds.has(eventId)) throw new Error(`Lifecycle event already committed: ${eventId}`);
+    if (!Number.isFinite(timeSeconds) || timeSeconds < image.capturedAtSeconds) {
+      throw new RangeError("Delivery or deletion time must be finite and no earlier than capture");
+    }
   }
 
   private combinedRates(): MarketCategoryRate[] {

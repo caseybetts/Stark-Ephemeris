@@ -6,7 +6,9 @@
     "predev": "node scripts/copy-cesium-assets.mjs",
     "dev": "vite",
     "prebuild": "node scripts/copy-cesium-assets.mjs",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build --configLoader native",
+    "test:runtime": "node --test --test-isolation=none tests/simulationRuntime.test.mjs",
+    "test:operations": "node --test --test-isolation=none tests/operationalLoop.test.mjs",
     "preview": "vite preview",
     "test:cells": "node --test --test-isolation=none tests/cells.test.mjs"
   },

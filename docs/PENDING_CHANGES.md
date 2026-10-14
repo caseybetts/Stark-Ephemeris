@@ -2,9 +2,11 @@
 
 This is the project's on-deck menu of implementation work. It turns discussed features into bounded work items an agent can pick up after the user selects them.
 
+**Design update (2026-10-13):** Two-minute optimization segments build a TEL covering operation through the next contact. Storage pressure deletes imagery by retention priority, defaulting to cell priority. Revenue is realized only on downlink. The prototype now integrates capture, capacity-driven deletion, contact-limited transfer, and exactly-once settlement across CELL-02A and OPS-01A; provisional scenario values and policy details remain open.
+
 ## How to use this list
 
-- The user can select work by ID or by outcome, for example: **Work on UI-01** or **Show cell values in the GUI**. A request to take the next step selects the next milestone in the order below.
+- The user can select work by ID or by outcome, for example: **Work on OPS-04** or **Finish automatic TEL replanning**. A request to take the next step selects the first incomplete entry in [Suggested starting order](#suggested-starting-order); a **Needs design** entry starts with its design decisions, not implementation of assumed rules.
 - Do not start an item solely because it appears here. Work within the user's selected outcome and check its dependencies and source documents first; a milestone may span the minimum required parts of CELL-02 and CELL-03.
 - Keep each change within its listed scope. If implementation requires an open gameplay or technical decision, surface that decision instead of silently turning a proposal into a requirement.
 - Update an item's status here when the user selects it or when the work is completed. Mark completed items with a short note and date; keep this menu focused on work that remains.
@@ -15,6 +17,78 @@ This is the project's on-deck menu of implementation work. It turns discussed fe
 - **Ready:** The first implementation slice is sufficiently described.
 - **Needs design:** The direction is agreed, but important rules or data sources need user decisions before the full feature can be implemented.
 - **Partial:** A usable slice is implemented; the item lists remaining work and decisions.
+- **Split:** An umbrella item retained for existing references; select its bounded child tasks in dependency order.
+- **Completed:** The described slice is implemented; this does not approve its provisional gameplay values or imply all later extensions are complete.
+
+## Roadmap alignment and tonight's handoff (2026-10-13)
+
+The [roadmap](ROADMAP.md) owns the high-level sequence. This menu maps that sequence to existing task IDs without treating every layer as finished or every open rule as approved. “Global Order Deck” maps to the existing Orders cell market; it does not introduce individual customer contracts.
+
+| Roadmap area | Work items and current boundary |
+| --- | --- |
+| Layer 1: GUI and visualizations, Global Order Deck | Existing management tabs and CELL-03A/B are implemented. CELL-03 value sorting/filtering and maps remain; UI-03 is a ready, independent cleanup. Broader polish belongs to Layer 4. |
+| Layer 1: Scheduling behavior | CELL-04A/B provide capture execution and manual greedy TEL generation. Automatic replanning and current/next commitment handling remain in CELL-04B; CELL-04C is a later search improvement. |
+| Layer 2: Ground contact dynamics | OPS-03 provides approximate contacts and TEL upload; OPS-01A provides contact-limited transfer. OPS-04 verifies their integrated behavior. Contact sharing, upload replacement, and final transfer policies still need decisions. Dynamic outages belong to Layer 3. |
+| Layer 2: Basic Revenue Generation | CELL-02/CELL-02A and OPS-01A implement capture-to-downlink settlement with sample inputs. Full company accounting is BIZ-01 in Layer 3. |
+| Layer 2: Spacecraft subsystems | FLEET-02A slew and OPS-01A storage are partial; OPS-01B power needs design. CLOUD-01 adds environmental constraints to the same operational loop; it is supporting work, not a new spacecraft subsystem. |
+| Layer 3: Company finances | BIZ-01 owns costs and accounting/reporting; BIZ-02 consumes that state in Finance & Growth. |
+| Layer 3: Spacecraft building and launching | BIZ-02 owns procurement and launch choices; FLEET-02B adds paid slew upgrades for future launches. FLEET-03 adds orbit models only when needed and specified. |
+| Layer 3: Outages, errors, and anomalies | OPS-02 owns degradation/anomaly response and the design of operational outages, including missed contacts. |
+| Layer 4: Playable attributes and revenue tuning | TUNE-01 coordinates final category/exposure review, balance, and operational scenario values after the relevant mechanics work. |
+| Layer 4: GUI refinement | UI-04 covers usability and operational explanations; remaining CELL-03 inspection tools and UI-03 can be selected earlier when useful. |
+| Release support, outside the four feature layers | PLATFORM-01 save/load and PLATFORM-02 publishing remain separately selectable. |
+
+**Recommended first work tonight: OPS-04.** Establish a repeatable contact/capture/downlink verification scenario before extending the recently integrated prototype. Then resolve CELL-04B's replanning rules and finish the unattended scheduling loop. Power is the next major subsystem, but its rules are not ready for implementation yet. This is a proposed work sequence, not a change to gameplay agreements.
+
+**Ready alternative:** UI-03 is a small, specified table change. Do not interpret a design-blocked subsystem as permission to invent power, pricing, contact, or failure policies.
+
+### OPS-04 — Verify the integrated operational loop
+
+**Status:** Completed 2026-10-14 — runtime regression repaired, shared `OperationalLoop` extracted, deterministic integration suite/build pass, and live browser contact/capture/downlink journey verified. The partial-transfer interval was confirmed by tests but was too brief to inspect at 300× playback.
+
+**Implemented slice:** `SimulationRuntime` now processes queued actions that start and finish within one large advance. The browser and tests share `src/simulation/operationalLoop.ts` for chronological contact/action advancement, capture outcomes, storage pressure, transfer, settlement, and reset. `tests/operationalLoop.test.mjs` covers large/regular/irregular time partitions, exact and real contact prediction, both directions of capacity eviction, reset/replay, and a greedy TEL smoke case. See the [Technical Strategy boundary](TECHNICAL_STRATEGY.md#ops-04-integration-verification) and [verification guide](OPS_04_VERIFICATION.md).
+
+**Verification results:** Automated coverage verifies no exchange with a down station, successful/failed capture effects, priority eviction, partial-byte persistence, exactly-once settlement, no pre-capture transfer, pending ground revisions, TEL Standby, chronology, priority edits independent of TEL/payout, and reset. Checks pass: runtime 4/4, operations 11/11, market 10/10, cells 5/5, and production build. The live browser run uploaded ground TEL V1, executed captures, observed cell `C0627880` captured at T+11:12 with `$88.54` potential and no cash credited, then observed TEL exhaustion/Standby and a subsequent contact. At T+12:09:42 Orders showed `$5,607.37` revenue and no onboard imagery. The UI's manual preview is not live downlink evidence; the observed revenue came from normal simulation playback.
+
+**Scope:** Fix defects exposed against documented prototype behavior and record any unresolved policy discrepancy. Do not introduce new balance, power, weather, or automatic replanning rules. OPS-04 verifies this prototype path; it does not validate the entire game or prove every possible contact geometry.
+
+**Dependencies:** Implemented SIM-01, OPS-03, CELL-04A/B prototype, CELL-02A, and OPS-01A. No new product decision or external data is required to begin.
+
+## Layer 2 foundations
+
+These tasks connect the existing world and market calculations to the operational systems in [Roadmap Layer 2](ROADMAP.md#layer-2--operational-simulation-depth). The breakdown and sequence are the implementation plan; details explicitly marked **Proposed** or **Open** still need resolution before code depends on them. Each increment should expose enough state and event history to explain its behavior.
+
+### SIM-01 — Own simulation time and action state in the domain
+
+**Status:** Completed 2026-10-13 — generic timed actions, event history, and app clock integration are in place; contact, collection, and resource rules remain in their own tasks.
+
+**Agreed boundary:** Simulation rules and state must be independent of Cesium and the interface.
+
+**Work:** Introduce domain-owned time advancement, per-spacecraft runtime state, action identity/completion, and a small operational event history. Route playback and explicit time advances through the same domain entry point. Process intervening actions rather than jumping directly to an endpoint snapshot. Keep renderer snapshots and UI selection separate from mutable operational state.
+
+**Implemented approach:** Advance directly between known action boundaries. Generic actions are queued sequentially per spacecraft; the domain records scheduled, started, and completed events with simulation timestamps. A large advance processes every action boundary in chronological order before setting the final clock time.
+
+**OPS-04 repair (2026-10-13):** `SimulationRuntime.advanceBy` now repeatedly processes queued starts and completions through the requested endpoint. `npm run test:runtime` passes 4/4, including step-size invariance. The old baseline failure is repaired.
+
+**Historical verified result:** A scripted sequence produces the same ordered events and final per-spacecraft action state for the same elapsed simulation time across small and large advances. UI playback and the manual preview clock call the same runtime. Pause avoids advancing it; completed actions run once; state and event history are inspectable without a renderer. `npm run test:runtime` and `npm run build` pass.
+
+**Dependencies:** Existing pure world calculations and shared market model. No new gameplay constants are needed for a scripted foundation scenario.
+
+### OPS-03 — Predict ground contacts and synchronize onboard TELs
+
+**Status:** Completed 2026-10-13 — authored TELs upload at available contact, execute through the shared runtime, and process contact transitions during large time advances. Dynamic outages and generated schedules remain later extensions.
+
+**Agreed:** A spacecraft exchanges TEL updates and imagery with the ground only during contact with an available ground station. The onboard TEL supplies commands through the next contact; ground-side revisions do not change it before upload. An exhausted TEL causes Standby. Upload and downlink may occur simultaneously.
+
+**Work:** Predict contact start/end times with the existing 1,800 km approximation. Distinguish geometric access, station operational status, and an active communication opportunity. Maintain separately identifiable ground-plan and onboard-TEL versions; upload only during available contact. Begin with authored command sequences so plan synchronization can be inspected before automatic scheduling exists. Expose the next contact, onboard plan coverage, upload events, and Standby cause.
+
+**Implemented prototype behavior:** Contact windows use the current circular-orbit world model and 1,800 km effective radius; a 120-second scan refines each boundary to about one second. The UI forecasts 24 hours ahead. An authored sample TEL covers the interval from the first to the second distinct predicted contact and uploads at the start of an available contact. Simulation advancement processes each contact edge and action completion chronologically. If no contact is predicted in the UI horizon, the revised ground plan stays pending and the onboard TEL continues; an exhausted TEL stays in Standby until a later available contact. Station availability is static in the current scenario, so an unexpected outage or missed predicted pass is not simulated.
+
+**Done when:** A down station cannot exchange data; transitions are processed even when one time advance crosses a full contact; changing a ground plan outside contact leaves onboard commands unchanged; upload updates the onboard version during contact; and exhausting a TEL enters Standby. The prototype's no-predicted-contact behavior and static-outage limitation are documented above.
+
+**Later extensions:** Automatic scheduling through CELL-04B; operational outages and truly missed contacts; contact accuracy beyond the current approximate geometry; upload size/duration; replacement behavior during ongoing contact; and rules for overlapping station access. Detailed antenna sharing and additional contact geometry can be later increments.
+
+**Dependencies:** SIM-01 and existing orbit/station definitions. Physical capture execution belongs to CELL-04A, automatic plan generation to CELL-04B, and imagery transfer to OPS-01A.
 
 ## Cell value inspection milestones
 
@@ -23,7 +97,7 @@ This is the project's on-deck menu of implementation work. It turns discussed fe
 | Part | Current state | Work needed for visible values |
 | --- | --- | --- |
 | Cell geography and proposed category quantities | Implemented; visible in Orders | Reuse the existing grid and selected-cell interaction |
-| VAM, payout, priority, and collection state | Implemented as domain modules | Sample readout and manual collection/recovery preview are visible in Orders; automatic capture and final game balance remain open |
+| VAM, payout, priority, and collection state | Implemented as domain modules | Sample readout, manual preview, and TEL capture execution exist; automatic replanning and final game balance remain open |
 | Dollar totals and market readout | Sample values visible in Orders | Review the calculations in the GUI; final rates and category balance remain open |
 
 ### CELL-03A — First visible dollar values
@@ -45,13 +119,13 @@ This is the project's on-deck menu of implementation work. It turns discussed fe
 
 ### CELL-03B — Inspect collection and recovery
 
-**Status:** Completed 2026-10-06.
+**Status:** Completed 2026-10-06; lifecycle preview migrated 2026-10-13.
 
-Orders now has clearly labeled preview controls to record a successful collection of the selected cell, preview a failed attempt, advance the shared simulation clock by explicit durations, and reset the preview. Successful capture uses the same domain settlement operation as the state model; the UI shows event payout, preview cash, the shared last-collection time, and per-category VAM and available payout. Reset restores the supplied sample scenario, starting cash, priorities, cell timestamps, and simulation time without changing geographic source data. These controls preview successful completion; they do not establish satellite access, duration, or scheduling rules.
+Orders now has clearly labeled preview controls to record successful/failed collection attempts, advance the shared simulation clock, deliver or delete the resulting sample imagery, and reset the preview. Capture resets recovery and stores an image without crediting revenue; downlink settlement and deletion are distinct events. The UI shows value potential, realized revenue, onboard imagery, lost value, the shared last-collection time, and per-category VAM. Reset restores the supplied scenario and clears image/events without changing geographic source data. These controls preview lifecycle outcomes; they do not establish satellite access, duration, or live transfer rules.
 
-**Verification:** With the sample 100-day cadence, the GUI showed the New York cell at VAM 0% immediately after capture, 0% at day 10, 50% at day 55, and 100% at day 100. The capture credited its $1,938.80 payout once; the failed-attempt preview left cash and the day-0 collection timestamp unchanged. Focused state-model checks pass for duplicate event rejection, failed validation leaving state unchanged, cadence changes against the shared timestamp, and reset restoring preview defaults. The domain tests also cover a single timestamp with category-specific cadence curves. Production build succeeds; the existing large Cesium chunk warning remains.
+**Historical verification before the 2026-10-13 migration:** With the sample 100-day cadence, the GUI showed the New York cell at VAM 0% immediately after capture, 0% at day 10, 50% at day 55, and 100% at day 100. The earlier preview credited the $1,938.80 capture quote immediately; CELL-02A supersedes that behavior. The failed-attempt preview left cash and the day-0 collection timestamp unchanged. Production build succeeds; the existing large Cesium chunk warning remains.
 
-**After these visible milestones:** Settle automatic capture/access and scheduler rules, add the real collection lifecycle and market trends, then add value map layers, broader sorting, and finance reporting as separate tasks. Final category/balance review can use the GUI evidence from CELL-03A/B.
+**After these visible milestones:** Continue the revised contact/TEL and capture-to-downlink sequence below, including live transfer, capacity-driven retention, and automatic capture integration. Market trends, richer map/table tools, and finance reporting are separate increments. Final category/balance review can use the GUI evidence from CELL-03A/B.
 
 ## Already implemented
 
@@ -65,7 +139,7 @@ Do not select these as pending work unless a new defect is reported:
 - UI-01 management tabs and Summary view completed 2026-10-02: the globe sits above Summary, Spacecraft, Orders, Ground Stations, and Finance & Growth; switching tabs leaves the running simulation intact.
 - UI-02 Ground Stations table completed 2026-10-02: configured stations show site availability, location coordinates, and configurable uplink/downlink prototype rates, independent of spacecraft contact.
 - FLEET-01 Spacecraft table and selection view completed 2026-10-02: the starting fleet remains one spacecraft, while the collection, per-spacecraft world snapshots, table/detail views, and globe marker/orbit selection support additional configured spacecraft.
-- CELL-01/CELL-03 geographic foundation completed 2026-10-05: 363,779 eligible ¼° land/coastal cells and fourteen sourced datasets, including military installations, data centers, NOAA research stations, and UNESCO World Heritage points. Orders has search, filters, sorting, pagination, cell details, and sixteen cell map modes. CELL-03A/B added a sample-priced market readout, cell payout/priority breakdown, and controlled collection/recovery preview on 2026-10-06; category approval, final rates, automatic capture, scheduler, and market trends remain open.
+- CELL-01/CELL-03 geographic foundation completed 2026-10-05: 363,779 eligible ¼° land/coastal cells and fourteen sourced datasets, including military installations, data centers, NOAA research stations, and UNESCO World Heritage points. Orders has search, filters, sorting, pagination, cell details, and sixteen cell map modes. CELL-03A/B added a sample-priced market readout, cell payout/priority breakdown, and controlled collection/recovery preview on 2026-10-06; category approval, final rates, automatic replanning, and market trends remain open; TEL capture execution and manual greedy scheduling are now implemented as prototypes.
 
 ## Ready for implementation
 
@@ -97,37 +171,93 @@ Do not select these as pending work unless a new defect is reported:
 
 ### CELL-02 — Calculate whole-cell revenue and repeat-purchase behavior
 
-**Status:** Partial — pure VAM/payout/priority calculations and a Cesium-independent market/cell-state model are implemented 2026-10-06; runtime configuration and Orders/finance integration remain.
+**Status:** Partial — VAM/payout/priority calculations and the live image lifecycle are implemented; final rates, category approval, and payable-value timing remain open.
 
-**Agreed:** The ¼° cell is the smallest collection unit, and collection is treated as imaging the entire cell. Swath width is abstracted away; timing, resource use, and access rules are defined at the cell level. Successful capture pays the sum of currently available per-category payouts and credits company money immediately on completion.
+**Agreed:** The ¼° cell is the smallest collection unit, treated as imaging the entire cell. Swath width is abstracted away; timing, resource use, and access rules are defined at cell level. Successful capture creates onboard imagery and resets collection recovery. Revenue is realized only when that imagery is downlinked; imagery deleted before delivery earns nothing.
 
 **Agreed:** The market sets each category's current imagery price and average customer refresh cadence. These values change over time, are visible in a read-only market dashboard, and are not player-editable. Rates use category-appropriate units, such as dollars per square kilometre or dollars per counted feature. The player sets an editable priority rate in points per matching unit for each category. These category priority rates determine per-cell priority from that cell's area/count exposure; there is no separate category or cell emphasis control. Priority rates do not change market prices, cadence, or payout.
 
 **Agreed recovery curve and state:** A never-collected cell starts at VAM 1. Store one last-collection timestamp per cell; all categories in that cell share elapsed time but apply their own cadence. The minimum refresh period is 10% of cadence. VAM is 0 through that time, rises linearly to 1 at the full cadence, and stays there: `VAM = clamp((elapsed - 0.1 * cadence) / (0.9 * cadence), 0, 1)`. For example, with a 100-day cadence, VAM stays 0 through day 10 and reaches 1 at day 100. Durations use explicit simulation units (internally seconds); calendar months are not a simulation unit. Recalculate VAM and derived payout/priority immediately when time, cadence, market price, or player priority rates change. Values are calculated scores, not balances. A whole-cell collection resets the shared timestamp for all categories in the cell, including slower-refresh categories; this is accepted. An optional per-cell `atMaximum` cache is true only when all contributing categories are at VAM 1 and is invalidated when relevant market data changes.
 
-For each cell-category, maximum payout is applicable market unit price × eligible area/count and available payout is maximum payout × VAM. Maximum priority is player-set category priority rate × eligible area/count and available priority is maximum priority × VAM. Sum payouts and priority points separately. Successful capture completion calculates and records payout, credits company money exactly once, and resets the cell timestamp as one operation. Failed capture does not pay or reset.
+For each cell-category, maximum payout is market unit price × eligible exposure and available payout is maximum payout × VAM. Maximum priority is player priority rate × exposure and available priority is maximum priority × VAM. Sum payouts and priority separately. Successful capture records an image and resets the cell timestamp without paying cash; failed capture does neither. Downlink settlement credits eligible revenue once. Whether payable value is fixed at capture or evaluated at delivery remains open.
 
-**Implemented:** `src/simulation/cellEconomy.ts` calculates VAM, category payouts, category priority points, and capture settlements without renderer dependencies. `src/simulation/cellMarketState.ts` composes caller-supplied market prices/cadences and player priority rates with the CELL-01 exposure mapping; holds one compact last-collection timestamp per cell; recalculates snapshots on demand; and records a successful capture event with cell, satellite, time, and category payouts while crediting supplied company cash exactly once per unique event ID. No market rates, cadence defaults, player rates, or starting cash are invented.
+**Implemented prototype:** `src/simulation/cellEconomy.ts` calculates VAM, category payouts, and priorities without renderer dependencies. `src/simulation/cellMarketState.ts` tracks cell timestamps, image records, transfer progress, deletion/downlink events, and exactly-once realized revenue; capture does not credit cash. `src/simulation/imageryOperations.ts` applies capacity-based retention and advances downlink only during active station contacts.
 
 **Implemented preview:** CELL-03B now exposes successful and failed-attempt previews, explicit shared-clock advances, cash and category recovery readouts, and reset in Orders. The preview is a verification tool, not the automatic collection lifecycle.
 
-**Work remaining:** Final rates, market trends, starting budget, automatic scheduler, and real capture access/duration/failure rules remain separate gameplay work. Keep category approval and overlap choices from CELL-01 visible. The current scheduler direction is recorded in [Gameplay](GAMEPLAY.md#agreed-scheduling-behavior); it is a planning brief, not an implemented scheduler.
+**Work remaining:** Final rates, market trends, starting budget, automatic replanning, and final capture access/duration/failure rules remain separate gameplay work. Keep category approval and overlap choices from CELL-01 visible. CELL-04B implements manual greedy TEL generation; its remaining work is distinct from the implemented scheduler prototype. Market-change behavior needs design before tuning its values; final balance belongs to TUNE-01 and starting company cash to BIZ-02.
 
-**Done when:** Per-category payout is market unit price × eligible exposure × VAM; per-category priority is player-set priority rate × eligible exposure × VAM; the two totals are inspectable separately; never-collected cells start at VAM 1; time/input changes update calculated values immediately; capture credits the sum of payouts once and resets the timestamp; market data is not player-editable; and changing priority rates affects scheduling without changing payout. Domain state and the manual Orders preview are implemented; automatic capture/scheduling is not.
+**Done when:** Payout potential and priority remain separately inspectable, VAM follows the agreed shared collection timestamp, successful capture creates image inventory and resets recovery without cash credit, and downlink realizes eligible revenue exactly once. Deleted undelivered imagery cannot earn money. Market data remains read-only and changing player priority does not change price. The prototype lifecycle is implemented; category approval, market balance, and payable-value reference time remain open.
 
 **Open choices:** Approval/revision of CELL-01's proposed category mapping and treatment of overlapping categories/features; starting prices, priority rates, and cadences and their trends; starting company cash; and collection timing/cost. Scheduler details are tracked in CELL-04.
 
+### CELL-02A — Separate capture from downlink revenue
+
+**Status:** Completed 2026-10-13 — identifiable image lifecycle, capacity retention, contact-limited partial transfer, and exactly-once downlink settlement are integrated as prototype behavior. Scenario values and final pricing/retention decisions remain open.
+
+**Work:** Introduce identifiable imagery records linking cell, spacecraft, capture time, size, retention priority, and transfer/settlement state. Separate capture/recovery from cash settlement. Establish the image and delivery-event contract shared with OPS-01A; migrate the manual preview and affected checks to the new lifecycle. Reuse the existing value calculations once the pricing reference time is decided. A controlled delivery preview can exercise settlement before live transfer integration exists, and must be clearly labeled as a preview.
+
+**Implemented prototype behavior:** Each successful capture creates an image record with cell/satellite identity, capture time, a 10 MiB sample size, captured value potential, and cell priority as its initial retention score. Configured prototype capacity is 100 MiB per spacecraft; overflow deletes the lowest-priority image, with oldest capture then image ID as tie-breaks. Live transfer advances at station downlink rate only during available contact, carries partial bytes across contacts, and settles the capture-time quote exactly once on completion. The Orders preview also retains an explicitly labeled instant-settlement shortcut. These values and policies are prototypes, not gameplay approvals.
+
+**Done when:** Capture alone earns no cash; successful downlink earns eligible revenue once; deleting undelivered imagery prevents its settlement; successful capture still resets VAM; failed capture does not create saleable imagery or reset VAM. Display captured value potential, stored imagery, transfer progress, lost imagery, and realized revenue distinctly. Prototype behavior meets this lifecycle.
+
+**Open choices:** Price/VAM reference time for each image; partial-transfer and payment-completion rules; retention-priority snapshot versus updates, overrides, and ties; downlink order and removal of delivered data from storage.
+
+**Dependencies:** SIM-01, CELL-02 calculations, OPS-03 contacts, and OPS-01A transfer behavior. BIZ-01 later reports settlement events without crediting them again.
+
 ### CELL-04 — Plan and schedule automatic cell collections
 
-**Status:** Design direction captured; implementation details remain open.
+**Status:** Split into CELL-04A (capture execution), CELL-04B (baseline scheduler), and CELL-04C (scheduler improvements). This umbrella retains the agreed direction and existing references.
 
-**Agreed behavior:** Combine geometric access opportunities, time feasibility, and the player's category priority rates. The current collection and next collection are committed; later choices can change. Use a rolling two-simulation-minute lookahead measured from the next collection rather than the current one. Replanning windows overlap. The scheduler should favor valuable feasible targets without trying to guarantee a perfect plan under uncertain cloud conditions.
+**Agreed behavior:** Combine geometric access, time feasibility, and category priority. Keep the current and next collection committed. Optimize within short two-minute segments to bound combinations, then extend or revise tentative segments to build a TEL covering all operations through the next contact. Each segment must fit the preceding cell's actual or planned completion state, and revisions must preserve the retained continuation. The two-minute search window does not limit TEL duration. Upload changes only during an available ground-station contact; execute the onboard TEL between contacts and enter Standby when it is exhausted.
 
-**Proposed implementation:** Establish a fast feasible greedy plan, then run a bounded beam search over a shortlist of reachable candidates. Score sequences by projected total available priority at collection completion, with VAM and earlier planned successful captures reflected. Include slew and collection time as feasibility costs; prefer lower wait/turn time to break close ties. Commit the first target, retain the previous feasible continuation while updating, and explain the next choice in the UI. Where usable cloud estimates exist, they may weight expected priority; actual simulated weather controls capture success.
+### CELL-04A — Execute feasible whole-cell captures
 
-**Open choices:** Whether the two-minute window begins at the locked target's start or completion (completion is the current proposal); pointing/access geometry, slew limits and rates, collection duration and resource use; beam width/candidate and iteration limits; idle reconsideration interval and replanning triggers; rules for cancelling a locked target; cloud forecast quality, usable-image threshold, failure cost, and retry timing; how schedule explanations appear; and when to extend from one satellite to a coordinated fleet scheduler.
+**Status:** Partial — authored TEL capture execution now uses shared feasibility and CELL-02A image creation; gameplay limits and continuous access geometry remain open.
 
-**Done when:** A single satellite repeatedly selects reachable work using category priority, accounts for time to turn and collect, can explain its next choice, adapts the tentative continuation as time or inputs change, and handles uncertain weather without invalid payouts or recovery resets on failure. Multiple satellites and resource models can extend the scheduler when separately specified.
+**Work:** Define the minimum access, pointing, illumination, slew, and collection-duration rules. Execute authored TEL commands through explicit slew, collection, success/failure, and completion states. Use one set of feasibility calculations for future planning and actual execution. Connect successful completion to CELL-02A image creation and recovery, with no capture-time cash credit.
+
+**Done when:** A valid uploaded command completes a whole-cell capture exactly once; an impossible or failed capture creates no saleable imagery and does not reset VAM; completion and failure reasons are visible. Successive commands account for the preceding collection's completion time and pointing state.
+
+**Implemented prototype:** Orders can append selected cells to a ground TEL draft. The draft forecasts the next available contact, then sequences commands using the same access, slew, and duration evaluator used at execution. Uploaded commands run through the shared runtime; success creates one CELL-02A image and resets recovery without cash, while access/timing failure records a reason and creates no image or recovery reset. Successful and failed outcomes are visible in ground-control status. The sample uses clearly labeled proposed settings of 25° maximum off-nadir, 45-second collection, and illumination ignored; these are not gameplay approvals. Multi-command pointing state advances from each preceding target.
+
+**Shared feasibility foundation:** `src/simulation/cellCapture.ts` evaluates cell-center look geometry at collection start and completion, computes retarget duration with the spacecraft's shared slew capability, optionally checks target sunlight, and returns timing, angles, ending pointing, and a failure reason. Planning and execution call this same function. Weather, power, and storage remain unconstrained for this slice.
+
+**Remaining open choices:** Final whole-cell access geometry and whether a cell-center approximation is sufficient; pointing limits; whether sunlight is required; collection duration; action interruption; behavior when a command is infeasible; and approved scenario values. The endpoint checks do not prove continuous access throughout a collection.
+
+**Dependencies:** SIM-01, OPS-03 command execution, FLEET-02A slew capability, and the initial CELL-02A image lifecycle. Use explicitly labeled clear-weather and unconstrained-power/storage scenarios for this isolated slice; real limits arrive in OPS-01A/B and CLOUD-01.
+
+### CELL-04B — Build a baseline schedule through the next contact
+
+**Status:** Partial — a greedy, segmented scheduler now builds a proposed TEL through the next contact; automatic replanning and commitment handling remain.
+
+**Work:** Build a greedy feasible schedule from reachable cell opportunities and player category priorities. Advance through two-minute segments until the next contact is covered; use each segment's predecessor state and projected VAM resets. Preserve the current and locked next collection and keep a feasible tentative continuation. Send the resulting ground plan through OPS-03 upload handling. Show why the next target was selected and why relevant alternatives were skipped.
+
+**Done when:** One spacecraft receives a generated TEL at contact and repeatedly executes feasible work until the next contact. Ground priority changes cannot silently change the onboard TEL. Segment transitions remain feasible, and planned idle periods have an explicit reason. The planner works with the same feasibility rules used by execution.
+
+**Open choices:** Initial segment boundary, advancement/overlap, greedy tie-breaking, candidate limits, idle/replanning triggers, and cancellation of a locked target.
+
+**Implemented prototype:** The selected spacecraft's Spacecraft view has a “Generate greedy TEL through next contact” action. It forecasts the next two distinct available contacts and builds a ground-side plan from the first contact to the second. It searches two-minute segments, samples candidate opportunities every 60 seconds, scores available priority at projected completion time, and carries planned VAM resets and pointing forward between captures. It uses CELL-04A's shared feasibility function and the current player category priorities. Ties resolve by higher priority, earlier start, then lower cell ID. When a segment has no feasible positive-priority target, an explicit idle TEL command records why. The UI reports total projected priority, the first choice, and its leading alternative. The plan remains ground-side until OPS-03 uploads it at an available contact; uploaded commands are unchanged by later priority edits. Orders remains the place to select a cell and add an individual capture to the authored draft.
+
+**Remaining:** Automatic segment-by-segment replanning, preservation/revision of a locked next collection and retained continuation, and richer explanations for skipped candidates. Segment start/advance behavior, sample interval, tie-breaking, and no-target idle behavior are implemented as proposed prototype choices, not final gameplay decisions. Access geometry and collection settings remain provisional under CELL-04A.
+
+**Next slice — Needs design, then implementation:** Specify the events that refresh the ground plan, how the current and next collection remain committed at upload, whether replacement is accepted during an ongoing contact, and what happens when no next contact is predicted or a locked command becomes infeasible. Record the decisions in GAMEPLAY.md and the planning boundary in TECHNICAL_STRATEGY.md before code depends on them. Keep the existing greedy search and sample market/access settings for this slice; beam search and final balance are not prerequisites.
+
+**Acceptance for that slice:** Run at least two successive contact-to-contact cycles without pressing Generate again; a priority edit revises only eligible tentative ground commands, preserves committed work, and reaches onboard execution only at an allowed upload. Compare small and large time advances. Explain idle/Standby and rejected replacement outcomes. Retest FLEET-02A with different slew settings to demonstrate their effect on feasible transitions and throughput.
+
+**Dependencies:** CELL-04A and OPS-03. Final market balance, cloud simulation, additional orbit classes, and beam search are not prerequisites. Later resource/weather tasks must extend both planning inputs and execution outcomes.
+
+### CELL-04C — Improve tentative schedules with bounded search
+
+**Status:** Needs design — bounded beam search is the proposed method.
+
+**Work:** Extend the baseline with a limited search over alternative sequences inside each optimization segment. Score projected available priority; preserve the prior feasible plan as fallback. Permit revisions to tentative choices while revalidating both segment boundaries and respecting committed work. Incorporate OPS-01A/B resource constraints and CLOUD-01 forecasts when those systems exist.
+
+**Done when:** Search stays within an explicit budget, preserves a feasible fallback, and never substitutes a lower-scoring plan under the same inputs and scoring rules. Revised segments remain compatible with preceding and retained following commands. Explain meaningful changes to the chosen plan.
+
+**Open choices:** Beam width, candidate/iteration budget, revision depth, tie-breaking, and replacement thresholds. Coordinated fleet scheduling is separate later work.
+
+**Dependencies:** CELL-04B. Nominal search improvement can be developed independently of later resource/weather features; their integration uses their agreed rules. This task does not block the first complete contact/capture/downlink cycle.
 
 ### CELL-03 — Show the cell market in Orders
 
@@ -138,17 +268,17 @@ For each cell-category, maximum payout is applicable market unit price × eligib
 
 **Agreed future UI requirement (2026-10-06):** The Cell table should eventually support sorting and filtering by calculated dollar value, maximum priority, and current/available priority, in addition to its existing geographic-attribute sorting and filtering. Cells on the globe should have selectable color modes that show dollar value, maximum priority, or current/available priority. “Maximum priority” is the sum of category priority points at VAM 1; “current priority” is the calculated available priority after each category's VAM is applied.
 
-**Work:** Review/approve the proposed categories and sample balance; add value-aware table sorting/filtering; then render tiled or aggregated value, priority, and freshness layers and connect them to the same state already shown in Orders.
+**Work:** Add value-aware table sorting/filtering; then render tiled or aggregated value, priority, and freshness layers and connect them to the same state already shown in Orders. Explicitly labeled sample inputs are sufficient; CELL-01 category review and TUNE-01 final balance are separate work, not prerequisites for inspection tools.
 
 **Done when:** The view and globe map reflect the same simulation state, support cell selection, expose sorting/filtering for the calculated value and priority totals, and offer cell-color modes for dollar value, maximum priority, and current/available priority. These remain separate from geographic data preparation and collection rules.
 
 **Open presentation choices:** Color ramps, normalization across the globe, legend/readout behavior, and whether filtering uses ranges, thresholds, or both. Geographic display conventions and source caveats are recorded in [Cell grid data](CELL_DATA.md).
 
-**Remaining, in order:** Review proposed category/exposure choices and sample balance; add value-aware sorting/filtering; implement dollar/maximum-priority/current-priority cell-color modes; then add freshness coloring as a separate layer. These can be delivered as separate increments.
+**Remaining, in order:** Specify numeric filter controls and add value-aware sorting/filtering; settle map presentation choices and implement dollar/maximum-priority/current-priority cell-color modes; then add freshness coloring as a separate layer. These can be delivered as separate increments.
 
 ### FLEET-03 — Support additional orbit models
 
-**Status:** Needs design  
+**Status:** Needs design for additional orbit classes — per-spacecraft circular-orbit parameters already exist; the next supported orbit class and propagation interface changes are not specified. Slew capability is tracked under FLEET-02A.
 **Agreed:** Orbit definitions and propagation are per spacecraft. Fleet-level simulation and rendering must not assume all spacecraft share one altitude, phase, or path. The current circular orbit is a provisional starter model; future orbit classes should fit behind a replaceable propagation boundary.
 
 **Work:** Introduce or refine an orbit-definition/propagation boundary so each spacecraft can provide its own orbit parameters and produce position/state at simulation time. Keep current circular propagation as the first model. Add additional orbit classes only when selected and specified; do not require high-fidelity astrodynamics as part of the abstraction work.
@@ -163,25 +293,90 @@ For each cell-category, maximum payout is applicable market unit price × eligib
 
 ### FLEET-02 — Add slew speed and future-launch upgrades
 
-**Status:** Needs design  
-**Agreed:** Slew speed is a satellite capability. A paid upgrade affects satellites launched afterward.
+**Status:** Split into FLEET-02A (Layer 2 capability) and FLEET-02B (Layer 3 purchasing). Existing references to FLEET-02 cover both.
 
-**Work:** Add slew speed to satellite capability data and make cell-collection scheduling account for time needed to retarget between cells. Model upgrade purchases as company configuration applied to future launches, not retroactive changes to existing spacecraft.
+### FLEET-02A — Model spacecraft slew capability
 
-**Done when:** Different slew capabilities can change retarget time and opportunity throughput; newly launched satellites receive the selected upgrade level; existing satellite specifications remain stable.
+**Status:** Partial — CELL-04A and CELL-04B consume shared feasibility, including the retarget calculation; comparative throughput verification and final capability/pointing choices remain.
+**Agreed:** Slew speed is a per-spacecraft capability and affects the time needed to retarget between cells.
 
-**Open choices:** Units, starting values, upgrade cost and progression, whether slew speed is distinct from pointing-angle limits, and how satellite design/launch purchasing is represented.
+**Work:** Add explicit slew capability to spacecraft definitions and a shared retarget-time calculation for planning and execution. Keep scenario values configurable.
+
+**Implemented foundation:** `SatelliteDefinition.slew` carries configured slew rate in degrees per second and settling time in seconds. `calculateRetargetDurationSeconds` computes great-circle angular separation between two pointing vectors, divides by rate, and adds settling time for a non-zero retarget. Asteria-1 currently uses clearly labeled scenario placeholders of 1 degree/second and 2 seconds; these are not approved gameplay balance. The helper is independent of rendering and is the shared calculation CELL-04A/B should consume.
+
+**Done when:** Different configured slew capabilities produce different feasible transitions and opportunity throughput, and CELL-04A/B use the same retarget-time calculation.
+
+**Open choices:** Approve or revise the prototype units and initial values, confirm great-circle pointing separation versus an axis-constrained model, tune settling time, and define how pointing limits interact with slew capability. CELL-04A/B must use the shared helper and demonstrate effects on feasible opportunities before this task is fully complete.
+
+**Dependencies:** Existing per-spacecraft definitions and world geometry. Purchasing and launches are not prerequisites.
+
+### FLEET-02B — Purchase slew upgrades for future launches
+
+**Status:** Needs design — Layer 3 growth work.
+
+**Agreed:** A paid slew upgrade applies to spacecraft launched afterward; it does not retroactively alter existing spacecraft.
+
+**Work:** Add upgrade purchase choices to company configuration and apply the selected capability to newly launched spacecraft.
+
+**Done when:** Purchases validate affordability, new spacecraft inherit the purchased capability, and existing spacecraft specifications remain stable.
+
+**Open choices:** Prices, progression, available capability levels, and the satellite procurement flow.
+
+**Dependencies:** FLEET-02A, BIZ-01 financial accounting, and BIZ-02 procurement.
 
 ### OPS-01 — Model onboard storage, power, and downlink operations
 
-**Status:** Needs design  
-**Agreed:** Operations should connect image capture, onboard data retention, energy, eclipse, downlink opportunities, and station service. Routine operation should eventually be manageable through standing priorities.
+**Status:** Split into OPS-01A (storage/downlink) and OPS-01B (power). Existing references to OPS-01 cover both.
 
-**Work:** Design and then implement explicit simulation state for generated image data, storage capacity, power generation/storage/use, and downlink. Keep time-step processing independent from the interface. The existing sunlight/eclipse and station-range calculations can provide inputs but do not yet change battery or data state.
+### OPS-01A — Retain, delete, and downlink imagery
 
-**Done when:** A capture consumes defined resources and occupies storage; downlink transfers data under explicit availability/capacity rules; sunlight/eclipse affects energy according to documented rules; state is visible in the Spacecraft and Ground Stations views.
+**Status:** Partial — 2026-10-13 prototype enforces storage capacity, deletes by captured cell priority, transfers at station bandwidth during contacts, and settles completed images once. Final capacity, sizing, ordering, and pricing decisions remain open.
 
-**Open choices:** Storage units and data sizes, battery/solar behavior, power consumption, data retention/deletion, station bandwidth/scheduling, and tick size.
+**Agreed:** Delete imagery under storage pressure using retention priority, defaulting to cell priority. Imagery deleted before delivery earns no revenue. Revenue is realized only on downlink. TEL upload and imagery downlink may happen simultaneously during an available ground-station contact.
+
+**Work:** Define storage capacity and image sizes, implement priority-based deletion, and integrate transfer progress over actual available contact time and station bandwidth. Use CELL-02A image identity and settlement rather than creating another cash-credit path. Expose inventory, deleted imagery, transfer progress, and realized revenue. Supply relevant capacity/retention projections to the scheduler without turning a full store into an automatic collection stop.
+
+**Done when:** Storage remains within its defined capacity, deletion follows priority, transfer stops outside contact or when a station is down, and delivered imagery settles exactly once. Crossing contact boundaries in a large time advance transfers only the eligible amount. The initial end-to-end loop can upload a plan, collect, retain/delete, downlink, and earn revenue.
+
+**Open choices:** Capacity and image sizes; priority sampling/updates, overrides and ties; treatment of incoming imagery; downlink ordering, partial transfers/resumption, and removal of delivered data. Payment-completion rules and pricing reference time are shared with CELL-02A. Station sharing/concurrency can follow after the single-spacecraft slice.
+
+**Dependencies:** SIM-01, OPS-03 contacts, and the initial CELL-02A image/settlement contract. CELL-04A/B provide live collection for the end-to-end milestone; stored-image fixtures can exercise transfer independently.
+
+**Implemented prototype details:** `ImageryOperations` uses 100 MiB per spacecraft and 10 MiB images as configurable scenario placeholders. It evicts the lowest captured cell-priority score first (oldest capture, then image ID for ties), transfers FIFO, uses the fastest active station link when contact windows overlap, persists partial bytes across contacts, and settles the capture-time quote only after full transfer. Station downlink rate is now active in simulation. Retention sampling/ties, simultaneous station use, transfer order, capacity/image sizes, and value timing remain open for final design.
+
+**Remaining:** Feed projected storage/retention outcomes into scheduler scoring; add dynamic retention updates and decide station sharing/concurrency. The current scheduler does not reduce capture choices based on predicted storage pressure; runtime deletion preserves the agreed rule that a full store does not automatically stop collection.
+
+### OPS-01B — Model spacecraft power
+
+**Status:** Needs design.
+
+**Agreed:** Power generation, storage, and consumption must connect spacecraft activities with sunlight and eclipse.
+
+**Work:** Add battery capacity and charge state, sunlight generation, and consumption by operating mode. Integrate across activity and illumination changes. Expose projected energy constraints to planning and enforce the same rules during execution; show why power limits an action.
+
+**Done when:** Sunlight/eclipses and activities change energy under documented rules, charge stays within defined bounds, and insufficient power produces an explicit operational outcome consistently across playback speeds.
+
+**Open choices:** Units and scenario values, charging efficiency, mode consumption, reserves, low-power behavior, interrupted actions, and permitted simultaneous activities.
+
+**Dependencies:** SIM-01, existing sunlight/eclipse calculations, and CELL-04A activity state. Integrate downlink power with OPS-01A once transfers exist.
+
+**First deliverable:** A power-rule proposal covering units, charge/generation/consumption, reserve thresholds, simultaneous capture/downlink, and interruption/recovery behavior. Include sunlit, eclipsed, and insufficient-energy examples. After decisions are recorded, implement one spacecraft's energy state and the same feasibility constraints in planning and execution; exclude procurement and degradation from this slice.
+
+### CLOUD-01 — Model cloud conditions, forecasts, and failed captures
+
+**Status:** Needs design — baseline source selected; data asset, simulation-calendar mapping, and capture/forecast behavior remain incomplete.
+
+**Agreed:** Actual cloud conditions can cause capture failure. Forecasts may help scheduling but do not reveal perfect weather knowledge. Failed captures create no saleable imagery and do not reset VAM. Use ERA5 monthly mean total cloud cover averaged over 1991–2020 as the seasonal baseline; choose by simulation calendar month and aggregate the global 0.25° source grid into the 1° weather grid with area weighting. For each hourly time bucket, give each 1° weather cell an actual cloud-cover value from a Gaussian draw centered on its seasonal baseline. Derive the actual ¼° value with a second Gaussian draw centered on the current hourly value of its parent 1° cell. Clamp both to [0, 1]; exactly clear and fully cloudy outcomes are acceptable. Make the draws deterministic per scenario, cell, and time bucket so repeated evaluation and replanning do not reroll actual weather; hold values stable within the hour.
+
+**Proposed implementation:** Generate the two levels of seeded Gaussian values at each hourly boundary and provide separate imperfect forecasts. Keep weather generation and capture-quality rules independent of rendering.
+
+**Work:** Acquire and aggregate the ERA5 baseline into a versioned 180 × 360 × 12 table (777,600 values); define usable-image criteria and failure costs; evaluate actual conditions during collection; supply only forecast information to the planner. Explain weather failures and record consumed time/resources under the agreed rules.
+
+**Done when:** The same scenario and simulation time produce consistent conditions across playback speeds and replanning; forecasts can be wrong; an unsuccessful capture creates no image or revenue and leaves recovery unchanged. Scheduling can use forecasts without accessing hidden actual conditions.
+
+**Open choices:** Simulation epoch/calendar-month mapping; Gaussian spread at each level; forecast accuracy/update cadence; usable-image threshold; failure resource costs; and retry policy. Verify source access, attribution, and redistribution terms before adding the baseline asset; selecting ERA5 does not imply the asset is already available locally.
+
+**Dependencies:** SIM-01, CELL-04A/B, and CELL-02A. Integrate resource costs with OPS-01A/B. A live weather service and cloud graphics are not prerequisites.
 
 ### OPS-02 — Add health, degradation, and anomaly response
 
@@ -194,16 +389,18 @@ For each cell-category, maximum payout is applicable market unit price × eligib
 
 **Open choices:** Failure rates, hidden versus visible information, diagnosis process, repair costs, intervention choices, and whether anomalies can permanently disable a satellite.
 
+**Roadmap scope:** Layer 3 includes ground-station outages and resulting missed contacts as well as spacecraft faults. Design one bounded failure/response scenario first; do not silently fold dynamic outages into the completed static-contact OPS-03 slice. Depend on the nominal subsystem being affected and define how its failure changes execution, planning, and player-visible explanations.
+
 ### BIZ-01 — Connect imagery collection to company finances
 
 **Status:** Needs design  
-**Agreed:** On successful whole-cell capture completion, the cell's calculated currently available market payout is credited exactly once. CELL-02 owns the collection calculation, company cash transaction, and recovery reset as one domain event. BIZ-01 adds finance reporting and any later operating costs; it must not credit the capture a second time. The initial market has no archive sales for old imagery. Individual customer contracts and satisfaction are optional future layers.
+**Agreed:** Revenue is realized only when imagery is downlinked. CELL-02A and OPS-01A own image identity, delivery, and settlement; BIZ-01 reports those events and must not credit them again. Capture alone and deletion of undelivered imagery produce no cash. A separate archive resale market is outside the current model. Contracts and satisfaction remain optional later layers.
 
-**Work:** Record cell-collection payouts at capture and connect them to company cash/income. If storage, downlink, processing, or delivery are modeled, treat their capacity and costs separately from whether the image sale occurs. Add customer satisfaction only if a later contract system defines service expectations.
+**Work:** Report downlink settlement events as company cash/income and expose modeled operating costs. Distinguish potential value onboard and value lost through deletion from realized revenue. Add customer satisfaction only if a later contract system defines service expectations.
 
-**Done when:** Each collection payout and relevant cost is traceable to simulation events and company totals reconcile from those events.
+**Done when:** Each downlink settlement and relevant cost is traceable to simulation events and company totals reconcile without duplicate credits.
 
-**Open choices:** Which operational costs apply after an immediate sale; whether to add contracts, deadlines, penalties, customer retention, or satisfaction later.
+**Open choices:** Which operational costs apply; whether to add contracts, deadlines, penalties, customer retention, or satisfaction later.
 
 ### BIZ-02 — Add Finance & Growth view and satellite procurement
 
@@ -212,9 +409,33 @@ For each cell-category, maximum payout is applicable market unit price × eligib
 
 **Work:** Show company cash, income, costs, and available growth decisions from explicit company state. Later connect spending to satellite design, slew upgrades for future launches, launch cadence, and ground capacity.
 
-**Done when:** Every displayed financial figure is derived from recorded company and collection events; purchases validate affordability and change the intended future capability or capacity; income is reconciled from recorded cell-collection and other business events.
+**Done when:** Every displayed financial figure is derived from recorded company and delivery-settlement events; purchases validate affordability and change the intended future capability or capacity; income reconciles from downlink settlement and other business events.
 
 **Open choices:** Starting funds, prices, recurring costs, launch cadence, financing, satellite design options, and whether growth unlocks are time- or milestone-based.
+
+## Layer 4 — Tuning and refinement
+
+### TUNE-01 — Tune playable attributes and revenue
+
+**Status:** Needs design — a proposed breakdown of the roadmap's tuning work.
+
+**Work:** Review CELL-01's candidate categories/overlap and CELL-02's prices/cadences alongside capture, slew, storage, downlink, and power settings. Choose representative scenarios and desired operating tradeoffs before changing values. Design market trends separately under CELL-02 before tuning them. Keep scenario inputs configurable and distinguish potential payout, realized income, and deletion losses.
+
+**Done when:** Selected scenarios have documented before/after outcomes, approved values are recorded in the owning brief/configuration, and tuning preserves revenue/priority separation and exactly-once settlement. Unapproved values remain labeled provisional.
+
+**Open choices:** Intended difficulty, target income/cost progression, representative scenarios, and which attributes to tune first.
+
+**Dependencies:** The mechanics being tuned must be implemented and verified; company profitability tuning additionally depends on BIZ-01/BIZ-02. Final balance does not block the earlier sample operational loop.
+
+### UI-04 — Refine operational management views
+
+**Status:** Needs design — a proposed breakdown of the roadmap's GUI refinement.
+
+**Work:** Review the working loop for unclear state, explanations, navigation, table readability, and accessibility. Select a bounded set of observed usability issues and acceptance criteria before implementation. Reuse CELL-03 for value inspection tools and UI-03 for station identifiers rather than duplicating those tasks.
+
+**Done when:** The selected issues have verified fixes, and players can distinguish ground plans from onboard commands and potential imagery value from realized revenue in the affected views.
+
+**Dependencies:** Implemented systems and a review of their actual interface. Prioritize operational understanding over decorative graphics.
 
 ## Persistence and deployment
 
@@ -242,13 +463,18 @@ For each cell-category, maximum payout is applicable market unit price × eligib
 
 ## Suggested starting order
 
-This is a dependency guide, not a commitment to start work automatically:
+OPS-04 completed on 2026-10-14. This proposed order closes the remaining Layer 1 scheduling gap while deepening Layer 2, then follows the roadmap into growth and refinement. A request to take the next step selects the first incomplete item below. A design task produces explicit decisions/proposals first; its presence here does not approve new gameplay rules.
 
-UI-03 is a ready but deferred table cleanup; it does not block the next simulation-system work.
+| Order | Tasks | Next deliverable |
+| --- | --- | --- |
+| 1 | **CELL-04B — Partial; next slice needs design**, with **FLEET-02A** verification | Resolve refresh/upload/commitment rules, then automate successive contact cycles while preserving current and next collections. |
+| 2 | **CELL-04A**, **OPS-03**, **OPS-01A**, **CELL-02A** remaining policy review | Resolve access/interruption, contact replacement/sharing, retention, and payment rules needed by the next selected slice. Existing labeled defaults support prototype work; do not reopen all balance values as a prerequisite. |
+| 3 | **OPS-01B — Needs design** | Define power behavior, then integrate battery/generation/consumption with both planning and execution. |
+| 4 | **CLOUD-01 — Needs design** | Resolve calendar, forecast, and capture-quality rules; prepare the baseline asset and add deterministic weather/failures. |
+| 5 | **CELL-04C — Needs design** | Improve feasible tentative schedules with bounded search. Nominal search can be selected earlier after CELL-04B; resource and forecast integration follows the corresponding systems. |
+| 6 | **BIZ-01**, **BIZ-02**, **FLEET-02B**, **OPS-02 — Needs design** | Layer 3: company accounting, building/launching and upgrades, and understandable outages/anomalies. Accounting precedes purchases; faults depend on the subsystem affected. |
+| 8 | **TUNE-01**, **UI-04 — Needs design** | Layer 4: evaluate operating tradeoffs and revenue balance, then refine the management experience using observed issues. |
 
-1. ~~Inspect the completed **CELL-03A** dollar readout and category breakdown in Orders.~~ Completed 2026-10-06.
-2. ~~Implement **CELL-03B**: inspect collection payouts, cash credit, and recovery with explicit preview controls and focused state checks.~~ Completed 2026-10-06.
-3. Review proposed **CELL-01** categories/exposures and sample balance using the GUI evidence; settle CELL-04's open access, cloud, and search-budget choices before implementing automatic **CELL-02**. Market trends and remaining **CELL-03** map layers can follow independently.
-4. Add finance reporting and any modeled operating costs in **BIZ-01**; capture cash credits are already owned by CELL-02 and must not be applied again.
-5. **FLEET-03** can extend the current per-spacecraft orbit model; **OPS-01**, **FLEET-02**, and **BIZ-02** add operations and growth as their rules are decided.
-6. **OPS-02**, **PLATFORM-01**, and **PLATFORM-02** remain queued for selection when their dependencies and release timing are clear.
+**Implemented foundation, not a pending queue:** SIM-01, OPS-03's static-contact/authored-TEL slice, CELL-03A/B, CELL-02A, and the initial CELL-04A/B plus OPS-01A integration are present. The prototype supports a contact cycle with one spacecraft, clear weather, no power model, manual plan generation, capacity-driven deletion, partial transfers, and full-delivery settlement. OPS-04 verifies the integration; this does not imply automatic recurring planning or final policy approval.
+
+**Independent work:** UI-03 is ready; CELL-03's additional inspection tools can proceed once their presentation choices are settled, using labeled sample rates. CELL-01 category review and CELL-02 market-trend design can proceed separately. FLEET-03 requires a selected orbit model. PLATFORM-01 and PLATFORM-02 remain separately selectable according to release needs.

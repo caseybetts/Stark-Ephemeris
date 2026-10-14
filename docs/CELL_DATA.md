@@ -73,6 +73,12 @@ Military locations use the DoD/BTS NTAD FY2024 Military Bases layer. The 824 sou
 
 The Gigawatt Map download endpoint returned a 4,255-record file whose pinned SHA-256 is recorded in the source manifest, while its published [data catalog](https://gigawattmap.com/data) currently lists a 53-record export with a different checksum. The cached source snapshot is retained as an explicitly approximate simulation layer; do not refresh it without reviewing this discrepancy. Its ODbL attribution/share-alike terms still apply, including attribution to OpenStreetMap contributors.
 
+## Seasonal cloud baseline
+
+**Agreed source and period:** Use ERA5 monthly mean `total cloud cover` (`tcc`) for 1991–2020. ERA5 is a global reanalysis that combines model data with observations; it is an estimated climatological baseline, not a direct observation of every cell. The source is available on a regular 0.25° latitude-longitude grid with monthly resolution. Regrid it to the project's 1° weather grid using area-weighted means, then store one value for each of 12 calendar months and each of the 180 × 360 global weather cells (777,600 values). The selected month supplies the center for the agreed deterministic hourly Gaussian draw.
+
+The NOAA SSM/I one-degree cloud-fraction archive was checked as an exact-grid alternative, but its annual files contain missing values, including at sampled land locations, so it does not provide a complete globe-wide baseline. Keep the runtime table as a static, versioned asset; a live weather service is not needed. The table has not yet been generated because the accessible ERA5 copy requires an API key. The source dataset is documented at [Copernicus ERA5 monthly means](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels-monthly-means?tab=overview).
+
 ## Data format and code boundaries
 
 - Stable cell ID: `row * 1440 + column`, with row zero at 90° north and column zero at 180° west. Rows run southward; columns run eastward. Longitudes wrap across the dateline. Coordinate lookup assigns grid-edge points to the east/south cell, except the south pole is clamped to the final row.

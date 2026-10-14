@@ -18,6 +18,10 @@ export const DEFAULT_SATELLITE: {
     ascendingNodeDeg: number;
     initialPhaseDeg: number;
   };
+  slew: {
+    slewRateDegPerSecond: number;
+    settlingTimeSeconds: number;
+  };
 } = {
   id: "asteria-1",
   name: "Asteria-1",
@@ -26,6 +30,11 @@ export const DEFAULT_SATELLITE: {
     inclinationDeg: 53,
     ascendingNodeDeg: 12,
     initialPhaseDeg: 8,
+  },
+  // Scenario placeholders for the shared retarget calculation; not final game balance.
+  slew: {
+    slewRateDegPerSecond: 1,
+    settlingTimeSeconds: 2,
   },
 };
 

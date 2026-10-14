@@ -11,7 +11,9 @@ This folder contains the shared brief for product, gameplay, and implementation 
 | [Technical strategy](TECHNICAL_STRATEGY.md) | Browser/deployment constraints, architecture direction, data and persistence approach |
 | [Cell grid data](CELL_DATA.md) | Implemented geographic layers, provenance, limitations, data format, and rebuilding the cell grid |
 | [Implementation outline](IMPLEMENTATION_OUTLINE.md) | Code boundaries, coordinate and orbit calculations, candidate first slice, and gaps an implementation agent must resolve |
+| [OPS-04 verification guide](OPS_04_VERIFICATION.md) | Starting baseline, shared operational orchestration, deterministic fixtures, acceptance scenarios, and implementation checks |
 | [Pending Changes](PENDING_CHANGES.md) | User-selectable implementation work items, dependencies, and open design decisions |
+| [Development roadmap](ROADMAP.md) | High-level planning sequence for building out the project |
 
 ## Keeping the brief useful
 

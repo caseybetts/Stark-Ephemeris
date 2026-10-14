@@ -112,6 +112,12 @@ button { font: inherit; }
 .spacecraft-detail-grid span, .spacecraft-detail-grid strong { display: block; }
 .spacecraft-detail-grid span { margin-bottom: 6px; color: #71898d; font-size: 7px; letter-spacing: 0.1em; }
 .spacecraft-detail-grid strong { color: #d9e5e1; font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.spacecraft-plan-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.spacecraft-plan-controls .eyebrow { margin: 0 0 5px; }
+.spacecraft-plan-description, .spacecraft-plan-status { margin: 0; color: #71878b; font-size: 8px; line-height: 1.5; }
+.spacecraft-plan-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.preview-button-primary { border-color: rgba(115, 215, 193, 0.5); background: rgba(115, 215, 193, 0.14); }
+.spacecraft-plan-status { grid-column: 1 / -1; min-height: 1.5em; }
 .satellite-card { margin: 15px 16px 2px; padding: 16px 15px 13px; border: 1px solid rgba(115, 215, 193, 0.16); border-radius: 9px; background: linear-gradient(135deg, rgba(26, 57, 59, 0.55), rgba(15, 31, 39, 0.75) 55%, rgba(14, 27, 35, 0.82)); }
 .satellite-card-top, .satellite-identity, .satellite-position, .satellite-state-row, .section-heading, .station-row, .location-row, .panel-footer, .sun-indicator, .condition-card { display: flex; align-items: center; }
 .satellite-card-top, .section-heading { justify-content: space-between; }
@@ -161,6 +167,14 @@ button { font: inherit; }
 .station-list, .location-list { display: flex; flex-direction: column; }
 .station-row, .location-row { min-height: 43px; gap: 9px; border-top: 1px solid rgba(178, 212, 205, 0.07); }
 .station-row:first-child, .location-row:first-child { border-top: 0; }
+.ground-control-preview { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; margin-top: 9px; padding: 10px; border: 1px solid rgba(178, 212, 205, 0.09); border-radius: 7px; background: rgba(6, 15, 20, 0.35); }
+.ground-control-preview > div:first-child { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ground-control-preview small { color: #71878b; font-size: 7px; letter-spacing: 0.05em; }
+.ground-control-preview strong { color: #cadbd6; font-size: 8px; font-weight: 600; }
+.ground-control-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.preview-button { min-height: 27px; padding: 5px 7px; border: 1px solid rgba(115, 215, 193, 0.25); border-radius: 5px; background: rgba(115, 215, 193, 0.06); color: var(--mint); font-size: 7px; letter-spacing: 0.04em; cursor: pointer; }
+.preview-button:disabled { opacity: 0.4; cursor: default; }
+.preview-button:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
 .row-marker { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #3e5158; }
 .row-marker-active { background: var(--mint); box-shadow: 0 0 8px rgba(115, 215, 193, 0.65); }
 .row-marker-sunlit { background: var(--lime); box-shadow: 0 0 7px rgba(244, 248, 112, 0.45); }
@@ -246,7 +260,7 @@ button { font: inherit; }
 .cell-market-heading h2 { margin: 0; font-size: 18px; font-weight: 550; }
 .cell-market-heading .eyebrow { color: var(--mint); }
 .cell-tag { border: 1px solid var(--line); border-radius: 5px; padding: 7px 9px; color: var(--mint); font: 10px ui-monospace, monospace; white-space: nowrap; }
-.cell-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--line); margin-bottom: 18px; }
+.cell-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--line); margin-bottom: 18px; }
 .cell-summary > div { background: #0e1c23; padding: 14px 18px; }
 .cell-summary span { display: block; font-size: 8px; letter-spacing: .1em; color: var(--muted); margin-bottom: 7px; }
 .cell-summary strong { font: 500 22px ui-monospace, SFMono-Regular, monospace; color: #dcece6; }
@@ -304,6 +318,11 @@ button { font: inherit; }
 .cell-preview-controls select { min-height: 30px; padding: 4px 7px; border: 1px solid #2b444b; border-radius: 4px; background: #11232a; color: #c5ddd5; font-size: 10px; }
 .cell-preview-primary { border-color: #3e7667; color: #d3f3df; }
 .cell-detail .cell-preview-status { margin: 10px 0 0; color: #abc5c2; font-size: 10px; }
+.cell-image-list { display: grid; gap: 7px; margin-top: 12px; }
+.cell-image-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 9px; border: 1px solid #243a40; border-radius: 5px; background: #0e1d23; }
+.cell-image-row > div:first-child { display: grid; gap: 4px; min-width: 180px; }
+.cell-image-row strong { color: #cbded8; font: 10px ui-monospace, monospace; }
+.cell-image-row small { color: var(--muted); font-size: 9px; }
 .cell-category-values { display: grid; gap: 8px; margin-top: 12px; }
 .cell-category-value { border: 1px solid rgba(175,207,205,.12); border-radius: 5px; padding: 9px 10px; background: #10232a; }
 .cell-category-value h5 { margin: 0 0 6px; color: var(--mint); font-size: 11px; font-weight: 600; }

@@ -3,7 +3,7 @@ import {
   EARTH_MEAN_RADIUS_KM,
   EFFECTIVE_CONTACT_RADIUS_KM,
   SIMULATED_DAY_SECONDS,
-} from "./constants";
+} from "./constants.ts";
 import type {
   GeographicLocation,
   OrbitDefinition,
@@ -11,7 +11,7 @@ import type {
   SurfaceObject,
   Vector3Km,
   WorldSnapshot,
-} from "./model";
+} from "./model.ts";
 
 const TAU = 2 * Math.PI;
 const degreesToRadians = (degrees: number): number => (degrees * Math.PI) / 180;
@@ -155,10 +155,14 @@ export function createWorldSnapshot(
       .filter((object) => object.kind === "ground-station")
       .map((station) => {
         const distanceKm = surfaceDistanceKm(subPoint, station.location);
+        const geometricInRange = distanceKm <= EFFECTIVE_CONTACT_RADIUS_KM;
+        const stationOperational = station.groundStationDetails?.operationalStatus === "available";
         return {
           station,
           distanceKm,
-          available: distanceKm <= EFFECTIVE_CONTACT_RADIUS_KM,
+          geometricInRange,
+          stationOperational,
+          available: geometricInRange && stationOperational,
         };
       }),
   };

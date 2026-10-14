@@ -150,6 +150,14 @@
               <span class="network-count" id="station-count">—</span>
             </div>
             <div class="station-list" id="station-list" aria-live="polite"></div>
+            <div class="ground-control-preview">
+              <div>
+                <small id="next-contact">NEXT CONTACT · CALCULATING</small>
+                <strong id="ground-plan-status">GROUND PLAN · NONE</strong>
+                <strong id="tel-status">STANDBY · NO TEL UPLOADED</strong>
+                <small id="tel-event">No ground-control events yet.</small>
+              </div>
+            </div>
             <p class="approximation-note">FIXED <b id="contact-radius">—</b> KM CONTACT RADIUS · NOT A RADIO LINK MODEL.</p>
           </section>
 
@@ -201,6 +209,17 @@
                 <div><span>INCLINATION</span><strong id="spacecraft-detail-inclination">—</strong></div>
                 <div><span>SUBSATELLITE POINT</span><strong id="spacecraft-detail-coordinate">—</strong></div>
                 <div><span>NEAREST STATION</span><strong id="spacecraft-detail-station">—</strong></div>
+              </div>
+              <div class="spacecraft-plan-controls" aria-labelledby="spacecraft-plan-title">
+                <div>
+                  <p class="eyebrow" id="spacecraft-plan-title">GROUND PLAN FOR SELECTED SPACECRAFT</p>
+                  <p class="spacecraft-plan-description">Prepare commands for this spacecraft to upload at its next ground-station contact.</p>
+                </div>
+                <div class="spacecraft-plan-actions">
+                  <button id="prepare-tel" class="preview-button" type="button">PREPARE AUTHORED TEL</button>
+                  <button id="generate-greedy-tel" class="preview-button preview-button-primary" type="button">GENERATE GREEDY TEL THROUGH NEXT CONTACT</button>
+                </div>
+                <p class="spacecraft-plan-status" id="spacecraft-plan-status" role="status" aria-live="polite">Select a spacecraft to prepare or generate its ground plan.</p>
               </div>
             </section>
           </section>
