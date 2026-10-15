@@ -40,6 +40,7 @@ export type SatelliteGroundOperationsState = {
   satelliteId: string;
   groundPlanVersion: number;
   groundPlan: TaskEventCommand[];
+  groundPlanCommittedPrefixCount: number;
   onboardTelVersion: number | null;
   onboardCommands: TaskEventCommand[];
   nextCommandIndex: number;
@@ -49,18 +50,29 @@ export type SatelliteGroundOperationsState = {
   standbyCause: "no-uploaded-tel" | "tel-exhausted" | null;
 };
 
+export type GroundStationAntennaState = {
+  ownerSatelliteId: string | null;
+  waitingSatelliteIds: string[];
+};
+
 type MutableSatelliteGroundOperationsState = SatelliteGroundOperationsState;
+
+const compareIds = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 
 /** Ground plan and onboard TEL state, separate from the orbit and renderer. */
 export class GroundOperations {
   private readonly satelliteState = new Map<string, MutableSatelliteGroundOperationsState>();
+  private readonly initialSatelliteIds = new Set<string>();
   private readonly eventLog: GroundOperationsEvent[] = [];
   private readonly runtimeActionCommands = new Map<string, {
     satelliteId: string;
     planVersion: number;
     commandId: string;
   }>();
+  /** Geometric access can wait for the station antenna currently serving another spacecraft. */
+  private readonly geometricContacts = new Map<string, Map<string, GroundContactWindow>>();
   private readonly activeContacts = new Map<string, Map<string, GroundContactWindow>>();
+  private readonly antennaOwners = new Map<string, string>();
   private eventSequence = 0;
   private readonly runtime: SimulationRuntime;
   private readonly predictContacts: GroundContactPredictor;
@@ -76,20 +88,20 @@ export class GroundOperations {
       if (!satelliteId.trim() || this.satelliteState.has(satelliteId)) {
         throw new Error(`Invalid or duplicate satellite ID: ${satelliteId}`);
       }
-      this.satelliteState.set(satelliteId, {
-        satelliteId,
-        groundPlanVersion: 0,
-        groundPlan: [],
-        onboardTelVersion: null,
-        onboardCommands: [],
-        nextCommandIndex: 0,
-        onboardCoverageEndsAtSeconds: null,
-        activeStationIds: [],
-        mode: "standby",
-        standbyCause: "no-uploaded-tel",
-      });
-      this.activeContacts.set(satelliteId, new Map());
+      this.satelliteState.set(satelliteId, this.createSatelliteState(satelliteId));
+      this.initialSatelliteIds.add(satelliteId);
     }
+  }
+
+  hasSatellite(satelliteId: string): boolean {
+    return this.satelliteState.has(satelliteId);
+  }
+
+  registerSatellite(satelliteId: string): void {
+    if (!satelliteId.trim() || this.satelliteState.has(satelliteId)) {
+      throw new Error(`Invalid or duplicate satellite ID: ${satelliteId}`);
+    }
+    this.satelliteState.set(satelliteId, this.createSatelliteState(satelliteId));
   }
 
   /** Advance time while processing every predicted contact edge in the interval. */
@@ -98,6 +110,8 @@ export class GroundOperations {
     fleet: readonly SatelliteDefinition[],
     stations: readonly SurfaceObject[],
     onContactInterval?: (startsAtSeconds: number, endsAtSeconds: number, contacts: readonly (GroundContactWindow & { station: SurfaceObject })[]) => void,
+    nextExternalBoundary?: (startsAtSeconds: number, endsAtSeconds: number, contacts: readonly (GroundContactWindow & { station: SurfaceObject })[]) => number | null,
+    canUploadAtContact?: (satelliteId: string) => boolean,
   ): number {
     if (!Number.isFinite(seconds) || seconds < 0) throw new RangeError("Time advance must be finite and non-negative");
     const startSeconds = this.runtime.elapsedSeconds;
@@ -131,7 +145,10 @@ export class GroundOperations {
       const now = this.runtime.elapsedSeconds;
       const nextContactEdge = edges[edgeIndex]?.timeSeconds ?? Number.POSITIVE_INFINITY;
       const nextActionBoundary = this.runtime.nextActionBoundaryAtOrBefore(endSeconds) ?? Number.POSITIVE_INFINITY;
-      const nextBoundary = Math.min(nextContactEdge, nextActionBoundary, endSeconds);
+      const currentContacts = this.getActiveContacts(stations);
+      const externalBoundary = nextExternalBoundary?.(now, endSeconds, currentContacts) ?? Number.POSITIVE_INFINITY;
+      if (externalBoundary <= now) throw new Error("External simulation boundary must move forward");
+      const nextBoundary = Math.min(nextContactEdge, nextActionBoundary, externalBoundary, endSeconds);
 
       if (nextBoundary > now) {
         this.runtime.advanceBy(nextBoundary - now);
@@ -143,19 +160,66 @@ export class GroundOperations {
         throw new Error("Ground-operation boundary moved behind simulation time");
       }
 
+      const boundaryEdges: typeof edges = [];
       while (edgeIndex < edges.length && edges[edgeIndex]!.timeSeconds === nextBoundary) {
-        const edge = edges[edgeIndex++]!;
-        if (edge.kind === "start") {
-          // A window that began before this advance is not a new upload opportunity.
-          // The first call can still initialize an already-active contact.
-          if (this.recordContactStarted(edge.contact)) {
-            this.uploadAtContact(edge.contact, this.runtime.elapsedSeconds);
-            this.observeRuntimeEvents(this.runtime.events.slice(observedEventCount));
-            observedEventCount = this.runtime.events.length;
-          }
-        } else {
-          this.recordContactEnded(edge.contact);
+        boundaryEdges.push(edges[edgeIndex++]!);
+      }
+      const edgesBySatellite = new Map<string, typeof edges>();
+      for (const edge of boundaryEdges) {
+        const satelliteEdges = edgesBySatellite.get(edge.contact.satelliteId) ?? [];
+        satelliteEdges.push(edge);
+        edgesBySatellite.set(edge.contact.satelliteId, satelliteEdges);
+      }
+      const hadActiveContact = new Map([...this.activeContacts].map(([id, contacts]) => [id, contacts.size > 0]));
+      const affectedStations = new Set<string>();
+      for (const [satelliteId, satelliteEdges] of edgesBySatellite) {
+        for (const edge of satelliteEdges) {
+          affectedStations.add(edge.contact.stationId);
+          const contacts = this.geometricContacts.get(satelliteId)!;
+          if (edge.kind === "end") contacts.delete(edge.contact.stationId);
+          else if (!contacts.has(edge.contact.stationId)) contacts.set(edge.contact.stationId, edge.contact);
         }
+      }
+
+      const newlyAssigned: Array<{ satelliteId: string; contact: GroundContactWindow }> = [];
+      for (const stationId of affectedStations) {
+        let ownerId = this.antennaOwners.get(stationId);
+        if (ownerId && !this.geometricContacts.get(ownerId)?.has(stationId)) {
+          const previous = this.activeContacts.get(ownerId)?.get(stationId);
+          if (previous) {
+            this.recordContactEnded({ ...previous, endsAtSeconds: nextBoundary });
+            this.activeContacts.get(ownerId)?.delete(stationId);
+          }
+          this.antennaOwners.delete(stationId);
+          ownerId = undefined;
+        }
+        if (ownerId) continue;
+
+        const candidates = [...this.geometricContacts.entries()]
+          .map(([, contacts]) => contacts.get(stationId))
+          .filter((contact): contact is GroundContactWindow => contact !== undefined)
+          .sort((left, right) => left.startsAtSeconds - right.startsAtSeconds
+            || compareIds(left.satelliteId, right.satelliteId));
+        const selected = candidates[0];
+        if (!selected) continue;
+
+        const linkContact: GroundContactWindow = {
+          ...selected,
+          startsAtSeconds: nextBoundary,
+          continuesBeforeWindow: false,
+        };
+        this.antennaOwners.set(stationId, selected.satelliteId);
+        this.recordContactStarted(linkContact);
+        newlyAssigned.push({ satelliteId: selected.satelliteId, contact: linkContact });
+      }
+
+      for (const { satelliteId, contact } of newlyAssigned) {
+        if (hadActiveContact.get(satelliteId)) continue;
+        if (canUploadAtContact?.(satelliteId) !== false) {
+          this.uploadAtContact(contact, this.runtime.elapsedSeconds);
+        }
+        this.observeRuntimeEvents(this.runtime.events.slice(observedEventCount));
+        observedEventCount = this.runtime.events.length;
       }
 
       if (this.runtime.elapsedSeconds === endSeconds
@@ -204,9 +268,61 @@ export class GroundOperations {
     });
   }
 
+  getAntennaState(stationId: string): GroundStationAntennaState {
+    const ownerSatelliteId = this.antennaOwners.get(stationId) ?? null;
+    const waitingSatelliteIds = [...this.geometricContacts.entries()]
+      .map(([satelliteId, contacts]) => ({ satelliteId, contact: contacts.get(stationId) }))
+      .filter((entry): entry is { satelliteId: string; contact: GroundContactWindow } =>
+        entry.contact !== undefined && entry.satelliteId !== ownerSatelliteId,
+      )
+      .sort((left, right) => left.contact.startsAtSeconds - right.contact.startsAtSeconds
+        || compareIds(left.satelliteId, right.satelliteId))
+      .map(({ satelliteId }) => satelliteId);
+    return { ownerSatelliteId, waitingSatelliteIds };
+  }
+
+  getGeometricStationIds(satelliteId: string): string[] {
+    this.requireSatellite(satelliteId);
+    return [...(this.geometricContacts.get(satelliteId)?.keys() ?? [])];
+  }
+
   hasPendingGroundPlan(satelliteId: string): boolean {
     const state = this.requireSatellite(satelliteId);
     return state.groundPlanVersion > 0 && state.groundPlanVersion !== state.onboardTelVersion;
+  }
+
+  /** Commands already committed onboard: active work plus the next not-yet-started capture. */
+  getCommittedPrefixCommands(satelliteId: string): TaskEventCommand[] {
+    const state = this.requireSatellite(satelliteId);
+    const active = this.runtime.getSatelliteState(satelliteId).currentAction;
+    if (!active) return [];
+    const activeMapping = this.runtimeActionCommands.get(active.id);
+    if (!activeMapping) return [];
+    const activeIndex = state.onboardCommands.findIndex(command => command.id === activeMapping.commandId);
+    if (activeIndex < state.nextCommandIndex) return [];
+    const activeIsCapture = state.onboardCommands[activeIndex]?.cellCapture !== undefined;
+    const capturesToKeep = activeIsCapture ? 2 : 1;
+    let capturesFound = 0;
+    let endIndex = activeIndex;
+    for (let index = activeIndex; index < state.onboardCommands.length; index += 1) {
+      endIndex = index;
+      if (state.onboardCommands[index]!.cellCapture) {
+        capturesFound += 1;
+        if (capturesFound === capturesToKeep) break;
+      }
+    }
+    if (capturesFound < capturesToKeep) endIndex = activeIndex;
+    return state.onboardCommands.slice(activeIndex, endIndex + 1).map(command => ({ ...command }));
+  }
+
+  getCommandCompletionSeconds(satelliteId: string, commandId: string): number | null {
+    const mapping = [...this.runtimeActionCommands.values()].find(command =>
+      command.satelliteId === satelliteId && command.commandId === commandId);
+    if (!mapping) return null;
+    const runtimeState = this.runtime.getSatelliteState(satelliteId);
+    const action = [runtimeState.currentAction, ...runtimeState.queuedActions]
+      .find(item => item?.id && this.runtimeActionCommands.get(item.id)?.commandId === commandId);
+    return action?.completesAtSeconds ?? null;
   }
 
   /** Revise the ground copy only; the onboard TEL is untouched until contact. */
@@ -214,6 +330,8 @@ export class GroundOperations {
     satelliteId: string,
     commands: readonly TaskEventCommand[],
     timeSeconds: number,
+    committedPrefixCount = 0,
+    explanation?: string,
   ): number {
     const state = this.requireSatellite(satelliteId);
     this.validateTime(timeSeconds);
@@ -229,17 +347,21 @@ export class GroundOperations {
     if (new Set(copy.map((command) => command.id)).size !== copy.length) {
       throw new Error("TEL command IDs must be unique within a plan");
     }
+    if (!Number.isInteger(committedPrefixCount) || committedPrefixCount < 0 || committedPrefixCount > copy.length) {
+      throw new RangeError("Committed TEL prefix count must refer to commands in the revised plan");
+    }
     const totalDurationSeconds = copy.reduce((total, command) => total + command.durationSeconds, 0);
     if (!Number.isFinite(totalDurationSeconds)) throw new RangeError("TEL duration must remain finite");
 
     state.groundPlanVersion += 1;
     state.groundPlan = copy;
+    state.groundPlanCommittedPrefixCount = committedPrefixCount;
     this.recordEvent({
       kind: "ground-plan-revised",
       satelliteId,
       timeSeconds,
       planVersion: state.groundPlanVersion,
-      detail: `Ground plan revised to version ${state.groundPlanVersion} with ${copy.length} command(s).`,
+      detail: `Ground plan revised to version ${state.groundPlanVersion} with ${copy.length} command(s).${explanation ? ` ${explanation}` : ""}`,
     });
     return state.groundPlanVersion;
   }
@@ -285,12 +407,30 @@ export class GroundOperations {
     }
     if (!this.hasPendingGroundPlan(contact.satelliteId)) return false;
 
-    this.runtime.cancelQueuedActions(contact.satelliteId);
-    for (const [actionId, command] of this.runtimeActionCommands) {
-      if (command.satelliteId === contact.satelliteId) this.runtimeActionCommands.delete(actionId);
+    const committedPrefix = state.groundPlanCommittedPrefixCount > 0
+      ? this.getCommittedPrefixCommands(contact.satelliteId)
+      : [];
+    const preservedCommandIds = new Set(committedPrefix.map(({ id }) => id));
+    const preservedActionIds = new Set<string>();
+    if (preservedCommandIds.size > 0) {
+      for (const [actionId, mapping] of this.runtimeActionCommands) {
+        if (mapping.satelliteId === contact.satelliteId && preservedCommandIds.has(mapping.commandId)) {
+          preservedActionIds.add(actionId);
+          mapping.planVersion = state.groundPlanVersion;
+        } else if (mapping.satelliteId === contact.satelliteId) {
+          this.runtimeActionCommands.delete(actionId);
+        }
+      }
+      this.runtime.cancelQueuedActionsExcept(contact.satelliteId, preservedActionIds);
+    } else {
+      this.runtime.cancelQueuedActions(contact.satelliteId);
+      for (const [actionId, command] of this.runtimeActionCommands) {
+        if (command.satelliteId === contact.satelliteId) this.runtimeActionCommands.delete(actionId);
+      }
     }
     state.onboardTelVersion = state.groundPlanVersion;
-    state.onboardCommands = state.groundPlan.map((command) => ({ ...command }));
+    const revisedSuffix = state.groundPlan.slice(state.groundPlanCommittedPrefixCount);
+    state.onboardCommands = [...committedPrefix, ...revisedSuffix].map((command) => ({ ...command }));
     state.nextCommandIndex = 0;
     state.mode = state.onboardCommands.length > 0 ? "ready" : "standby";
     state.standbyCause = state.mode === "standby" ? "tel-exhausted" : null;
@@ -302,28 +442,24 @@ export class GroundOperations {
       planVersion: state.onboardTelVersion,
       detail: `TEL version ${state.onboardTelVersion} uploaded at ${contact.stationName}.`,
     });
-    let firstActionStartSeconds: number | null = null;
-    for (const command of state.onboardCommands) {
+    for (const command of revisedSuffix) {
       const actionId = `tel:${contact.satelliteId}:v${state.onboardTelVersion}:${command.id}`;
       this.runtimeActionCommands.set(actionId, {
         satelliteId: contact.satelliteId,
         planVersion: state.onboardTelVersion,
         commandId: command.id,
       });
-      const action = this.runtime.queueAction(
+      this.runtime.queueAction(
         contact.satelliteId,
         actionId,
         "tel-command",
         command.durationSeconds,
       );
-      if (firstActionStartSeconds === null) firstActionStartSeconds = action.startsAtSeconds;
     }
-    state.onboardCoverageEndsAtSeconds = firstActionStartSeconds === null
-      ? null
-      : firstActionStartSeconds + state.onboardCommands.reduce(
-        (duration, command) => duration + command.durationSeconds,
-        0,
-      );
+    const runtimeState = this.runtime.getSatelliteState(contact.satelliteId);
+    state.onboardCoverageEndsAtSeconds = runtimeState.queuedActions.at(-1)?.completesAtSeconds
+      ?? runtimeState.currentAction?.completesAtSeconds
+      ?? null;
     if (state.mode === "standby") this.recordExhaustion(state, timeSeconds);
     return true;
   }
@@ -331,6 +467,10 @@ export class GroundOperations {
   /** Apply action completions from the shared runtime to the current onboard TEL. */
   observeRuntimeEvents(events: readonly RuntimeEvent[]): void {
     for (const event of events) {
+      if (event.kind === "action-cancelled") {
+        this.runtimeActionCommands.delete(event.actionId);
+        continue;
+      }
       if (event.kind !== "action-completed") continue;
       const command = this.runtimeActionCommands.get(event.actionId);
       if (!command) continue;
@@ -339,6 +479,7 @@ export class GroundOperations {
       const nextCommand = state.onboardCommands[state.nextCommandIndex];
       if (nextCommand?.id !== command.commandId) continue;
       this.completeNextCommand(command.satelliteId, event.timeSeconds);
+      this.runtimeActionCommands.delete(event.actionId);
     }
   }
 
@@ -374,23 +515,51 @@ export class GroundOperations {
     this.eventLog.length = 0;
     this.eventSequence = 0;
     this.runtimeActionCommands.clear();
+    for (const satelliteId of this.satelliteState.keys()) {
+      if (!this.initialSatelliteIds.has(satelliteId)) {
+        this.satelliteState.delete(satelliteId);
+        this.geometricContacts.delete(satelliteId);
+        this.activeContacts.delete(satelliteId);
+      }
+    }
     for (const state of this.satelliteState.values()) {
       state.groundPlanVersion = 0;
       state.groundPlan = [];
+      state.groundPlanCommittedPrefixCount = 0;
       state.onboardTelVersion = null;
       state.onboardCommands = [];
       state.nextCommandIndex = 0;
       state.onboardCoverageEndsAtSeconds = null;
       this.activeContacts.get(state.satelliteId)?.clear();
+      this.geometricContacts.get(state.satelliteId)?.clear();
       state.mode = "standby";
       state.standbyCause = "no-uploaded-tel";
     }
+    this.antennaOwners.clear();
   }
 
   private requireSatellite(satelliteId: string): MutableSatelliteGroundOperationsState {
     const state = this.satelliteState.get(satelliteId);
     if (!state) throw new Error(`Unknown satellite: ${satelliteId}`);
     return state;
+  }
+
+  private createSatelliteState(satelliteId: string): MutableSatelliteGroundOperationsState {
+    this.geometricContacts.set(satelliteId, new Map());
+    this.activeContacts.set(satelliteId, new Map());
+    return {
+      satelliteId,
+      groundPlanVersion: 0,
+      groundPlan: [],
+      groundPlanCommittedPrefixCount: 0,
+      onboardTelVersion: null,
+      onboardCommands: [],
+      nextCommandIndex: 0,
+      onboardCoverageEndsAtSeconds: null,
+      activeStationIds: [],
+      mode: "standby",
+      standbyCause: "no-uploaded-tel",
+    };
   }
 
   private validateTime(timeSeconds: number): void {

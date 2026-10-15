@@ -27,6 +27,7 @@ import { earthFixedKilometersToCartesian, locationToCartesian } from "./coordina
 export type GlobeView = {
   viewer: Viewer;
   update(snapshots: readonly WorldSnapshot[]): void;
+  setSatellites(satellites: readonly SatelliteDefinition[]): void;
   setSelectedSatellite(satelliteId: string): void;
   setTrackVisible(visible: boolean): void;
   setSurfaceObjectsVisible(visible: boolean): void;
@@ -132,9 +133,11 @@ export async function createGlobeView(
   });
 
   const satelliteColors = ["#f4f870", "#72d7ff", "#ff9b76", "#c4a7ff", "#7ce2a4"];
-  const satelliteVisuals = new Map(satellites.map((satellite, index) => {
+  let satelliteDefinitions = [...satellites];
+  let selectedSatelliteId = satelliteDefinitions[0]?.id;
+  const createSatelliteVisual = (satellite: SatelliteDefinition, index: number) => {
     const color = Color.fromCssColorString(satelliteColors[index % satelliteColors.length]);
-    const selectedInitially = index === 0;
+    const selectedInitially = satellite.id === selectedSatelliteId;
     const entity = viewer.entities.add({
       id: satellite.id,
       name: satellite.name,
@@ -183,9 +186,26 @@ export async function createGlobeView(
         asynchronous: false,
       }),
     );
-    return [satellite.id, { entity, orbit }];
-  }));
-  let selectedSatelliteId = satellites[0]?.id;
+    return { entity, orbit };
+  };
+  const satelliteVisuals = new Map<string, ReturnType<typeof createSatelliteVisual>>(
+    satelliteDefinitions.map((satellite, index) => [satellite.id, createSatelliteVisual(satellite, index)]),
+  );
+  const applySelectedSatellite = (satelliteId: string): void => {
+    if (!satelliteVisuals.has(satelliteId)) return;
+    selectedSatelliteId = satelliteId;
+    satelliteDefinitions.forEach((satellite, index) => {
+      const visual = satelliteVisuals.get(satellite.id);
+      if (!visual) return;
+      const selected = satellite.id === selectedSatelliteId;
+      const color = Color.fromCssColorString(satelliteColors[index % satelliteColors.length]);
+      visual.entity.point!.pixelSize = new ConstantProperty(selected ? 13 : 9);
+      visual.entity.point!.outlineWidth = new ConstantProperty(selected ? 3 : 2);
+      visual.entity.label!.show = new ConstantProperty(selected);
+      visual.orbit.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.74 : 0.4);
+    });
+    viewer.scene.requestRender();
+  };
 
   const surfaceEntities = surfaceObjects.map((object) => ({
     object,
@@ -217,20 +237,24 @@ export async function createGlobeView(
 
       viewer.scene.requestRender();
     },
-    setSelectedSatellite(satelliteId) {
-      if (!satelliteVisuals.has(satelliteId)) return;
-      selectedSatelliteId = satelliteId;
-      satellites.forEach((satellite, index) => {
-        const visual = satelliteVisuals.get(satellite.id);
-        if (!visual) return;
-        const selected = satellite.id === selectedSatelliteId;
-        const color = Color.fromCssColorString(satelliteColors[index % satelliteColors.length]);
-        visual.entity.point!.pixelSize = new ConstantProperty(selected ? 13 : 9);
-        visual.entity.point!.outlineWidth = new ConstantProperty(selected ? 3 : 2);
-        visual.entity.label!.show = new ConstantProperty(selected);
-        visual.orbit.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.74 : 0.4);
+    setSatellites(nextSatellites) {
+      for (const visual of satelliteVisuals.values()) {
+        viewer.entities.remove(visual.entity);
+        viewer.scene.primitives.remove(visual.orbit);
+      }
+      satelliteVisuals.clear();
+      satelliteDefinitions = [...nextSatellites];
+      if (!satelliteDefinitions.some(satellite => satellite.id === selectedSatelliteId)) {
+        selectedSatelliteId = satelliteDefinitions[0]?.id;
+      }
+      satelliteDefinitions.forEach((satellite, index) => {
+        satelliteVisuals.set(satellite.id, createSatelliteVisual(satellite, index));
       });
+      if (selectedSatelliteId) applySelectedSatellite(selectedSatelliteId);
       viewer.scene.requestRender();
+    },
+    setSelectedSatellite(satelliteId) {
+      applySelectedSatellite(satelliteId);
     },
     setTrackVisible(visible) {
       for (const visual of satelliteVisuals.values()) visual.orbit.show = visible;

@@ -22,6 +22,8 @@ The layers are intended to build on one another: establish the core experience a
 - Spacecraft building and launching
 - Outages, Errors and Anamolies
 
+The [reviewed Layer 3 plan](LAYER_3_PLAN.md) records BIZ-02's implemented purchase and antenna flow, then sequences a future-launch upgrade and one bounded outage/response scenario. It keeps the remaining gameplay decisions visible.
+
 ## Layer 4 — Tuning and refinement
 
 - Fine-tuning playable attributes and revenue generation

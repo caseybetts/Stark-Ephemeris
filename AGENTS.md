@@ -13,6 +13,8 @@ Before making a change, read [`docs/README.md`](docs/README.md) and the document
 
 ## Working rules
 
+- This is a fun side project. Keep responses light, encouraging, and brief; summarize work conceptually instead of listing every step or detail.
+- Explain design details when they help with a decision, but favor practical prototype solutions over commercial-grade process or unnecessary precision.
 - Preserve the operations-management focus. Graphics support the simulation; they are not the primary deliverable.
 - Distinguish agreed decisions from proposals and open questions. Mark undecided details as open rather than presenting assumptions as requirements.
 - Keep the simulation rules in a form that can be reasoned about independently of the interface.

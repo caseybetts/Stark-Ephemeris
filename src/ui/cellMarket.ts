@@ -25,6 +25,7 @@ type CellMarketActions = {
   addCellCaptureToTel: (cellIndex: number, target: GeographicLocation) => string;
   clearCellCaptureDraft: () => string;
   enforceStorageCapacity: (satelliteId: string, timeSeconds: number) => number;
+  notifySchedulingInputsChanged: () => void;
 };
 
 export async function setupCellMarket(
@@ -110,6 +111,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       input.setCustomValidity("");
       market.updatePlayerPriorityRates(market.getPlayerPriorityRates().map(rate =>
         rate.categoryId === definition.id ? { ...rate, pointsPerUnit: next } : rate));
+      actions.notifySchedulingInputsChanged();
       refreshEconomy(true);
     });
     control.append(input); row.append(name, marketPrice, cadence, control); return row;

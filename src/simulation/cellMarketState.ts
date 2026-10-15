@@ -1,4 +1,5 @@
 import type { CellGrid } from "./cells.ts";
+import { CompanyFinance } from "./companyFinance.ts";
 import {
   calculateCellEconomy,
   recordSuccessfulCellCapture,
@@ -78,12 +79,10 @@ export class CellMarketState {
   private readonly lifecycleEventIds = new Set<string>();
   private readonly images = new Map<string, CellImageRecord>();
   private readonly lifecycleEvents: ImageLifecycleEvent[] = [];
-  private readonly startingCashUsd: number;
   private readonly initialMarketReadout: MarketReadoutCategory[];
   private readonly initialPriorityRates: PlayerCategoryPriorityRate[];
-  private cashUsdValue: number;
-  private realizedRevenueUsdValue = 0;
   private readonly grid: CellGrid;
+  readonly finance: CompanyFinance;
 
   constructor(
     grid: CellGrid,
@@ -91,11 +90,11 @@ export class CellMarketState {
     playerPriorityRates: readonly PlayerCategoryPriorityRate[],
     startingCashUsd: number,
     definitions: readonly CellCategoryExposureDefinition[] = PROPOSED_CELL_CATEGORIES,
+    finance?: CompanyFinance,
   ) {
     this.grid = grid;
     if (!Number.isFinite(startingCashUsd) || startingCashUsd < 0) throw new RangeError("Starting company cash must be finite and non-negative");
-    this.startingCashUsd = startingCashUsd;
-    this.cashUsdValue = startingCashUsd;
+    this.finance = finance ?? new CompanyFinance({ startingCashUsd });
     this.exposures = new CellCategoryExposureIndex(grid, definitions);
     this.lastCollectedAt = new Float64Array(grid.ids.length);
     this.lastCollectedAt.fill(Number.NaN); // NaN represents never collected (VAM starts at 1).
@@ -106,8 +105,8 @@ export class CellMarketState {
     this.initialPriorityRates = this.playerPriorityRates.map(rate => ({ ...rate }));
   }
 
-  get companyCashUsd(): number { return this.cashUsdValue; }
-  get realizedRevenueUsd(): number { return this.realizedRevenueUsdValue; }
+  get companyCashUsd(): number { return this.finance.cashUsd; }
+  get realizedRevenueUsd(): number { return this.finance.realizedRevenueUsd; }
 
   /** Restore the in-memory preview to its supplied scenario defaults. */
   resetPreview(): void {
@@ -117,8 +116,7 @@ export class CellMarketState {
     this.lifecycleEventIds.clear();
     this.images.clear();
     this.lifecycleEvents.length = 0;
-    this.cashUsdValue = this.startingCashUsd;
-    this.realizedRevenueUsdValue = 0;
+    this.finance.reset();
     this.marketReadout = this.initialMarketReadout.map(category => ({ ...category }));
     this.playerPriorityRates = this.initialPriorityRates.map(rate => ({ ...rate }));
   }
@@ -161,7 +159,7 @@ export class CellMarketState {
       transferredBytes: onboard.reduce((total, image) => total + image.transferredBytes, 0),
       deletedCount: deleted.length,
       lostValuePotentialUsd: deleted.reduce((total, image) => total + image.valuePotentialUsdAtCapture, 0),
-      realizedRevenueUsd: this.realizedRevenueUsdValue,
+      realizedRevenueUsd: this.realizedRevenueUsd,
     };
   }
 
@@ -278,16 +276,13 @@ export class CellMarketState {
     const image = this.requireOnboardImage(imageId);
     this.validateLifecycleEvent(eventId, timeSeconds, image);
     if (!Number.isFinite(revenueUsd) || revenueUsd < 0) throw new RangeError("Settlement revenue must be finite and non-negative");
-    const nextCash = this.cashUsdValue + revenueUsd;
-    const nextRealizedRevenue = this.realizedRevenueUsdValue + revenueUsd;
-    if (!Number.isFinite(nextCash) || !Number.isFinite(nextRealizedRevenue)) throw new RangeError("Resulting revenue must remain finite");
-    const event: ImageLifecycleEvent = { kind: "image-downlinked", eventId, imageId, timeSeconds, revenueUsd };
+    const settlement = this.finance.recordDownlinkRevenue(eventId, imageId, timeSeconds, revenueUsd);
+    const settledRevenueUsd = settlement.amountCents / 100;
+    const event: ImageLifecycleEvent = { kind: "image-downlinked", eventId, imageId, timeSeconds, revenueUsd: settledRevenueUsd };
     image.status = "delivered";
     image.transferredBytes = image.sizeBytes;
     image.deliveredAtSeconds = timeSeconds;
-    image.settledRevenueUsd = revenueUsd;
-    this.cashUsdValue = nextCash;
-    this.realizedRevenueUsdValue = nextRealizedRevenue;
+    image.settledRevenueUsd = settledRevenueUsd;
     this.lifecycleEventIds.add(eventId);
     this.lifecycleEvents.push(event);
     return { ...event };

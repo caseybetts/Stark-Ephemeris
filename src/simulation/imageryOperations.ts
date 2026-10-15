@@ -14,11 +14,13 @@ export type ImageryOperationsConfiguration = {
  */
 export class ImageryOperations {
   private eventSequence = 0;
-  private readonly configuration: ImageryOperationsConfiguration;
+  private readonly initialCapacityBytesBySatellite: Readonly<Record<string, number>>;
+  private capacityBytesBySatellite: Record<string, number>;
   private readonly fractionalBytesByImage = new Map<string, number>();
 
   constructor(configuration: ImageryOperationsConfiguration) {
-    this.configuration = configuration;
+    this.initialCapacityBytesBySatellite = { ...configuration.storageCapacityBytesBySatellite };
+    this.capacityBytesBySatellite = { ...configuration.storageCapacityBytesBySatellite };
     for (const [satelliteId, capacityBytes] of Object.entries(configuration.storageCapacityBytesBySatellite)) {
       if (!satelliteId.trim() || !Number.isSafeInteger(capacityBytes) || capacityBytes <= 0) {
         throw new RangeError("Each spacecraft needs a positive whole-byte storage capacity");
@@ -26,8 +28,22 @@ export class ImageryOperations {
     }
   }
 
+  hasSatellite(satelliteId: string): boolean {
+    return Object.hasOwn(this.capacityBytesBySatellite, satelliteId);
+  }
+
+  registerSatellite(satelliteId: string, capacityBytes: number): void {
+    if (!satelliteId.trim() || this.hasSatellite(satelliteId)) {
+      throw new Error(`Invalid or duplicate satellite ID: ${satelliteId}`);
+    }
+    if (!Number.isSafeInteger(capacityBytes) || capacityBytes <= 0) {
+      throw new RangeError("Each spacecraft needs a positive whole-byte storage capacity");
+    }
+    this.capacityBytesBySatellite[satelliteId] = capacityBytes;
+  }
+
   enforceStorageCapacity(market: CellMarketState, satelliteId: string, timeSeconds: number): ImageLifecycleEvent[] {
-    const capacityBytes = this.configuration.storageCapacityBytesBySatellite[satelliteId];
+    const capacityBytes = this.capacityBytesBySatellite[satelliteId];
     if (capacityBytes === undefined) throw new Error(`No storage capacity is configured for spacecraft ${satelliteId}`);
     const events: ImageLifecycleEvent[] = [];
     let onboard = market.getImages().filter(image => image.satelliteId === satelliteId && image.status === "onboard");
@@ -121,8 +137,35 @@ export class ImageryOperations {
     return events;
   }
 
+  nextDeliveryBoundary(
+    market: CellMarketState,
+    startsAtSeconds: number,
+    activeContacts: readonly (GroundContactWindow & { station: SurfaceObject })[],
+  ): number | null {
+    const bestBySatellite = new Map<string, number>();
+    for (const contact of activeContacts) {
+      if (contact.station.groundStationDetails?.operationalStatus !== "available") continue;
+      const rate = contact.station.groundStationDetails.downlinkRateMbps;
+      if (rate <= 0) continue;
+      if (rate > (bestBySatellite.get(contact.satelliteId) ?? 0)) bestBySatellite.set(contact.satelliteId, rate);
+    }
+    let next = Number.POSITIVE_INFINITY;
+    for (const [satelliteId, rateMbps] of bestBySatellite) {
+      const image = market.getImages()
+        .filter(item => item.satelliteId === satelliteId && item.status === "onboard")
+        .sort((left, right) => left.capturedAtSeconds - right.capturedAtSeconds || left.imageId.localeCompare(right.imageId))[0];
+      if (!image) continue;
+      const cursor = Math.max(startsAtSeconds, image.capturedAtSeconds);
+      const fractionalCredit = this.fractionalBytesByImage.get(image.imageId) ?? 0;
+      const bytesPerSecond = rateMbps * 1_000_000 / 8;
+      const completion = cursor + (image.sizeBytes - image.transferredBytes - fractionalCredit) / bytesPerSecond;
+      if (completion > startsAtSeconds && completion < next) next = completion;
+    }
+    return Number.isFinite(next) ? next : null;
+  }
+
   getCapacityBytes(satelliteId: string): number {
-    const capacityBytes = this.configuration.storageCapacityBytesBySatellite[satelliteId];
+    const capacityBytes = this.capacityBytesBySatellite[satelliteId];
     if (capacityBytes === undefined) throw new Error(`No storage capacity is configured for spacecraft ${satelliteId}`);
     return capacityBytes;
   }
@@ -130,6 +173,7 @@ export class ImageryOperations {
   reset(): void {
     this.eventSequence = 0;
     this.fractionalBytesByImage.clear();
+    this.capacityBytesBySatellite = { ...this.initialCapacityBytesBySatellite };
   }
 
   private nextEventId(kind: string): string {

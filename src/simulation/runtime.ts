@@ -42,13 +42,13 @@ export class SimulationRuntime {
   private elapsed = 0;
   private actionOrder = 0;
   private eventSequence = 0;
-  private readonly satelliteIds: Set<string>;
+  private readonly satelliteIds = new Set<string>();
+  private readonly initialSatelliteIds: Set<string>;
   private readonly actionsBySatellite = new Map<string, RuntimeAction[]>();
   private readonly actionIds = new Set<string>();
   private readonly eventLog: RuntimeEvent[] = [];
 
   constructor(satelliteIds: readonly string[]) {
-    this.satelliteIds = new Set();
     for (const satelliteId of satelliteIds) {
       if (!satelliteId.trim() || this.satelliteIds.has(satelliteId)) {
         throw new Error(`Invalid or duplicate satellite ID: ${satelliteId}`);
@@ -56,10 +56,23 @@ export class SimulationRuntime {
       this.satelliteIds.add(satelliteId);
       this.actionsBySatellite.set(satelliteId, []);
     }
+    this.initialSatelliteIds = new Set(this.satelliteIds);
   }
 
   get elapsedSeconds(): number {
     return this.elapsed;
+  }
+
+  hasSatellite(satelliteId: string): boolean {
+    return this.satelliteIds.has(satelliteId);
+  }
+
+  registerSatellite(satelliteId: string): void {
+    if (!satelliteId.trim() || this.satelliteIds.has(satelliteId)) {
+      throw new Error(`Invalid or duplicate satellite ID: ${satelliteId}`);
+    }
+    this.satelliteIds.add(satelliteId);
+    this.actionsBySatellite.set(satelliteId, []);
   }
 
   get events(): readonly RuntimeEvent[] {
@@ -144,6 +157,16 @@ export class SimulationRuntime {
     }
   }
 
+  /** Cancel queued actions except the committed TEL actions that must survive an upload. */
+  cancelQueuedActionsExcept(satelliteId: string, preservedActionIds: ReadonlySet<string>): void {
+    const actions = this.requireSatellite(satelliteId);
+    for (const action of actions) {
+      if (action.status !== "queued" || preservedActionIds.has(action.id)) continue;
+      action.status = "cancelled";
+      this.recordEvent(action, "action-cancelled", this.elapsed);
+    }
+  }
+
   /** Advance the domain clock and process every action boundary in the interval. */
   advanceBy(seconds: number): number {
     if (!Number.isFinite(seconds) || seconds < 0) {
@@ -197,7 +220,13 @@ export class SimulationRuntime {
     this.eventSequence = 0;
     this.actionIds.clear();
     this.eventLog.length = 0;
-    for (const actions of this.actionsBySatellite.values()) actions.length = 0;
+    for (const satelliteId of this.satelliteIds) {
+      if (!this.initialSatelliteIds.has(satelliteId)) {
+        this.satelliteIds.delete(satelliteId);
+        this.actionsBySatellite.delete(satelliteId);
+      }
+    }
+    for (const satelliteId of this.initialSatelliteIds) this.actionsBySatellite.set(satelliteId, []);
   }
 
   private requireSatellite(satelliteId: string): RuntimeAction[] {

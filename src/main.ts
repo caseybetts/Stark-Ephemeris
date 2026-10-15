@@ -1,16 +1,18 @@
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./styles.css";
 import { AVAILABLE_TIME_MULTIPLIERS, DEFAULT_TIME_MULTIPLIER, EFFECTIVE_CONTACT_RADIUS_KM, INITIAL_FLEET, SURFACE_OBJECTS } from "./simulation/constants";
-import { createWorldSnapshot } from "./simulation/world";
+import { circularOrbitPeriodSeconds, createWorldSnapshot } from "./simulation/world";
 import { SimulationRuntime } from "./simulation/runtime";
 import { predictGroundContactWindows, type GroundContactWindow } from "./simulation/contacts";
 import { GroundOperations } from "./simulation/groundOperations";
 import { createPrototypeCellMarket } from "./simulation/prototypeCellMarket";
 import { cellLookDirectionAt, evaluateCellCaptureOpportunity, nadirPointingAt, type CellCaptureScenario } from "./simulation/cellCapture";
-import { generateGreedyCellSchedule } from "./simulation/cellScheduler";
+import { generateBoundedCellSchedule } from "./simulation/cellScheduler";
 import type { CellMarketState } from "./simulation/cellMarketState";
 import { OperationalLoop } from "./simulation/operationalLoop";
+import { CompanyFinance } from "./simulation/companyFinance";
 import type { GeographicLocation, SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
+import { setupFinanceView } from "./ui/finance";
 
 declare global {
   interface Window {
@@ -50,20 +52,33 @@ const elements = {
   stationTableCount: document.querySelector<HTMLElement>("#station-table-count")!,
   stationTableBody: document.querySelector<HTMLTableSectionElement>("#station-table-body")!,
   spacecraftCount: document.querySelector<HTMLElement>("#spacecraft-count")!,
+  summaryFleetCount: document.querySelector<HTMLElement>("#summary-fleet-count")!,
   spacecraftTableBody: document.querySelector<HTMLTableSectionElement>("#spacecraft-table-body")!,
+  purchaseOrbitAltitude: document.querySelector<HTMLInputElement>("#purchase-orbit-altitude")!,
+  purchaseOrbitInclination: document.querySelector<HTMLInputElement>("#purchase-orbit-inclination")!,
+  purchaseOrbitNode: document.querySelector<HTMLInputElement>("#purchase-orbit-node")!,
+  purchaseOrbitPhase: document.querySelector<HTMLInputElement>("#purchase-orbit-phase")!,
+  purchaseSpacecraft: document.querySelector<HTMLButtonElement>("#purchase-spacecraft")!,
+  purchaseSpacecraftStatus: document.querySelector<HTMLElement>("#purchase-spacecraft-status")!,
   spacecraftDetailTitle: document.querySelector<HTMLElement>("#spacecraft-detail-title")!,
   spacecraftDetailState: document.querySelector<HTMLElement>("#spacecraft-detail-state")!,
   spacecraftDetailAltitude: document.querySelector<HTMLElement>("#spacecraft-detail-altitude")!,
   spacecraftDetailInclination: document.querySelector<HTMLElement>("#spacecraft-detail-inclination")!,
   spacecraftDetailCoordinate: document.querySelector<HTMLElement>("#spacecraft-detail-coordinate")!,
   spacecraftDetailStation: document.querySelector<HTMLElement>("#spacecraft-detail-station")!,
+  spacecraftDetailBattery: document.querySelector<HTMLElement>("#spacecraft-detail-battery")!,
+  spacecraftDetailPowerState: document.querySelector<HTMLElement>("#spacecraft-detail-power-state")!,
+  spacecraftDetailPowerFlow: document.querySelector<HTMLElement>("#spacecraft-detail-power-flow")!,
+  spacecraftDetailPowerReason: document.querySelector<HTMLElement>("#spacecraft-detail-power-reason")!,
   contactRadius: document.querySelector<HTMLElement>("#contact-radius")!,
   locationCount: document.querySelector<HTMLElement>("#location-count")!,
   locationList: document.querySelector<HTMLElement>("#location-list")!,
 };
 
-const fleet: readonly SatelliteDefinition[] = INITIAL_FLEET.satellites;
+let fleet: readonly SatelliteDefinition[] = [...INITIAL_FLEET.satellites];
 const surfaceObjects = SURFACE_OBJECTS as readonly SurfaceObject[];
+const STANDARD_SPACECRAFT_COST_USD = 50_000_000;
+const STANDARD_LAUNCH_COST_USD = 0;
 const CONTACT_FORECAST_HORIZON_SECONDS = 24 * 60 * 60;
 const CONTACT_FORECAST_SAMPLE_SECONDS = 120;
 // Proposed demonstration values only; capture geometry and timing remain open gameplay choices.
@@ -78,6 +93,7 @@ const PROTOTYPE_STORAGE_CAPACITY_BYTES = 100 * 1024 * 1024;
 let selectedSatelliteId = fleet[0]!.id;
 const simulationRuntime = new SimulationRuntime(fleet.map(({ id }) => id));
 const groundOperations = new GroundOperations(fleet.map(({ id }) => id), simulationRuntime);
+const companyFinance = new CompanyFinance({ startingCashUsd: -50_000 });
 const contactForecasts = new Map<string, { computedAt: number; window?: GroundContactWindow }>();
 const simulation = {
   timeMultiplier: DEFAULT_TIME_MULTIPLIER,
@@ -96,6 +112,7 @@ type SpacecraftTableRow = {
 };
 
 const spacecraftTableRows = new Map<string, SpacecraftTableRow>();
+const stationAntennaCells = new Map<string, HTMLElement>();
 
 const formatCoordinate = (latitude: number, longitude: number): string => {
   const latDirection = latitude >= 0 ? "N" : "S";
@@ -120,14 +137,21 @@ function renderStations(
   runtime: SimulationRuntime,
 ): void {
   const stations = snapshot.stationContacts;
-  const activeCount = stations.filter((contact) => contact.available).length;
+  const activeStationIds = new Set(groundOperations.getSatelliteState(snapshot.satelliteId).activeStationIds);
+  const activeCount = activeStationIds.size;
   elements.stationCount.textContent = `${activeCount} / ${stations.length} IN CONTACT`;
   elements.stationList.replaceChildren(
     ...stations.map((contact) => {
       const row = document.createElement("div");
       row.className = "station-row";
       const marker = document.createElement("span");
-      marker.className = `row-marker ${contact.available ? "row-marker-active" : ""}`;
+      const antenna = groundOperations.getAntennaState(contact.station.id);
+      const linked = activeStationIds.has(contact.station.id);
+      const waitingFor = antenna.ownerSatelliteId && antenna.ownerSatelliteId !== snapshot.satelliteId
+        ? fleet.find(({ id }) => id === antenna.ownerSatelliteId)?.name
+        : undefined;
+      const waiting = contact.geometricInRange && contact.stationOperational && !linked && Boolean(waitingFor);
+      marker.className = `row-marker ${linked ? "row-marker-active" : ""}`;
       const copy = document.createElement("span");
       copy.className = "row-copy";
       const name = document.createElement("strong");
@@ -136,17 +160,19 @@ function renderStations(
       detail.textContent = contact.station.description;
       copy.append(name, detail);
       const state = document.createElement("span");
-      state.className = `row-state ${contact.available ? "row-state-active" : ""}`;
-      state.textContent = contact.available
+      state.className = `row-state ${linked ? "row-state-active" : ""}`;
+      state.textContent = linked
         ? "IN CONTACT"
         : contact.geometricInRange && !contact.stationOperational
           ? "STATION DOWN"
+          : waiting
+            ? `ANTENNA BUSY · ${waitingFor!.toUpperCase()}`
           : formatDistance(contact.distanceKm);
       row.append(marker, copy, state);
       return row;
     }),
   );
-  renderNearestStationContact(stations, nextWindow, snapshot.elapsedSeconds);
+  renderNearestStationContact(stations, nextWindow, snapshot.elapsedSeconds, groundOperations, snapshot.satelliteId);
   renderGroundControl(
     snapshot.satelliteId,
     snapshot.elapsedSeconds,
@@ -202,14 +228,37 @@ function renderGroundStationTable(): void {
         ? station.groundStationDetails.downlinkRateMbps.toLocaleString()
         : "UNCONFIGURED";
 
-      row.append(stationCell, locationCell, contactCell, uplinkCell, downlinkCell);
+      const antennaCell = document.createElement("td");
+      antennaCell.className = "antenna-status-cell";
+      antennaCell.textContent = "NO ACTIVE LINK";
+      stationAntennaCells.set(station.id, antennaCell);
+
+      row.append(stationCell, locationCell, contactCell, uplinkCell, downlinkCell, antennaCell);
       return row;
     }),
   );
 }
 
+function renderAntennaOccupancy(groundOperations: GroundOperations): void {
+  for (const [stationId, cell] of stationAntennaCells) {
+    const state = groundOperations.getAntennaState(stationId);
+    const ownerName = state.ownerSatelliteId
+      ? fleet.find(({ id }) => id === state.ownerSatelliteId)?.name ?? state.ownerSatelliteId
+      : null;
+    const waitingNames = state.waitingSatelliteIds
+      .map(id => fleet.find(satellite => satellite.id === id)?.name ?? id);
+    cell.textContent = ownerName
+      ? `${ownerName}${waitingNames.length > 0 ? ` · waiting: ${waitingNames.join(", ")}` : ""}`
+      : waitingNames.length > 0
+        ? `Waiting: ${waitingNames.join(", ")}`
+      : "NO ACTIVE LINK";
+    cell.title = waitingNames.join(", ");
+  }
+}
+
 function buildSpacecraftTable(onSelect: (satelliteId: string) => void): void {
   elements.spacecraftCount.textContent = `${fleet.length} SPACECRAFT`;
+  elements.summaryFleetCount.textContent = `${fleet.length} SPACECRAFT`;
   spacecraftTableRows.clear();
   elements.spacecraftTableBody.replaceChildren(
     ...fleet.map((satellite) => {
@@ -243,7 +292,7 @@ function buildSpacecraftTable(onSelect: (satelliteId: string) => void): void {
   );
 }
 
-function renderSpacecraftTable(snapshots: readonly WorldSnapshot[]): void {
+function renderSpacecraftTable(snapshots: readonly WorldSnapshot[], groundOperations: GroundOperations): void {
   for (const snapshot of snapshots) {
     const row = spacecraftTableRows.get(snapshot.satelliteId);
     if (!row) continue;
@@ -258,14 +307,31 @@ function renderSpacecraftTable(snapshots: readonly WorldSnapshot[]): void {
     );
     row.altitude.textContent = `${Math.round(satellite.orbit.altitudeKm).toLocaleString()} km`;
     row.lighting.textContent = snapshot.satelliteEclipsed ? "EARTH ECLIPSE" : "SUNLIT";
-    const accessibleStation = snapshot.stationContacts.find((contact) => contact.available);
-    row.stationAccess.textContent = accessibleStation
-      ? `IN RANGE · ${accessibleStation.station.name}`
-      : "NO CONTACT";
+    const groundState = groundOperations.getSatelliteState(snapshot.satelliteId);
+    const linkedStationId = groundState.activeStationIds[0];
+    const linkedStation = linkedStationId
+      ? surfaceObjects.find(({ id }) => id === linkedStationId)
+      : undefined;
+    const waitingContact = snapshot.stationContacts.find(contact => {
+      const antenna = groundOperations.getAntennaState(contact.station.id);
+      return contact.geometricInRange && contact.stationOperational
+        && antenna.ownerSatelliteId !== null
+        && antenna.ownerSatelliteId !== snapshot.satelliteId;
+    });
+    row.stationAccess.textContent = linkedStation
+      ? `LINK · ${linkedStation.name}`
+      : waitingContact
+        ? `WAITING · ${waitingContact.station.name}`
+        : "NO CONTACT";
   }
 }
 
-function renderSelectedSpacecraft(satellite: SatelliteDefinition, snapshot: WorldSnapshot): void {
+function renderSelectedSpacecraft(
+  satellite: SatelliteDefinition,
+  snapshot: WorldSnapshot,
+  power: ReturnType<OperationalLoop["getPowerSnapshot"]>,
+  groundOperations: GroundOperations,
+): void {
   elements.satelliteName.textContent = satellite.name;
   elements.satelliteIdentifier.textContent = `SPACECRAFT · ${satellite.id.toUpperCase()}`;
   elements.spacecraftDetailTitle.textContent = satellite.name;
@@ -277,24 +343,60 @@ function renderSelectedSpacecraft(satellite: SatelliteDefinition, snapshot: Worl
     snapshot.subSatellitePoint.latitudeDeg,
     snapshot.subSatellitePoint.longitudeDeg,
   );
+  const groundState = groundOperations.getSatelliteState(satellite.id);
+  const activeStation = groundState.activeStationIds
+    .map(id => snapshot.stationContacts.find(contact => contact.station.id === id))
+    .find((contact): contact is NonNullable<typeof contact> => Boolean(contact));
+  const waitingStation = snapshot.stationContacts.find(contact => {
+    const ownerId = groundOperations.getAntennaState(contact.station.id).ownerSatelliteId;
+    return contact.geometricInRange && contact.stationOperational && ownerId !== null && ownerId !== satellite.id;
+  });
+  const waitingOwnerId = waitingStation
+    ? groundOperations.getAntennaState(waitingStation.station.id).ownerSatelliteId
+    : null;
+  const waitingOwner = waitingOwnerId ? fleet.find(({ id }) => id === waitingOwnerId)?.name : null;
   const nearestStation = [...snapshot.stationContacts].sort((left, right) => left.distanceKm - right.distanceKm)[0];
-  elements.spacecraftDetailStation.textContent = nearestStation
-    ? `${nearestStation.station.name} · ${formatDistance(nearestStation.distanceKm)}${nearestStation.available ? " · IN RANGE" : ""}`
-    : "NONE CONFIGURED";
+  elements.spacecraftDetailStation.textContent = activeStation
+    ? `${activeStation.station.name} · ANTENNA LINK`
+    : waitingStation
+      ? `${waitingStation.station.name} · WAITING${waitingOwner ? ` BEHIND ${waitingOwner}` : ""}`
+      : nearestStation
+        ? `${nearestStation.station.name} · ${formatDistance(nearestStation.distanceKm)}`
+        : "NONE CONFIGURED";
+  elements.spacecraftDetailBattery.textContent = `${power.energyWh.toFixed(1)} / ${power.capacityWh} Wh (${power.chargePercent.toFixed(0)}%) · ${power.reserveWh} Wh reserve`;
+  elements.spacecraftDetailPowerState.textContent = power.depleted ? "DEPLETED · RECHARGING" : power.radioPaused ? "DOWNLINK PAUSED" : "NOMINAL";
+  elements.spacecraftDetailPowerFlow.textContent = `${power.generationW} W generation · ${power.loadW.toFixed(0)} W load · ${power.netW.toFixed(0)} W net`;
+  elements.spacecraftDetailPowerReason.textContent = power.reason ?? "No active power restriction.";
 }
 
 function renderNearestStationContact(
   stations: ReturnType<typeof createWorldSnapshot>["stationContacts"],
   nextWindow: GroundContactWindow | undefined,
   nowSeconds: number,
+  groundOperations: GroundOperations,
+  satelliteId: string,
 ): void {
-  const activeContact = stations.find((contact) => contact.available);
+  const activeStationIds = new Set(groundOperations.getSatelliteState(satelliteId).activeStationIds);
+  const activeContact = stations.find((contact) => activeStationIds.has(contact.station.id));
   const nearestContact = [...stations].sort((left, right) => left.distanceKm - right.distanceKm)[0];
+  const waitingContact = stations.find(contact => {
+    const antenna = groundOperations.getAntennaState(contact.station.id);
+    return contact.geometricInRange && contact.stationOperational
+      && antenna.ownerSatelliteId !== null
+      && antenna.ownerSatelliteId !== satelliteId;
+  });
+  const waitingFor = waitingContact
+    ? groundOperations.getAntennaState(waitingContact.station.id).ownerSatelliteId
+    : null;
+  const waitingName = waitingFor ? fleet.find(({ id }) => id === waitingFor)?.name ?? waitingFor : null;
   if (activeContact) {
     elements.satContactState.textContent = `IN CONTACT · ${activeContact.station.name.toUpperCase()}`;
     elements.satContactState.classList.remove("state-warning");
   } else if (nearestContact?.geometricInRange && !nearestContact.stationOperational) {
     elements.satContactState.textContent = `STATION DOWN · ${nearestContact.station.name.toUpperCase()}`;
+    elements.satContactState.classList.add("state-warning");
+  } else if (waitingContact && waitingName) {
+    elements.satContactState.textContent = `ANTENNA BUSY · ${waitingContact.station.name.toUpperCase()} SERVING ${waitingName.toUpperCase()}`;
     elements.satContactState.classList.add("state-warning");
   } else if (nextWindow) {
     elements.satContactState.textContent = `NEXT · ${nextWindow.stationName.toUpperCase()} IN ${formatDuration(nextWindow.startsAtSeconds - nowSeconds)}`;
@@ -320,8 +422,23 @@ function renderGroundControl(
   const activeStation = state.activeStationIds
     .map((stationId) => surfaceObjects.find((station) => station.id === stationId)?.name)
     .find((name): name is string => Boolean(name));
+  const waitingStationId = activeStation
+    ? undefined
+    : groundOperations.getGeometricStationIds(satelliteId).find(stationId => {
+      const ownerId = groundOperations.getAntennaState(stationId).ownerSatelliteId;
+      return ownerId !== null && ownerId !== satelliteId;
+    });
+  const waitingStationName = waitingStationId
+    ? surfaceObjects.find(({ id }) => id === waitingStationId)?.name
+    : undefined;
+  const waitingOwnerId = waitingStationId
+    ? groundOperations.getAntennaState(waitingStationId).ownerSatelliteId
+    : null;
+  const waitingOwnerName = waitingOwnerId ? fleet.find(({ id }) => id === waitingOwnerId)?.name : undefined;
   elements.nextContact.textContent = activeStation
-    ? `CONTACT OPEN · ${activeStation.toUpperCase()}`
+    ? `ANTENNA LINK OPEN · ${activeStation.toUpperCase()}`
+    : waitingStationName
+      ? `WAITING · ${waitingStationName.toUpperCase()} SERVING ${waitingOwnerName?.toUpperCase() ?? waitingOwnerId}`
     : nextWindow
       ? `NEXT CONTACT · ${nextWindow.stationName.toUpperCase()} IN ${formatDuration(nextWindow.startsAtSeconds - nowSeconds)}`
       : "NO AVAILABLE CONTACT PREDICTED IN 24H";
@@ -436,6 +553,7 @@ function setupManagementTabs(): void {
 async function start(): Promise<void> {
   setupManagementTabs();
   renderGroundStationTable();
+  renderAntennaOccupancy(groundOperations);
   elements.contactRadius.textContent = EFFECTIVE_CONTACT_RADIUS_KM.toLocaleString();
   elements.stationList.innerHTML = '<div class="loading-row">CALCULATING ACCESS WINDOWS…</div>';
 
@@ -451,14 +569,53 @@ async function start(): Promise<void> {
   // Geography loads independently so a data failure does not stop the world clock.
   let cellMarket: CellMarketState | null = null;
   let cellGrid: import("./simulation/cells").CellGrid | null = null;
+  const refreshFinance = setupFinanceView(companyFinance);
+  refreshFinance();
+  let purchaseNotice: string | null = null;
+  let purchaseNoticeWarning = false;
+  let purchaseNoticeRevision = -1;
+  const updatePurchaseStatus = (message: string, warning = false): void => {
+    elements.purchaseSpacecraftStatus.textContent = message;
+    elements.purchaseSpacecraftStatus.dataset.state = warning ? "warning" : "ready";
+  };
+  const refreshGrowth = (): void => {
+    refreshFinance();
+    const validOrbit = [
+      elements.purchaseOrbitAltitude,
+      elements.purchaseOrbitInclination,
+      elements.purchaseOrbitNode,
+      elements.purchaseOrbitPhase,
+    ].every(input => input.checkValidity());
+    const cashCents = companyFinance.getSnapshot().cashCents;
+    const purchaseCostCents = Math.round((STANDARD_SPACECRAFT_COST_USD + STANDARD_LAUNCH_COST_USD) * 100);
+    elements.purchaseSpacecraft.disabled = !validOrbit || cashCents < purchaseCostCents;
+    if (purchaseNotice && purchaseNoticeRevision === companyFinance.revision) {
+      updatePurchaseStatus(purchaseNotice, purchaseNoticeWarning);
+      return;
+    }
+    purchaseNotice = null;
+    if (!validOrbit) {
+      updatePurchaseStatus("Enter a valid orbit before launch.", true);
+    } else if (cashCents < purchaseCostCents) {
+      const required = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+        .format(STANDARD_SPACECRAFT_COST_USD + STANDARD_LAUNCH_COST_USD);
+      const current = (cashCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
+      updatePurchaseStatus(`Requires ${required} available cash. Current cash: ${current}.`, true);
+    } else {
+      const orbit = `${Number(elements.purchaseOrbitAltitude.value).toLocaleString()} km · ${Number(elements.purchaseOrbitInclination.value).toFixed(1)}° inclination`;
+      updatePurchaseStatus(`Ready to launch in the selected orbit: ${orbit}.`);
+    }
+  };
   const operationalLoop = new OperationalLoop({
     fleet,
     stations: surfaceObjects,
     scenario: PROPOSED_CELL_CAPTURE_SCENARIO,
+    weather: { seed: 20261014, epochUtcMs: Date.parse("2026-01-01T00:00:00Z"), baselinePercent: 50 },
     getMarket: () => cellMarket,
     storageCapacityBytesBySatellite: Object.fromEntries(fleet.map(({ id }) => [id, PROTOTYPE_STORAGE_CAPACITY_BYTES])),
     runtime: simulationRuntime,
     groundOperations,
+    finance: companyFinance,
   });
   let refreshCellMarket: (() => void) | null = null;
   let captureSequence = 0;
@@ -530,16 +687,19 @@ async function start(): Promise<void> {
       now + 48 * 60 * 60,
       { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 4 },
     );
-    const distinctWindows: GroundContactWindow[] = [];
-    for (const window of windows) {
-      const previous = distinctWindows.at(-1);
-      if (!previous || window.startsAtSeconds >= previous.endsAtSeconds) distinctWindows.push(window);
-      if (distinctWindows.length === 2) break;
+    const episodes: GroundContactWindow[] = [];
+    for (const window of [...windows].sort((left, right) => left.startsAtSeconds - right.startsAtSeconds)) {
+      const previous = episodes.at(-1);
+      if (previous && window.startsAtSeconds <= previous.endsAtSeconds) {
+        previous.endsAtSeconds = Math.max(previous.endsAtSeconds, window.endsAtSeconds);
+      } else episodes.push({ ...window });
     }
+    const distinctWindows = episodes.filter(window => window.startsAtSeconds >= now
+      && !window.continuesBeforeWindow && window.endsAtSeconds > now).slice(0, 2);
     if (distinctWindows.length < 2) return "Could not generate a TEL: two separate available contacts were not found within 48 hours.";
     const uploadContact = distinctWindows[0]!;
     const nextContact = distinctWindows[1]!;
-    const schedule = generateGreedyCellSchedule({
+    const schedule = generateBoundedCellSchedule({
       satellite,
       grid,
       market: cellMarket,
@@ -548,15 +708,19 @@ async function start(): Promise<void> {
       scenario: PROPOSED_CELL_CAPTURE_SCENARIO,
       initialPointing: operationalLoop.getLastCommandedPointing(satellite.id)
         ?? nadirPointingAt(satellite, uploadContact.startsAtSeconds),
+      powerConfiguration: operationalLoop.powerOperations.getConfiguration(satellite.id),
+      initialEnergyWh: operationalLoop.projectScheduledEnergy(satellite.id, now, uploadContact.startsAtSeconds),
     });
     clearCaptureDraftFor(satellite.id);
-    const groundPlanVersion = operationalLoop.reviseGroundPlan(satellite.id, schedule.commands, now);
+    operationalLoop.reviseGroundPlan(satellite.id, schedule.commands, now);
+    operationalLoop.enableAutomaticPlanning(satellite.id, grid);
+    const groundPlanVersion = operationalLoop.groundOperations.getSatelliteState(satellite.id).groundPlanVersion;
     captureDrafts.delete(satellite.id);
     const first = schedule.decisions[0];
     const choiceSummary = first
       ? ` First choice: C${first.cellId.toString().padStart(7, "0")} at ${first.availablePriorityPoints.toFixed(2)} priority points${first.alternatives[0] ? `; next alternative C${first.alternatives[0].cellId.toString().padStart(7, "0")} scored ${first.alternatives[0].availablePriorityPoints.toFixed(2)}` : ""}.`
       : " No positive-priority feasible capture was found; the plan contains explicit idle segments.";
-    return `Generated ground plan V${groundPlanVersion}: ${schedule.decisions.length} capture(s) across ${schedule.optimizationSegments} two-minute optimization segment(s), from ${uploadContact.stationName} to ${nextContact.stationName}. Total projected available priority: ${schedule.projectedPriorityPoints.toFixed(2)}. Idle commands explain gaps.${choiceSummary} Tie-breaks are priority, earliest start, then cell ID; these scheduler details are proposed. Plan uploads only at contact.`;
+    return `Generated ground plan V${groundPlanVersion}: ${schedule.decisions.length} capture(s) across ${schedule.optimizationSegments} two-minute optimization segment(s), from ${uploadContact.stationName} to ${nextContact.stationName}. Total projected available priority: ${schedule.projectedPriorityPoints.toFixed(2)}. Idle commands explain gaps.${choiceSummary} ${schedule.search?.improvedOverGreedy ? "Bounded search improved the full plan over the greedy fallback." : "The greedy fallback remained best under the search budget."} Plan uploads only at contact. Automatic continuation is enabled.`;
   };
   const advanceGroundOperations = (seconds: number) => operationalLoop.advanceBy(seconds);
   const setSimulationRunning = (running: boolean) => {
@@ -573,15 +737,32 @@ async function start(): Promise<void> {
     advanceGroundOperations(seconds);
     simulation.lastFrameMilliseconds = performance.now();
     refreshCellMarket?.();
+    refreshGrowth();
   };
   const resetPreview = () => {
     setSimulationRunning(false);
     operationalLoop.reset();
+    fleet = operationalLoop.getFleet();
+    selectedSatelliteId = fleet[0]!.id;
+    elements.purchaseOrbitAltitude.value = "550";
+    elements.purchaseOrbitInclination.value = "53";
+    elements.purchaseOrbitNode.value = "12";
+    elements.purchaseOrbitPhase.value = "8";
+    purchaseNotice = null;
+    purchaseNoticeWarning = false;
+    purchaseNoticeRevision = -1;
+    globe.setSatellites(fleet);
+    buildSpacecraftTable((satelliteId) => {
+      selectedSatelliteId = satelliteId;
+      globe.setSelectedSatellite(satelliteId);
+    });
+    globe.setSelectedSatellite(selectedSatelliteId);
     captureDrafts.clear();
     captureSequence = 0;
     contactForecasts.clear();
     simulation.lastFrameMilliseconds = performance.now();
     refreshCellMarket?.();
+    refreshGrowth();
   };
   void import("./ui/cellMarket").then(({ setupCellMarket }) => setupCellMarket(
     globe.viewer,
@@ -589,15 +770,10 @@ async function start(): Promise<void> {
       nowSeconds: () => simulationRuntime.elapsedSeconds,
       getOrCreateMarket: grid => {
         cellGrid = grid;
-        return cellMarket ??= createPrototypeCellMarket(grid);
+        return cellMarket ??= createPrototypeCellMarket(grid, companyFinance);
       },
       getSatelliteId: () => selectedSatelliteId,
-      hasGroundContact: () => {
-        const satellite = fleet.find(({ id }) => id === selectedSatelliteId);
-        return satellite !== undefined
-          && createWorldSnapshot(satellite, surfaceObjects, simulationRuntime.elapsedSeconds)
-            .stationContacts.some(contact => contact.available);
-      },
+      hasGroundContact: () => groundOperations.getSatelliteState(selectedSatelliteId).activeStationIds.length > 0,
       pauseSimulation: () => setSimulationRunning(false),
       advanceSimulationBySeconds,
       resetPreview,
@@ -605,13 +781,15 @@ async function start(): Promise<void> {
       clearCellCaptureDraft: clearCaptureDraft,
       enforceStorageCapacity: (satelliteId, timeSeconds) =>
         operationalLoop.enforceStorageCapacity(satelliteId, timeSeconds),
+      notifySchedulingInputsChanged: () => operationalLoop.notifySchedulingInputsChanged(),
     },
     refresh => { refreshCellMarket = refresh; },
   ));
 
   const updateFleetViews = (snapshots: readonly WorldSnapshot[]) => {
     globe.update(snapshots);
-    renderSpacecraftTable(snapshots);
+    renderSpacecraftTable(snapshots, groundOperations);
+    renderAntennaOccupancy(groundOperations);
     const selectedSnapshot = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId);
     const selectedSatellite = fleet.find(({ id }) => id === selectedSatelliteId);
     if (!selectedSnapshot || !selectedSatellite) return;
@@ -635,8 +813,103 @@ async function start(): Promise<void> {
       contactForecasts.set(selectedSatellite.id, forecast);
     }
     renderSnapshot(selectedSnapshot, selectedSatellite, forecast.window);
-    renderSelectedSpacecraft(selectedSatellite, selectedSnapshot);
+    renderSelectedSpacecraft(selectedSatellite, selectedSnapshot, operationalLoop.getPowerSnapshot(selectedSatellite.id), groundOperations);
   };
+
+  const commitPurchase = (): void => {
+    if (![
+      elements.purchaseOrbitAltitude,
+      elements.purchaseOrbitInclination,
+      elements.purchaseOrbitNode,
+      elements.purchaseOrbitPhase,
+    ].every(input => input.checkValidity())) {
+      elements.purchaseOrbitAltitude.reportValidity();
+      elements.purchaseOrbitInclination.reportValidity();
+      elements.purchaseOrbitNode.reportValidity();
+      elements.purchaseOrbitPhase.reportValidity();
+      refreshGrowth();
+      return;
+    }
+
+    const now = simulationRuntime.elapsedSeconds;
+    companyFinance.advanceTo(now, fleet.map(({ id }) => id), surfaceObjects
+      .filter(station => station.kind === "ground-station").map(({ id }) => id));
+    const purchaseCostCents = Math.round((STANDARD_SPACECRAFT_COST_USD + STANDARD_LAUNCH_COST_USD) * 100);
+    if (companyFinance.getSnapshot().cashCents < purchaseCostCents) {
+      purchaseNotice = null;
+      refreshGrowth();
+      return;
+    }
+
+    const ordinal = fleet.length + 1;
+    const satelliteId = `asteria-${ordinal}`;
+    const firstSatellite = fleet[0]!;
+    const selectedAltitudeKm = Number(elements.purchaseOrbitAltitude.value);
+    const selectedInclinationDeg = Number(elements.purchaseOrbitInclination.value);
+    const selectedNodeDeg = Number(elements.purchaseOrbitNode.value);
+    const selectedPhaseAtLaunchDeg = Number(elements.purchaseOrbitPhase.value);
+    const definition: SatelliteDefinition = {
+      id: satelliteId,
+      name: `Asteria-${ordinal}`,
+      orbit: {
+        altitudeKm: selectedAltitudeKm,
+        inclinationDeg: selectedInclinationDeg,
+        ascendingNodeDeg: selectedNodeDeg,
+        initialPhaseDeg: ((selectedPhaseAtLaunchDeg
+          - (360 / circularOrbitPeriodSeconds(selectedAltitudeKm)) * now) % 360 + 360) % 360,
+      },
+      slew: { ...firstSatellite.slew },
+    };
+    const registration = {
+      storageCapacityBytes: PROTOTYPE_STORAGE_CAPACITY_BYTES,
+      power: operationalLoop.powerOperations.getConfiguration(firstSatellite.id),
+    };
+    try {
+      operationalLoop.validateSatelliteRegistration(definition, registration);
+      companyFinance.recordSpacecraftProcurement(
+        `purchase:${satelliteId}`,
+        satelliteId,
+        now,
+        STANDARD_SPACECRAFT_COST_USD,
+        STANDARD_LAUNCH_COST_USD,
+      );
+      operationalLoop.registerSatellite(definition, registration);
+    } catch (error) {
+      purchaseNotice = error instanceof Error ? error.message : "Purchase could not be completed.";
+      purchaseNoticeWarning = true;
+      purchaseNoticeRevision = companyFinance.revision;
+      updatePurchaseStatus(purchaseNotice, true);
+      refreshGrowth();
+      return;
+    }
+
+    fleet = operationalLoop.getFleet();
+    selectedSatelliteId = satelliteId;
+    contactForecasts.clear();
+    globe.setSatellites(fleet);
+    buildSpacecraftTable((nextSatelliteId) => {
+      selectedSatelliteId = nextSatelliteId;
+      globe.setSelectedSatellite(nextSatelliteId);
+    });
+    globe.setSelectedSatellite(satelliteId);
+    purchaseNotice = `Launched ${definition.name} at ${selectedAltitudeKm.toLocaleString()} km, ${selectedInclinationDeg}° inclination, ${selectedNodeDeg}° ascending node, and ${selectedPhaseAtLaunchDeg}° phase. It starts with empty storage and its own operations.`;
+    purchaseNoticeWarning = false;
+    purchaseNoticeRevision = companyFinance.revision;
+    updatePurchaseStatus(purchaseNotice);
+    refreshGrowth();
+  };
+
+  elements.purchaseSpacecraft.addEventListener("click", commitPurchase);
+  [
+    elements.purchaseOrbitAltitude,
+    elements.purchaseOrbitInclination,
+    elements.purchaseOrbitNode,
+    elements.purchaseOrbitPhase,
+  ].forEach(input => input.addEventListener("input", () => {
+    purchaseNotice = null;
+    refreshGrowth();
+  }));
+  refreshGrowth();
 
   elements.trackToggle.addEventListener("click", () => {
     simulation.showTrack = !simulation.showTrack;
@@ -706,6 +979,7 @@ async function start(): Promise<void> {
       );
       updateFleetViews(snapshots);
       refreshCellMarket?.();
+      refreshGrowth();
       previousUiUpdate = frameMilliseconds;
     }
 

@@ -76,7 +76,9 @@
           <section class="management-tabpanel" id="panel-summary" role="tabpanel" aria-labelledby="tab-summary" tabindex="0">
           <div class="summary-intro">
             <p class="eyebrow">LIVE WORLD MODEL</p>
-            <p>Prototype spacecraft and Earth conditions update as the simulation runs. Company and fleet-wide metrics will appear when those systems are defined.</p>
+            <p>Prototype spacecraft and Earth conditions update as the simulation runs. Review company cash and operating results in the Finance &amp; Growth view.</p>
+            <div class="summary-company-metric"><span>COMPANY CASH</span><strong id="summary-company-cash">$0.00</strong><span class="summary-cash-warning" id="summary-company-warning" hidden>NEGATIVE BALANCE</span></div>
+            <div class="summary-company-metric"><span>FLEET</span><strong id="summary-fleet-count">1 SPACECRAFT</strong></div>
           </div>
           <section class="satellite-card" aria-labelledby="satellite-name">
             <div class="satellite-card-top">
@@ -181,7 +183,7 @@
               </div>
               <span class="network-count" id="spacecraft-count">—</span>
             </header>
-            <p class="table-explainer">Select a spacecraft to highlight its marker and orbit. Values reflect modeled orbit, sunlight, eclipse, and approximate station access; storage, battery, health, and revenue are not modeled yet.</p>
+              <p class="table-explainer">Select a spacecraft to highlight its marker and orbit. The prototype models orbit, station access, onboard storage, downlink, and a simplified battery.</p>
             <div class="table-scroll fleet-table-scroll" role="region" aria-label="Spacecraft fleet table" tabindex="0">
               <table class="operations-table fleet-table">
                 <thead>
@@ -209,6 +211,10 @@
                 <div><span>INCLINATION</span><strong id="spacecraft-detail-inclination">—</strong></div>
                 <div><span>SUBSATELLITE POINT</span><strong id="spacecraft-detail-coordinate">—</strong></div>
                 <div><span>NEAREST STATION</span><strong id="spacecraft-detail-station">—</strong></div>
+                <div><span>BATTERY</span><strong id="spacecraft-detail-battery">—</strong></div>
+                <div><span>POWER STATE</span><strong id="spacecraft-detail-power-state">—</strong></div>
+                <div><span>POWER FLOW</span><strong id="spacecraft-detail-power-flow">—</strong></div>
+                <div><span>POWER REASON</span><strong id="spacecraft-detail-power-reason">—</strong></div>
               </div>
               <div class="spacecraft-plan-controls" aria-labelledby="spacecraft-plan-title">
                 <div>
@@ -235,9 +241,9 @@
                 </div>
                 <span class="network-count" id="station-table-count">—</span>
               </div>
-              <p class="table-explainer">Site status is independent of spacecraft contact. Bit rates are configurable prototype defaults and do not yet constrain data transfer.</p>
+              <p class="table-explainer">Available antennas serve one spacecraft at a time. The first pass holds the antenna until it ends, then the next spacecraft still in view is served; equal starts use spacecraft ID order.</p>
               <div class="table-scroll" role="region" aria-label="Ground station status table" tabindex="0">
-                <table class="operations-table">
+                <table class="operations-table stations-table">
                   <thead>
                     <tr>
                       <th scope="col">Station</th>
@@ -245,6 +251,7 @@
                       <th scope="col">Site status</th>
                       <th scope="col">Uplink rate (Mbps)</th>
                       <th scope="col">Downlink rate (Mbps)</th>
+                      <th scope="col">Antenna assignment</th>
                     </tr>
                   </thead>
                   <tbody id="station-table-body"></tbody>
@@ -252,8 +259,45 @@
               </div>
             </section>
           </section>
-          <section class="management-tabpanel placeholder-panel" id="panel-finance-growth" role="tabpanel" aria-labelledby="tab-finance-growth" tabindex="0" hidden>
-            <div class="empty-state"><span class="empty-state-mark" aria-hidden="true">↗</span><p class="eyebrow">COMPANY PERFORMANCE</p><h2>Finance and growth are not available yet</h2><p>Revenue, costs, customer satisfaction, launch planning, and company growth rules have not been implemented. This view will be populated when those systems are defined.</p></div>
+          <section class="management-tabpanel finance-panel" id="panel-finance-growth" role="tabpanel" aria-labelledby="tab-finance-growth" tabindex="0" hidden>
+            <div class="finance-heading">
+              <div><p class="eyebrow">COMPANY PERFORMANCE</p><h2>Finance &amp; Growth</h2></div>
+              <span class="cell-tag">PROTOTYPE ECONOMY · SAMPLE COSTS</span>
+            </div>
+            <p class="finance-warning" id="finance-warning" role="status" aria-live="polite" hidden></p>
+            <div class="finance-metrics" aria-label="Whole-run financial totals">
+              <div><span>COMPANY CASH</span><strong id="finance-cash">-$50,000.00</strong></div>
+              <div><span>NET CASH MOVEMENT</span><strong id="finance-cash-movement">$0.00</strong></div>
+              <div><span>REALIZED REVENUE</span><strong id="finance-revenue">$0.00</strong></div>
+              <div><span>OPERATING COSTS</span><strong id="finance-costs">$0.00</strong></div>
+              <div><span>CAPITAL SPENDING</span><strong id="finance-capital-spending">$0.00</strong></div>
+              <div><span>NET OPERATING RESULT</span><strong id="finance-net">$0.00</strong></div>
+            </div>
+            <p class="finance-explainer">Revenue is credited when imagery is fully downlinked. Opening cash is -$50,000; no loan interest is modeled. The <span id="finance-spacecraft-rate">$100.00</span> spacecraft-day charge represents general mission operations; ground stations cost <span id="finance-station-rate">$25.00</span> per station-day. A new launch joins charges at the next day boundary. Capital spending is separate; negative cash shows a warning while operations continue.</p>
+            <section class="growth-purchase" aria-labelledby="growth-purchase-title">
+              <div class="section-heading">
+                <div><p class="eyebrow">AVAILABLE GROWTH</p><h2 id="growth-purchase-title">Standard imaging spacecraft</h2></div>
+                <span class="network-count">IMMEDIATE LAUNCH</span>
+              </div>
+              <p class="finance-explainer">Spacecraft <strong>$50,000,000</strong> · launch <strong>$0</strong>. Choose the orbit before launch. Fields start from Asteria-1's current orbit; edit them for each launch. The standard spacecraft keeps its current modeled hardware and operating behavior.</p>
+              <div class="growth-purchase-controls">
+                <label>Altitude (km)<input id="purchase-orbit-altitude" type="number" min="1" step="10" value="550" required></label>
+                <label>Inclination (°)<input id="purchase-orbit-inclination" type="number" min="0" max="180" step="1" value="53" required></label>
+                <label>Ascending node (°)<input id="purchase-orbit-node" type="number" min="0" max="359" step="1" value="12" required></label>
+                <label>Phase at launch (°)<input id="purchase-orbit-phase" type="number" min="0" max="359" step="1" value="8" required></label>
+                <button class="preview-button growth-purchase-button" id="purchase-spacecraft" type="button">BUY &amp; LAUNCH</button>
+              </div>
+              <p class="growth-purchase-status" id="purchase-spacecraft-status" role="status" aria-live="polite">Edit the orbit above; launch is available when company cash covers the package.</p>
+            </section>
+            <section class="section-block finance-ledger" aria-labelledby="finance-ledger-title">
+              <div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2 id="finance-ledger-title">Company ledger</h2></div><span class="network-count">WHOLE RUN</span></div>
+              <div class="table-scroll" role="region" aria-label="Company finance ledger" tabindex="0">
+                <table class="operations-table finance-table">
+                  <thead><tr><th scope="col">Simulation time</th><th scope="col">Category</th><th scope="col">Source</th><th scope="col">Amount</th></tr></thead>
+                  <tbody id="finance-ledger-body"></tbody>
+                </table>
+              </div>
+            </section>
           </section>
           </section>
 
