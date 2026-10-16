@@ -85,7 +85,7 @@ This document records implementation constraints and architecture direction. The
 - The candidate category/exposure mapping is implemented in `src/simulation/categoryExposures.ts` and described in [Cell grid data](CELL_DATA.md). It converts urban, cropland, and pasture area into km²; other candidates retain mapped record/polygon counts or MW. This mapping is **Proposed** pending review, and its data measures are not approved market categories or verified real-world prices.
 - Geographic attributes such as sensitive ecological areas, borders, and additional energy infrastructure may be considered later; they are not in the current candidate market mapping.
 - The Orders tab presents the cell market and offers globe layers for category exposure, calculated gross value, and repeat-purchase/freshness state once that state is defined. Individual customer orders, point targets, and project contracts are not required for this initial economic loop; they may be added later as a separate layer.
-- Each satellite has a slew-speed capability. A paid upgrade applies to satellites launched afterward. The current code convention is degrees per second plus settling seconds, with great-circle separation between pointing vectors; Asteria-1's 1 degree/second and 2-second settling values are scenario placeholders, not approved gameplay balance. CELL-04A/B should share `calculateRetargetDurationSeconds`. Whether pointing uses independent-axis limits, the final units/values, and any upgrade amounts remain open.
+- Each satellite has a slew-speed capability. Installed hardware is chosen at launch and immutable afterward. The current code convention is degrees per second plus settling seconds, with great-circle separation between pointing vectors; Asteria-1's Standard 1 degree/second and 2-second settling values remain prototype inputs. The configurable Enhanced option is 2 degrees/second, 2 seconds settling, and +$5M per spacecraft. These approved starters are not final balance. CELL-04A/B share `calculateRetargetDurationSeconds`; independent-axis pointing limits remain open.
 
 ### Proposed implementation shape
 
@@ -178,6 +178,8 @@ Future Orders work should add sorting/filtering against calculated dollar value,
 - The prototype simulation offers 1×, 60×, and 300× time speed, with 60× as the starting value. These speeds and all geometry constants are configurable scenario defaults, not balance decisions.
 
 Keep the simulation/domain model independent of Cesium so another renderer can replace it if needed.
+
+Treat each launched spacecraft's installed hardware specification as immutable. Procurement may select upgrades for a new spacecraft; retain the resulting per-spacecraft capability snapshot for planning and execution. Operational state and future maneuver state evolve under their own rules. The prototype `spacecraftCatalog.ts` defines Standard and Enhanced slew packages, and the domain purchase command validates the option, quotes it, and registers the configured spacecraft. The first upgrade slice covers one slew option; broader new-spacecraft upgrade choices are deferred. See the [FLEET-02B design brief](LAYER_3_PLAN.md#fleet-02b-design-brief).
 
 ## Suggested code boundaries
 

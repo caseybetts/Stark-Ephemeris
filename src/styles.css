@@ -119,8 +119,8 @@ button { font: inherit; }
 .growth-purchase > .finance-explainer strong { color: #c8ded8; font-weight: 600; }
 .growth-purchase-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 9px; margin-top: 12px; }
 .growth-purchase-controls label { display: flex; min-width: 112px; flex: 1; flex-direction: column; gap: 5px; color: #9ab1b4; font-size: 9px; }
-.growth-purchase-controls input { width: 100%; min-height: 34px; border: 1px solid #2a4149; border-radius: 5px; padding: 7px 8px; background: #0b171e; color: #dcebe5; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
-.growth-purchase-controls input:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+.growth-purchase-controls input, .growth-purchase-controls select { width: 100%; min-height: 34px; border: 1px solid #2a4149; border-radius: 5px; padding: 7px 8px; background: #0b171e; color: #dcebe5; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.growth-purchase-controls input:focus-visible, .growth-purchase-controls select:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
 .growth-purchase-button { min-height: 34px; align-self: end; padding-right: 12px; padding-left: 12px; white-space: nowrap; }
 .growth-purchase-button:disabled { opacity: .4; cursor: default; }
 .growth-purchase-status { min-height: 14px; margin: 9px 0 0; color: #82979a; font-size: 9px; line-height: 1.5; }
@@ -374,14 +374,22 @@ button { font: inherit; }
 .cell-data-notes a { color: var(--mint); }
 .cell-data-notes p { margin: 9px 0; }
 .cell-loading { color: var(--muted); font-size: 13px; padding: 22px 0; }
-.cell-map-key { position: absolute; z-index: 2; right: 24px; top: 103px; width: 220px; padding: 13px 14px; border: 1px solid rgba(115,215,193,.25); border-radius: 7px; background: rgba(7,20,27,.9); backdrop-filter: blur(10px); }
+.cell-map-key { position: absolute; z-index: 2; right: 24px; top: 103px; width: 270px; padding: 13px 14px; border: 1px solid rgba(115,215,193,.25); border-radius: 7px; background: rgba(7,20,27,.9); backdrop-filter: blur(10px); }
 .cell-map-key[hidden] { display: none; }
 .cell-map-key > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .cell-map-key .eyebrow { font-size: 7px; color: var(--mint); margin: 0; }
+.cell-map-select-label { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; color: #9ab1b4; font-size: 9px; }
+.cell-map-key select { width: 100%; min-height: 30px; border: 1px solid #2a4149; border-radius: 4px; padding: 5px 7px; background: #0b171e; color: #deebe6; font: 10px Inter, sans-serif; }
+.cell-map-key select:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
 .cell-overview { border: 0; background: transparent; color: #bdd4cf; font-size: 9px; padding: 3px 0; cursor: pointer; }
 .cell-map-layer-name { display: block; margin: 9px 0; font-size: 12px; font-weight: 550; }
 .cell-map-ramp { display: block; height: 5px; border-radius: 3px; background: linear-gradient(90deg, #2a7c82, #feca62); }
 .cell-map-key[data-layer=coverage] .cell-map-ramp { background: #43c7b1; }
+.cell-map-ramp[data-palette=priority-max] { background: linear-gradient(90deg, #1c2252, #ffc34a); }
+.cell-map-ramp[data-palette=priority-now] { background: linear-gradient(90deg, #f6de53, #129c89); }
+.cell-map-ramp[data-palette=value] { background: linear-gradient(90deg, #1d392e, #e3ec67); }
+.cell-map-ramp[data-palette=scheduled] { background: linear-gradient(90deg, #ff9b76, #f4f870); }
+.cell-map-ramp[data-palette=imaging] { background: linear-gradient(90deg, #547f78, #f4f870); }
 .cell-map-scale { display: block; margin-top: 6px; font-size: 9px; color: #abc4c0; }
 .cell-map-key p { font-size: 9px; color: #78989b; margin: 8px 0 0; }
 @media (max-width: 1000px) { .cell-workspace { grid-template-columns: minmax(0, 1fr) 265px; } .cell-table th, .cell-table td { padding: 10px 8px; } }
@@ -389,7 +397,7 @@ button { font: inherit; }
 @media (max-width: 600px) {
   .top-actions { gap: 4px; } .brand strong { display: none; }
   .mission-clock { position: absolute; top: 61px; left: 13px; } .map-hud { display: none; }
-  .cell-map-key { right: 10px; top: 94px; width: 168px; padding: 10px; }
+  .cell-map-key { right: 10px; top: 94px; width: min(245px, calc(100vw - 20px)); padding: 10px; }
   .cell-map-key > div { gap: 3px; } .cell-map-key .eyebrow { font-size: 6px; } .cell-overview { font-size: 8px; }
   .cell-map-layer-name { font-size: 11px; } .cell-map-scale { font-size: 8px; }
   .cell-controls { gap: 10px; } .cell-controls label { flex: 1; } .cell-controls select { min-width: 125px; }

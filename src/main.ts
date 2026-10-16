@@ -1,7 +1,7 @@
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./styles.css";
 import { AVAILABLE_TIME_MULTIPLIERS, DEFAULT_TIME_MULTIPLIER, EFFECTIVE_CONTACT_RADIUS_KM, INITIAL_FLEET, SURFACE_OBJECTS } from "./simulation/constants";
-import { circularOrbitPeriodSeconds, createWorldSnapshot } from "./simulation/world";
+import { createWorldSnapshot } from "./simulation/world";
 import { SimulationRuntime } from "./simulation/runtime";
 import { predictGroundContactWindows, type GroundContactWindow } from "./simulation/contacts";
 import { GroundOperations } from "./simulation/groundOperations";
@@ -11,6 +11,7 @@ import { generateBoundedCellSchedule } from "./simulation/cellScheduler";
 import type { CellMarketState } from "./simulation/cellMarketState";
 import { OperationalLoop } from "./simulation/operationalLoop";
 import { CompanyFinance } from "./simulation/companyFinance";
+import { getSpacecraftEquipmentOption, quoteSpacecraftPurchase, purchaseSpacecraftWithEquipment } from "./simulation/spacecraftCatalog";
 import type { GeographicLocation, SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
 import { setupFinanceView } from "./ui/finance";
 
@@ -58,12 +59,15 @@ const elements = {
   purchaseOrbitInclination: document.querySelector<HTMLInputElement>("#purchase-orbit-inclination")!,
   purchaseOrbitNode: document.querySelector<HTMLInputElement>("#purchase-orbit-node")!,
   purchaseOrbitPhase: document.querySelector<HTMLInputElement>("#purchase-orbit-phase")!,
+  purchaseEquipmentOption: document.querySelector<HTMLSelectElement>("#purchase-equipment-option")!,
+  purchasePackageSummary: document.querySelector<HTMLElement>("#purchase-package-summary")!,
   purchaseSpacecraft: document.querySelector<HTMLButtonElement>("#purchase-spacecraft")!,
   purchaseSpacecraftStatus: document.querySelector<HTMLElement>("#purchase-spacecraft-status")!,
   spacecraftDetailTitle: document.querySelector<HTMLElement>("#spacecraft-detail-title")!,
   spacecraftDetailState: document.querySelector<HTMLElement>("#spacecraft-detail-state")!,
   spacecraftDetailAltitude: document.querySelector<HTMLElement>("#spacecraft-detail-altitude")!,
   spacecraftDetailInclination: document.querySelector<HTMLElement>("#spacecraft-detail-inclination")!,
+  spacecraftDetailSlew: document.querySelector<HTMLElement>("#spacecraft-detail-slew")!,
   spacecraftDetailCoordinate: document.querySelector<HTMLElement>("#spacecraft-detail-coordinate")!,
   spacecraftDetailStation: document.querySelector<HTMLElement>("#spacecraft-detail-station")!,
   spacecraftDetailBattery: document.querySelector<HTMLElement>("#spacecraft-detail-battery")!,
@@ -77,8 +81,6 @@ const elements = {
 
 let fleet: readonly SatelliteDefinition[] = [...INITIAL_FLEET.satellites];
 const surfaceObjects = SURFACE_OBJECTS as readonly SurfaceObject[];
-const STANDARD_SPACECRAFT_COST_USD = 50_000_000;
-const STANDARD_LAUNCH_COST_USD = 0;
 const CONTACT_FORECAST_HORIZON_SECONDS = 24 * 60 * 60;
 const CONTACT_FORECAST_SAMPLE_SECONDS = 120;
 // Proposed demonstration values only; capture geometry and timing remain open gameplay choices.
@@ -339,6 +341,10 @@ function renderSelectedSpacecraft(
   elements.spacecraftDetailState.classList.toggle("table-status-active", !snapshot.satelliteEclipsed);
   elements.spacecraftDetailAltitude.textContent = `${Math.round(satellite.orbit.altitudeKm).toLocaleString()} km`;
   elements.spacecraftDetailInclination.textContent = `${satellite.orbit.inclinationDeg.toFixed(1)}°`;
+  const equipment = satellite.equipmentOptionId
+    ? getSpacecraftEquipmentOption(satellite.equipmentOptionId)
+    : getSpacecraftEquipmentOption("standard");
+  elements.spacecraftDetailSlew.textContent = `${equipment.name} · ${satellite.slew.slewRateDegPerSecond}°/s · ${satellite.slew.settlingTimeSeconds}s settle`;
   elements.spacecraftDetailCoordinate.textContent = formatCoordinate(
     snapshot.subSatellitePoint.latitudeDeg,
     snapshot.subSatellitePoint.longitudeDeg,
@@ -586,9 +592,22 @@ async function start(): Promise<void> {
       elements.purchaseOrbitNode,
       elements.purchaseOrbitPhase,
     ].every(input => input.checkValidity());
+    let quote: ReturnType<typeof quoteSpacecraftPurchase>;
+    try {
+      quote = quoteSpacecraftPurchase(elements.purchaseEquipmentOption.value, companyFinance.getSnapshot().cashCents);
+    } catch {
+      elements.purchaseSpacecraft.disabled = true;
+      elements.purchasePackageSummary.textContent = "Choose a valid spacecraft package.";
+      updatePurchaseStatus("Choose a valid spacecraft package.", true);
+      return;
+    }
     const cashCents = companyFinance.getSnapshot().cashCents;
-    const purchaseCostCents = Math.round((STANDARD_SPACECRAFT_COST_USD + STANDARD_LAUNCH_COST_USD) * 100);
-    elements.purchaseSpacecraft.disabled = !validOrbit || cashCents < purchaseCostCents;
+    const { option: equipment, totalCostCents: purchaseCostCents, cashAfterPurchaseCents } = quote;
+    const money = (cents: number): string => new Intl.NumberFormat(undefined, {
+      style: "currency", currency: "USD", maximumFractionDigits: 0,
+    }).format(cents / 100);
+    elements.purchasePackageSummary.textContent = `${equipment.name}: spacecraft ${money(equipment.spacecraftCostCents)} · upgrade ${money(equipment.upgradeCostCents)} · launch ${money(equipment.launchCostCents)} · total ${money(purchaseCostCents)} · cash after launch ${money(cashAfterPurchaseCents)} · ${equipment.slew.slewRateDegPerSecond}°/second, ${equipment.slew.settlingTimeSeconds}s settling`;
+    elements.purchaseSpacecraft.disabled = !validOrbit || !quote.affordable;
     if (purchaseNotice && purchaseNoticeRevision === companyFinance.revision) {
       updatePurchaseStatus(purchaseNotice, purchaseNoticeWarning);
       return;
@@ -596,9 +615,8 @@ async function start(): Promise<void> {
     purchaseNotice = null;
     if (!validOrbit) {
       updatePurchaseStatus("Enter a valid orbit before launch.", true);
-    } else if (cashCents < purchaseCostCents) {
-      const required = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
-        .format(STANDARD_SPACECRAFT_COST_USD + STANDARD_LAUNCH_COST_USD);
+    } else if (!quote.affordable) {
+      const required = money(purchaseCostCents);
       const current = (cashCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
       updatePurchaseStatus(`Requires ${required} available cash. Current cash: ${current}.`, true);
     } else {
@@ -618,6 +636,7 @@ async function start(): Promise<void> {
     finance: companyFinance,
   });
   let refreshCellMarket: (() => void) | null = null;
+  let selectedSatelliteEarthFixedKm: { x: number; y: number; z: number } | null = null;
   let captureSequence = 0;
   type DraftCapture = { id: string; cellIndex: number; target: GeographicLocation };
   const captureDrafts = new Map<string, DraftCapture[]>();
@@ -748,6 +767,7 @@ async function start(): Promise<void> {
     elements.purchaseOrbitInclination.value = "53";
     elements.purchaseOrbitNode.value = "12";
     elements.purchaseOrbitPhase.value = "8";
+    elements.purchaseEquipmentOption.value = "standard";
     purchaseNotice = null;
     purchaseNoticeWarning = false;
     purchaseNoticeRevision = -1;
@@ -782,12 +802,15 @@ async function start(): Promise<void> {
       enforceStorageCapacity: (satelliteId, timeSeconds) =>
         operationalLoop.enforceStorageCapacity(satelliteId, timeSeconds),
       notifySchedulingInputsChanged: () => operationalLoop.notifySchedulingInputsChanged(),
+      getCellOperationalVisualization: () => operationalLoop.getCellOperationalVisualization(selectedSatelliteId),
+      getSatelliteEarthFixedKm: () => selectedSatelliteEarthFixedKm,
     },
     refresh => { refreshCellMarket = refresh; },
   ));
 
   const updateFleetViews = (snapshots: readonly WorldSnapshot[]) => {
     globe.update(snapshots);
+    selectedSatelliteEarthFixedKm = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId)?.satelliteEarthFixedKm ?? null;
     renderSpacecraftTable(snapshots, groundOperations);
     renderAntennaOccupancy(groundOperations);
     const selectedSnapshot = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId);
@@ -832,15 +855,6 @@ async function start(): Promise<void> {
     }
 
     const now = simulationRuntime.elapsedSeconds;
-    companyFinance.advanceTo(now, fleet.map(({ id }) => id), surfaceObjects
-      .filter(station => station.kind === "ground-station").map(({ id }) => id));
-    const purchaseCostCents = Math.round((STANDARD_SPACECRAFT_COST_USD + STANDARD_LAUNCH_COST_USD) * 100);
-    if (companyFinance.getSnapshot().cashCents < purchaseCostCents) {
-      purchaseNotice = null;
-      refreshGrowth();
-      return;
-    }
-
     const ordinal = fleet.length + 1;
     const satelliteId = `asteria-${ordinal}`;
     const firstSatellite = fleet[0]!;
@@ -848,32 +862,29 @@ async function start(): Promise<void> {
     const selectedInclinationDeg = Number(elements.purchaseOrbitInclination.value);
     const selectedNodeDeg = Number(elements.purchaseOrbitNode.value);
     const selectedPhaseAtLaunchDeg = Number(elements.purchaseOrbitPhase.value);
-    const definition: SatelliteDefinition = {
-      id: satelliteId,
-      name: `Asteria-${ordinal}`,
-      orbit: {
+    let definition: SatelliteDefinition;
+    let equipment: ReturnType<typeof getSpacecraftEquipmentOption>;
+    try {
+      const purchase = purchaseSpacecraftWithEquipment({
+        eventId: `purchase:${satelliteId}`,
+        satelliteId,
+        satelliteName: `Asteria-${ordinal}`,
+        equipmentOptionId: elements.purchaseEquipmentOption.value,
+        timeSeconds: now,
         altitudeKm: selectedAltitudeKm,
         inclinationDeg: selectedInclinationDeg,
         ascendingNodeDeg: selectedNodeDeg,
-        initialPhaseDeg: ((selectedPhaseAtLaunchDeg
-          - (360 / circularOrbitPeriodSeconds(selectedAltitudeKm)) * now) % 360 + 360) % 360,
-      },
-      slew: { ...firstSatellite.slew },
-    };
-    const registration = {
-      storageCapacityBytes: PROTOTYPE_STORAGE_CAPACITY_BYTES,
-      power: operationalLoop.powerOperations.getConfiguration(firstSatellite.id),
-    };
-    try {
-      operationalLoop.validateSatelliteRegistration(definition, registration);
-      companyFinance.recordSpacecraftProcurement(
-        `purchase:${satelliteId}`,
-        satelliteId,
-        now,
-        STANDARD_SPACECRAFT_COST_USD,
-        STANDARD_LAUNCH_COST_USD,
-      );
-      operationalLoop.registerSatellite(definition, registration);
+        phaseAtLaunchDeg: selectedPhaseAtLaunchDeg,
+        referenceSatelliteId: firstSatellite.id,
+        spacecraftIds: fleet.map(({ id }) => id),
+        groundStationIds: surfaceObjects.filter(station => station.kind === "ground-station").map(({ id }) => id),
+        storageCapacityBytes: PROTOTYPE_STORAGE_CAPACITY_BYTES,
+        operationalLoop,
+        finance: companyFinance,
+        powerOperations: operationalLoop.powerOperations,
+      });
+      definition = purchase.definition;
+      equipment = purchase.option;
     } catch (error) {
       purchaseNotice = error instanceof Error ? error.message : "Purchase could not be completed.";
       purchaseNoticeWarning = true;
@@ -892,7 +903,7 @@ async function start(): Promise<void> {
       globe.setSelectedSatellite(nextSatelliteId);
     });
     globe.setSelectedSatellite(satelliteId);
-    purchaseNotice = `Launched ${definition.name} at ${selectedAltitudeKm.toLocaleString()} km, ${selectedInclinationDeg}° inclination, ${selectedNodeDeg}° ascending node, and ${selectedPhaseAtLaunchDeg}° phase. It starts with empty storage and its own operations.`;
+    purchaseNotice = `Launched ${definition.name} with ${equipment.name} at ${selectedAltitudeKm.toLocaleString()} km, ${selectedInclinationDeg}° inclination, ${selectedNodeDeg}° ascending node, and ${selectedPhaseAtLaunchDeg}° phase. It starts with empty storage and its own operations.`;
     purchaseNoticeWarning = false;
     purchaseNoticeRevision = companyFinance.revision;
     updatePurchaseStatus(purchaseNotice);
@@ -909,6 +920,10 @@ async function start(): Promise<void> {
     purchaseNotice = null;
     refreshGrowth();
   }));
+  elements.purchaseEquipmentOption.addEventListener("change", () => {
+    purchaseNotice = null;
+    refreshGrowth();
+  });
   refreshGrowth();
 
   elements.trackToggle.addEventListener("click", () => {

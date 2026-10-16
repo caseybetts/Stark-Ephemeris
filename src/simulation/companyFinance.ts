@@ -15,7 +15,9 @@ export type FinanceEntry = {
   sourceId: string;
   amountCents: number;
   spacecraftCostCents?: number;
+  upgradeCostCents?: number;
   launchCostCents?: number;
+  equipmentOptionId?: string;
 };
 
 export type CompanyFinanceSnapshot = {
@@ -102,19 +104,25 @@ export class CompanyFinance {
     });
   }
 
-  /** Record an affordable spacecraft and launch purchase as one idempotent capital entry. */
+  /** Record an affordable spacecraft package and launch as one idempotent capital entry. */
   recordSpacecraftProcurement(
     eventId: string,
     satelliteId: string,
     timeSeconds: number,
     spacecraftCostUsd: number,
     launchCostUsd: number,
+    upgradeCostUsd = 0,
+    equipmentOptionId?: string,
   ): FinanceEntry {
     if (!eventId.trim() || !satelliteId.trim()) throw new Error("Procurement and spacecraft IDs are required");
     if (!Number.isFinite(timeSeconds) || timeSeconds < 0) throw new RangeError("Procurement time must be finite and non-negative");
     const spacecraftCostCents = dollarsToCents(spacecraftCostUsd, "Spacecraft purchase price");
     const launchCostCents = dollarsToCents(launchCostUsd, "Launch price");
-    const amountCents = -(spacecraftCostCents + launchCostCents);
+    const upgradeCostCents = dollarsToCents(upgradeCostUsd, "Spacecraft upgrade price");
+    const totalCostCents = spacecraftCostCents + upgradeCostCents + launchCostCents;
+    if (!Number.isSafeInteger(totalCostCents)) throw new RangeError("Procurement total is too large");
+    if (equipmentOptionId !== undefined && !equipmentOptionId.trim()) throw new Error("Equipment option ID cannot be empty");
+    const amountCents = -totalCostCents;
     if (!Number.isSafeInteger(amountCents)) throw new RangeError("Procurement total is too large");
     const entry: FinanceEntry = {
       id: `procurement:${eventId}`,
@@ -123,19 +131,23 @@ export class CompanyFinance {
       sourceId: satelliteId,
       amountCents,
       spacecraftCostCents,
+      upgradeCostCents,
       launchCostCents,
+      ...(equipmentOptionId ? { equipmentOptionId } : {}),
     };
     const previous = this.entryById.get(entry.id);
     if (previous) {
       if (previous.timeSeconds !== entry.timeSeconds || previous.kind !== entry.kind
         || previous.sourceId !== entry.sourceId || previous.amountCents !== entry.amountCents
         || previous.spacecraftCostCents !== entry.spacecraftCostCents
-        || previous.launchCostCents !== entry.launchCostCents) {
+        || previous.upgradeCostCents !== entry.upgradeCostCents
+        || previous.launchCostCents !== entry.launchCostCents
+        || previous.equipmentOptionId !== entry.equipmentOptionId) {
         throw new Error(`Financial event ID reused with different contents: ${entry.id}`);
       }
       return { ...previous };
     }
-    if (this.cashCentsValue < spacecraftCostCents + launchCostCents) {
+    if (this.cashCentsValue < totalCostCents) {
       throw new Error("Insufficient company cash for spacecraft purchase and launch");
     }
     return this.append(entry);
@@ -203,7 +215,9 @@ export class CompanyFinance {
       if (previous.timeSeconds !== entry.timeSeconds || previous.kind !== entry.kind
         || previous.sourceId !== entry.sourceId || previous.amountCents !== entry.amountCents
         || previous.spacecraftCostCents !== entry.spacecraftCostCents
-        || previous.launchCostCents !== entry.launchCostCents) {
+        || previous.upgradeCostCents !== entry.upgradeCostCents
+        || previous.launchCostCents !== entry.launchCostCents
+        || previous.equipmentOptionId !== entry.equipmentOptionId) {
         throw new Error(`Financial event ID reused with different contents: ${entry.id}`);
       }
       return { ...previous };

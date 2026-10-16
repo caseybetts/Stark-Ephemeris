@@ -209,6 +209,7 @@
               <div class="spacecraft-detail-grid">
                 <div><span>ORBIT ALTITUDE</span><strong id="spacecraft-detail-altitude">—</strong></div>
                 <div><span>INCLINATION</span><strong id="spacecraft-detail-inclination">—</strong></div>
+                <div><span>INSTALLED SLEW</span><strong id="spacecraft-detail-slew">—</strong></div>
                 <div><span>SUBSATELLITE POINT</span><strong id="spacecraft-detail-coordinate">—</strong></div>
                 <div><span>NEAREST STATION</span><strong id="spacecraft-detail-station">—</strong></div>
                 <div><span>BATTERY</span><strong id="spacecraft-detail-battery">—</strong></div>
@@ -285,8 +286,10 @@
                 <label>Inclination (°)<input id="purchase-orbit-inclination" type="number" min="0" max="180" step="1" value="53" required></label>
                 <label>Ascending node (°)<input id="purchase-orbit-node" type="number" min="0" max="359" step="1" value="12" required></label>
                 <label>Phase at launch (°)<input id="purchase-orbit-phase" type="number" min="0" max="359" step="1" value="8" required></label>
+                <label>Slew capability<select id="purchase-equipment-option"><option value="standard" selected>Standard · 1°/second · included</option><option value="enhanced-slew">Enhanced slew · 2°/second · +$5,000,000</option></select></label>
                 <button class="preview-button growth-purchase-button" id="purchase-spacecraft" type="button">BUY &amp; LAUNCH</button>
               </div>
+              <p class="growth-purchase-status" id="purchase-package-summary" aria-live="polite"></p>
               <p class="growth-purchase-status" id="purchase-spacecraft-status" role="status" aria-live="polite">Edit the orbit above; launch is available when company cash covers the package.</p>
             </section>
             <section class="section-block finance-ledger" aria-labelledby="finance-ledger-title">

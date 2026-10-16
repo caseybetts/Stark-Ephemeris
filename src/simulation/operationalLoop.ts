@@ -28,11 +28,17 @@ export type OperationalLoopConfiguration = {
   finance?: CompanyFinance;
 };
 
+export type CellOperationalVisualization = {
+  scheduledCellIndexes: number[];
+  activeCapture: { cellIndex: number; target: GeographicLocation } | null;
+};
+
 const cloneSatellite = (satellite: SatelliteDefinition): SatelliteDefinition => ({
   id: satellite.id,
   name: satellite.name,
   orbit: { ...satellite.orbit },
   slew: { ...satellite.slew },
+  ...(satellite.equipmentOptionId ? { equipmentOptionId: satellite.equipmentOptionId } : {}),
 });
 
 type CaptureAction = {
@@ -104,6 +110,22 @@ export class OperationalLoop {
 
   getFleet(): readonly SatelliteDefinition[] {
     return [...this.fleetById.values()].map(cloneSatellite);
+  }
+
+  getCellOperationalVisualization(satelliteId: string): CellOperationalVisualization {
+    const ground = this.groundOperations.getSatelliteState(satelliteId);
+    const runtime = this.runtime.getSatelliteState(satelliteId);
+    const commands = ground.groundPlanVersion !== ground.onboardTelVersion
+      ? ground.groundPlan
+      : ground.onboardCommands.slice(ground.nextCommandIndex);
+    const scheduledCellIndexes = commands
+      .filter(command => command.cellCapture)
+      .map(command => command.cellCapture!.cellIndex);
+    const active = runtime.currentAction ? this.captureActions.get(runtime.currentAction.id) : undefined;
+    return {
+      scheduledCellIndexes,
+      activeCapture: active ? { cellIndex: active.cellIndex, target: { ...active.target } } : null,
+    };
   }
 
   /** Add an empty spacecraft to the live domain systems without disturbing the existing fleet. */

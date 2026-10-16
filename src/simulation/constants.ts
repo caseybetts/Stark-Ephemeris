@@ -22,6 +22,7 @@ export const DEFAULT_SATELLITE: {
     slewRateDegPerSecond: number;
     settlingTimeSeconds: number;
   };
+  equipmentOptionId: string;
 } = {
   id: "asteria-1",
   name: "Asteria-1",
@@ -36,6 +37,7 @@ export const DEFAULT_SATELLITE: {
     slewRateDegPerSecond: 1,
     settlingTimeSeconds: 2,
   },
+  equipmentOptionId: "standard",
 };
 
 // The player begins with the one configured spacecraft; the collection supports future fleet growth.

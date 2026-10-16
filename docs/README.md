@@ -10,6 +10,7 @@ This folder contains the shared brief for product, gameplay, and implementation 
 | [Gameplay](GAMEPLAY.md) | Player loop, simulation systems, interface needs, and unresolved design questions |
 | [Technical strategy](TECHNICAL_STRATEGY.md) | Browser/deployment constraints, architecture direction, data and persistence approach |
 | [Cell grid data](CELL_DATA.md) | Implemented geographic layers, provenance, limitations, data format, and rebuilding the cell grid |
+| [Cell visualization design](CELL_VISUALIZATION_DESIGN.md) | Orders-map color scales, schedule overlays, active imaging visualization, and interpretation limits |
 | [Implementation outline](IMPLEMENTATION_OUTLINE.md) | Code boundaries, coordinate and orbit calculations, candidate first slice, and gaps an implementation agent must resolve |
 | [OPS-04 verification guide](OPS_04_VERIFICATION.md) | Starting baseline, shared operational orchestration, deterministic fixtures, acceptance scenarios, and implementation checks |
 | [OPS-01B power design and verification](OPS_01B_POWER_DESIGN.md) | Agreed prototype rules, implementation boundaries, starter fixtures, and completed acceptance results |

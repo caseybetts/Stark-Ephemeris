@@ -63,7 +63,7 @@ export function setupFinanceView(finance: CompanyFinance): () => void {
       const category = document.createElement("td"); category.textContent = entryLabel(entry.kind);
       const source = document.createElement("td");
       source.textContent = entry.kind === "spacecraft-procurement"
-        ? `${entry.sourceId} · spacecraft ${money(entry.spacecraftCostCents ?? 0)} + launch ${money(entry.launchCostCents ?? 0)}`
+        ? `${entry.sourceId} · spacecraft ${money(entry.spacecraftCostCents ?? 0)} + ${entry.equipmentOptionId ?? "standard"} upgrade ${money(entry.upgradeCostCents ?? 0)} + launch ${money(entry.launchCostCents ?? 0)}`
         : entry.sourceId;
       const amount = document.createElement("td"); amount.className = "finance-amount";
       amount.textContent = `${entry.amountCents > 0 ? "+" : ""}${money(entry.amountCents)}`;

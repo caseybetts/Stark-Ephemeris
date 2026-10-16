@@ -1,6 +1,6 @@
 # BIZ-02 company growth and procurement design
 
-**Status: Implemented prototype; `npm run build` passes.** Company finance accepts the approved -$50,000 starting cash and records affordability-checked capital procurement separately from operating costs. `OperationalLoop.registerSatellite` adds an initialized spacecraft to runtime, ground operations, storage, and power. Finance & Growth now offers editable orbit inputs and immediate purchase/launch for the standard package at $50,000,000 with $0 launch cost. The app updates spacecraft rows, globe markers/orbit paths, operational controls, and reset state. Behavioral review remains pending; growth values are configurable and unbalanced.
+**Status: Implemented prototype; TypeScript and production build pass.** Company finance accepts the approved -$50,000 starting cash and records affordability-checked capital procurement separately from operating costs. `OperationalLoop.registerSatellite` adds an initialized spacecraft to runtime, ground operations, storage, and power. Finance & Growth offers editable orbit inputs and immediate purchase/launch for Standard or Enhanced slew packages at $50,000,000 and $55,000,000, with $0 launch cost. The app updates spacecraft rows, globe markers/orbit paths, operational controls, and reset state. Focused behavioral review remains pending; growth values are configurable and unbalanced.
 
 ## Goal
 
@@ -10,21 +10,21 @@ Make company growth a clear management choice: see what a purchase costs, whethe
 
 The app starts with Asteria-1. `SatelliteDefinition` carries per-spacecraft orbit and slew settings, and world snapshots are calculated independently. Launched spacecraft start with empty storage, an independent power state, and no uploaded TEL; the running loop and globe update without resetting existing assets.
 
-FLEET-02B separately owns paid slew upgrades that apply only to future launches. To keep the first BIZ-02 slice focused, defer that upgrade and use the standard package's configured capabilities; integrate upgrades later without changing existing spacecraft.
+The first BIZ-02 slice began with one standard package. FLEET-02B now adds a per-spacecraft Enhanced slew choice at procurement. Each launched asset keeps its purchased specification; its upgrade applies only to that spacecraft and never retrofits earlier launches.
 
 ## Implemented first playable slice
 
 ### Purchase choice
 
-Offer one clearly labeled **Standard imaging spacecraft** package. Before each launch, the player chooses altitude, inclination, ascending node, and phase at launch. Fields begin with Asteria-1's current 550 km / 53° / 12° / 8° orbit and remain editable. Do not apply an automatic phase offset; the player can choose an orbit that repeats or spaces their fleet. Launch immediately after purchase. Defer the future-launch slew upgrade to FLEET-02B. Allow repeat purchases when affordable; do not impose an arbitrary fleet cap.
+Offer a **Standard** or **Enhanced slew** package. Before each launch, the player chooses altitude, inclination, ascending node, phase, and slew package. Orbit fields begin with Asteria-1's current 550 km / 53° / 12° / 8° orbit and remain editable. Do not apply an automatic phase offset; the player can choose an orbit that repeats or spaces their fleet. Launch immediately after purchase. Allow repeat purchases when affordable; do not impose an arbitrary fleet cap.
 
-Show package and launch prices, the recurring spacecraft cost, current cash and affordability, and the editable orbit before the player submits the launch. Keep prices configurable and labeled as prototype values. Do not add financing, customer contracts, ground-station construction, or hardware that has no modeled operational effect.
+Show spacecraft, upgrade, and launch prices, the recurring spacecraft cost, current cash and affordability, selected slew capability, and editable orbit before the player submits the launch. Keep package values configurable. Do not add financing, customer contracts, ground-station construction, or hardware that has no modeled operational effect.
 
 ### Purchase and launch
 
-Buying a package launches it immediately; skip manufacturing queues and launch windows. Show spacecraft and launch prices separately, then record them together as one idempotent procurement transaction. A successful transaction assigns a stable new spacecraft ID, adds its definition to the fleet, and makes it available to the simulation. Failed affordability checks leave both cash and fleet unchanged. Routine operations continue if ongoing expenses later push cash below zero; the agreed BIZ-01 warning remains in effect.
+Buying a package launches it immediately; skip manufacturing queues and launch windows. Show spacecraft, upgrade, and launch prices separately, then record them together as one idempotent procurement transaction. A successful transaction assigns a stable new spacecraft ID, snapshots its selected equipment, adds its definition to the fleet, and makes it available to the simulation. Failed affordability checks leave cash and fleet unchanged. Routine operations continue if ongoing expenses later push cash below zero; the agreed BIZ-01 warning remains in effect.
 
-Treat purchase and launch as capital spending, not operating costs. They reduce available cash and appear in the ledger, but remain separate from BIZ-01's recurring operating-cost and net operating-result totals. Show total cash movement separately so balances reconcile.
+Treat spacecraft, upgrades, and launch as capital spending, not operating costs. They reduce available cash and appear as separate line items in one ledger entry, but remain separate from BIZ-01's recurring operating-cost and net operating-result totals. Show total cash movement separately so balances reconcile.
 
 ### Finance & Growth view
 
@@ -75,7 +75,7 @@ These clarifications close the BIZ-02 integration questions and are implemented 
 
 The chosen $50M growth price has not been balanced against current sample revenue. Starting at -$50,000 means earning at least $50,050,000 net of operating costs before the first purchase. Treat growth pacing as unverified and preserve these approved values; use funded fixtures for development. TUNE-01 owns eventual balancing.
 
-The $50M price remains intentionally unbalanced, and multi-spacecraft planning continues to use independent plans. Runtime antenna queues are shared, but future planner forecasts may need to account for contention. Slew upgrades remain a later FLEET-02B task.
+The $50M Standard and $55M Enhanced prices remain intentionally unbalanced, and multi-spacecraft planning continues to use independent plans. Runtime antenna queues are shared, but future planner forecasts may need to account for contention. The Enhanced package is the first FLEET-02B slice; broader hardware selection remains later work.
 
 ## Completion check
 

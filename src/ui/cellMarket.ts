@@ -4,7 +4,8 @@ import { CELL_LAYERS, UNSOURCED_ATTRIBUTES, cellBounds, cellLabel } from "../sim
 import type { CellGrid, CellLayer } from "../simulation/cells";
 import type { CellMarketState } from "../simulation/cellMarketState";
 import type { GeographicLocation } from "../simulation/model";
-import { createCellLayer } from "../rendering/cellLayer";
+import type { CellOperationalVisualization } from "../simulation/operationalLoop";
+import { createCellLayer, economyDisplayMaximum } from "../rendering/cellLayer";
 
 const count = (value: number) => value.toLocaleString();
 const money = (value: number) => value.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -26,6 +27,19 @@ type CellMarketActions = {
   clearCellCaptureDraft: () => string;
   enforceStorageCapacity: (satelliteId: string, timeSeconds: number) => number;
   notifySchedulingInputsChanged: () => void;
+  getCellOperationalVisualization: () => CellOperationalVisualization;
+  getSatelliteEarthFixedKm: () => { x: number; y: number; z: number } | null;
+};
+
+type CellVisualizationLayer = CellLayer | "maximumPriority" | "availablePriority" | "availableValue" | "scheduled" | "imaging";
+
+const VISUALIZATION_LAYERS: Record<CellVisualizationLayer, { label: string; description: string; palette: string }> = {
+  ...Object.fromEntries(Object.entries(CELL_LAYERS).map(([key, layer]) => [key, { ...layer, palette: "features" }])) as Record<CellLayer, { label: string; description: string; palette: string }>,
+  maximumPriority: { label: "Maximum priority", description: "Fresh-cell scheduling priority before value availability recovery." , palette: "priority-max" },
+  availablePriority: { label: "Current priority", description: "Priority available now after each cell’s value-availability recovery." , palette: "priority-now" },
+  availableValue: { label: "Current dollar value", description: "Potential payout available now; capture creates imagery, and downlink realizes revenue." , palette: "value" },
+  scheduled: { label: "Scheduled cells", description: "Cells in the selected spacecraft’s active onboard plan or pending ground plan." , palette: "scheduled" },
+  imaging: { label: "Satellite imaging a cell", description: "The active capture target and line of sight appear while a capture command is running." , palette: "imaging" },
 };
 
 export async function setupCellMarket(
@@ -68,9 +82,8 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       <div><span>PARTIAL DOWNLINKS</span><strong id="cell-partial-transfers">0</strong><small id="cell-transferred-bytes">0 MiB transferred</small></div>
       <div><span>VALUE LOST TO DELETION</span><strong id="cell-lost-imagery-value">$0</strong><small id="cell-deleted-imagery-count">0 images deleted</small></div>
     </div>
-    <section class="cell-market-rates" aria-label="Prototype market rates"><div class="cell-market-rates-heading"><div><p class="eyebrow">PROTOTYPE MARKET — SAMPLE RATES</p><h3>Category market readout</h3></div><p>Prices and cadences are sample market data. Priority rates calculate scheduling scores; automatic scheduling is not active yet. Candidate categories and overlap rules are still under review.</p></div><div class="table-scroll"><table class="operations-table cell-rates-table"><thead><tr><th scope="col">Category</th><th scope="col">Market price</th><th scope="col">Refresh cadence</th><th scope="col">Priority points per unit</th></tr></thead><tbody id="cell-rate-body"></tbody></table></div></section>
+    <section class="cell-market-rates" aria-label="Prototype market rates"><div class="cell-market-rates-heading"><div><p class="eyebrow">PROTOTYPE MARKET — SAMPLE RATES</p><h3>Category market readout</h3></div><p>Prices and cadences are sample market data. Priority rates feed scheduling scores; candidate categories and overlap rules remain under review.</p></div><div class="table-scroll"><table class="operations-table cell-rates-table"><thead><tr><th scope="col">Category</th><th scope="col">Market price</th><th scope="col">Refresh cadence</th><th scope="col">Priority points per unit</th></tr></thead><tbody id="cell-rate-body"></tbody></table></div></section>
     <div class="cell-controls">
-      <label>Map layer<select id="cell-layer"></select></label>
       <label class="cell-search-label">Find a cell<input id="cell-search" type="search" placeholder="City, port, cell ID, or latitude, longitude" autocomplete="off" /></label>
       <label>Show<select id="cell-filter"><option value="coverage">All eligible cells</option><option value="cityCount">With cities & towns</option><option value="portCount">With ports</option><option value="urban">With urban footprint</option><option value="border">Land borders</option><option value="coastal">Coastal cells</option><option value="cropland">With cropland</option><option value="pasture">With pasture</option><option value="powerPlants">With power plants</option><option value="oilPipelines">With oil pipelines</option><option value="militarySites">With military installations</option><option value="dataCenters">With data centers</option><option value="researchSites">With NOAA research sites</option><option value="monuments">With World Heritage sites</option></select></label>
       <label>Sort by<select id="cell-sort"><option value="cityPopulation">City population ↓</option><option value="urban">Urban footprint ↓</option><option value="cityCount">City count ↓</option><option value="portCount">Port count ↓</option><option value="cropland">Cropland area ↓</option><option value="pasture">Pasture area ↓</option><option value="powerPlants">Power plant count ↓</option><option value="powerCapacity">Power capacity ↓</option><option value="oilPipelines">Oil pipeline count ↓</option><option value="militarySites">Military installations ↓</option><option value="dataCenters">Data centers ↓</option><option value="researchSites">NOAA research sites ↓</option><option value="monuments">World Heritage sites ↓</option><option value="coverage">Cell ID ↑</option></select></label>
@@ -117,24 +130,33 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     control.append(input); row.append(name, marketPrice, cadence, control); return row;
   });
   element("cell-rate-body").replaceChildren(...rateRows);
-  const selectLayer = element<HTMLSelectElement>("cell-layer");
-  for (const [key, layer] of Object.entries(CELL_LAYERS)) selectLayer.add(new Option(layer.label, key));
   const mapKey = document.createElement("aside");
   mapKey.className = "cell-map-key";
   mapKey.setAttribute("aria-label", "Cell map legend");
-  mapKey.innerHTML = '<div><span class="eyebrow">¼° CELL GRID</span><button type="button" class="cell-overview">World view ↗</button></div><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><p>Zoom for boundaries · Click to inspect</p>';
+  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span><button type="button" class="cell-overview">World view ↗</button></div><label class="cell-map-select-label">Land use categories<select id="cell-land-layer" aria-label="Land use categories"></select></label><label class="cell-map-select-label">Everything else<select id="cell-other-layer" aria-label="Everything else"></select></label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><p>Zoom for boundaries · Click to inspect</p>';
   document.querySelector(".globe-stage")!.append(mapKey);
+  const landLayerSelect = mapKey.querySelector<HTMLSelectElement>("#cell-land-layer")!;
+  const otherLayerSelect = mapKey.querySelector<HTMLSelectElement>("#cell-other-layer")!;
+  const landUseKeys = new Set<CellVisualizationLayer>(["urban", "cropland", "pasture"]);
+  landLayerSelect.add(new Option("Choose a category", ""));
+  otherLayerSelect.add(new Option("Choose another layer", ""));
+  for (const [key, layer] of Object.entries(VISUALIZATION_LAYERS) as [CellVisualizationLayer, typeof VISUALIZATION_LAYERS[CellVisualizationLayer]][]) {
+    (landUseKeys.has(key) ? landLayerSelect : otherLayerSelect).add(new Option(layer.label, key));
+  }
+  otherLayerSelect.value = "coverage";
+  let selectedLayer: CellVisualizationLayer = "coverage";
   let selected = -1;
   let visible = true;
   let page = 0;
   let filtered = new Uint32Array();
   let visiblePayouts: { index: number; maximum: HTMLElement; available: HTMLElement }[] = [];
   let lastRefreshedAt = Number.NaN;
+  let lastMetricRefreshAt = Number.NEGATIVE_INFINITY;
   const ranks = new Map<string, Uint32Array>();
   const map = await createCellLayer(viewer, grid, (index, route) => {
     selectCell(index, false, route);
     document.querySelector<HTMLButtonElement>("#tab-orders")!.click();
-  });
+  }, () => market, nowSeconds);
   mapKey.querySelector("button")!.addEventListener("click", () => map.overview());
   toggle.disabled = false;
   toggle.setAttribute("aria-pressed", "true");
@@ -146,15 +168,33 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   }
 
   function setLayer() {
-    const layer = selectLayer.value as CellLayer;
+    const layer = selectedLayer;
     map.setMetric(layer);
     mapKey.dataset.layer = layer;
-    mapKey.querySelector(".cell-map-layer-name")!.textContent = CELL_LAYERS[layer].label;
+    mapKey.querySelector(".cell-map-layer-name")!.textContent = VISUALIZATION_LAYERS[layer].label;
+    (mapKey.querySelector(".cell-map-ramp") as HTMLElement).dataset.palette = VISUALIZATION_LAYERS[layer].palette;
     const binary = ["urban", "border", "coastal"].includes(layer);
-    mapKey.querySelector(".cell-map-scale")!.textContent = layer === "coverage" ? "Mapped land & coastal cells" : binary ? "No mapped feature → Mapped feature" : `0 → ${count(grid.maximum(layer))} / cell · log scale`;
-    element("cell-layer-note").textContent = CELL_LAYERS[layer].description + (layer === "coverage" ? "" : " Distant map pixels show the strongest cell within them.");
+    const scale = layer === "coverage" ? "Mapped land & coastal cells"
+      : layer === "scheduled" ? "Scheduled: orange · Active imaging: yellow"
+        : layer === "imaging" ? "Active target + satellite line of sight"
+          : layer === "availableValue" ? `0 → ${money(economyDisplayMaximum(layer, market))} scale reference / cell · log scale`
+            : ["maximumPriority", "availablePriority"].includes(layer) ? `0 → ${points(economyDisplayMaximum(layer, market))} priority-point scale reference / cell · log scale`
+            : binary ? "No mapped feature → Mapped feature" : `0 → ${count(grid.maximum(layer as CellLayer))} / cell · log scale`;
+    mapKey.querySelector(".cell-map-scale")!.textContent = scale;
+    element("cell-layer-note").textContent = VISUALIZATION_LAYERS[layer].description + (["coverage", "scheduled", "imaging"].includes(layer) ? "" : " Distant map pixels show the strongest cell within them.");
   }
-  selectLayer.addEventListener("change", () => { setLayer(); setVisible(true); });
+  landLayerSelect.addEventListener("change", () => {
+    if (!landLayerSelect.value) return;
+    selectedLayer = landLayerSelect.value as CellVisualizationLayer;
+    otherLayerSelect.value = "";
+    setLayer(); setVisible(true);
+  });
+  otherLayerSelect.addEventListener("change", () => {
+    if (!otherLayerSelect.value) return;
+    selectedLayer = otherLayerSelect.value as CellVisualizationLayer;
+    landLayerSelect.value = "";
+    setLayer(); setVisible(true);
+  });
   setLayer();
 
   function applyFilters() {
@@ -239,6 +279,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     const entries: [string, string][] = [
       ["Maximum payout", money(snapshot.maximumPayoutUsd)],
       ["Available payout", money(snapshot.availablePayoutUsd)],
+      ["Maximum priority", `${points(snapshot.maximumPriorityPoints)} points`],
       ["Available priority", `${points(snapshot.availablePriorityPoints)} points`],
       ["Last collection", snapshot.lastCollectedAtSeconds === null ? "Never collected" : `${amount(snapshot.lastCollectedAtSeconds / 86_400)} simulation days`],
     ];
@@ -276,6 +317,12 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     const now = nowSeconds();
     if (!force && now === lastRefreshedAt) return;
     lastRefreshedAt = now;
+    map.setOperationalOverlay(actions.getCellOperationalVisualization(), actions.getSatelliteEarthFixedKm());
+    if (["maximumPriority", "availablePriority", "availableValue"].includes(selectedLayer)
+      && (force || now - lastMetricRefreshAt >= 3_600)) {
+      lastMetricRefreshAt = now;
+      map.refreshMetric();
+    }
     refreshSelectedImages?.();
     element("cell-preview-cash").textContent = money(market.companyCashUsd);
     const imagery = market.getImagerySummary();

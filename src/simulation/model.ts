@@ -46,6 +46,8 @@ export type SatelliteDefinition = {
   name: string;
   orbit: OrbitDefinition;
   slew: SlewCapability;
+  /** Selected installed hardware configuration at launch; absent on legacy definitions. */
+  equipmentOptionId?: string;
 };
 
 export type FleetState = {

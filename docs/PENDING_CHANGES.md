@@ -312,15 +312,15 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 ### FLEET-02B — Purchase slew upgrades for future launches
 
-**Status:** Needs design — Layer 3 growth work. The [Layer 3 plan](LAYER_3_PLAN.md#fleet-02b-design-brief) proposes one company-wide upgrade and identifies the pricing/capability decisions and acceptance checks.
+**Status:** Implemented prototype 2026-10-16 — TypeScript and production build pass. Focused behavioral verification remains pending. The [Layer 3 plan](LAYER_3_PLAN.md#fleet-02b-design-brief) records the approved Enhanced slew option for new spacecraft: +$5M per equipped spacecraft, 2 degrees/second, and 2 seconds settling time. Values are configurable; further hardware-detail design is deferred in favor of reaching playtesting.
 
-**Agreed:** A paid slew upgrade applies to spacecraft launched afterward; it does not retroactively alter existing spacecraft.
+**Agreed:** Installed hardware and its designed capabilities are fixed after launch. Upgrades equip new spacecraft and never retrofit an in-orbit asset. The first planned slice covers one slew improvement; a wider selection of new-spacecraft upgrades is later work.
 
-**Work:** Add upgrade purchase choices to company configuration and apply the selected capability to newly launched spacecraft.
+**Implemented:** Added a domain-owned package catalog and purchase command; the launch form offers Standard and Enhanced slew, quotes the full price and remaining cash, and records base, upgrade, and launch line items in one capital entry. Each launched spacecraft stores its selected equipment identity and slew capability; spacecraft details show the installed option. Existing spacecraft retain their launched specification. Values live in `src/simulation/spacecraftCatalog.ts` for tuning.
 
-**Done when:** Purchases validate affordability, new spacecraft inherit the purchased capability, and existing spacecraft specifications remain stable.
+**Done when:** Procurement validates affordability, the selected new spacecraft receives the purchased capability, and all existing spacecraft specifications remain unchanged.
 
-**Open choices:** One-time company upgrade versus per-launch payment, price, improved slew rate, and settling time. BIZ-02's standard package and immediate launch are agreed; upgrades follow that slice.
+**Later tuning:** The surcharge, slew rate, and settling time are approved starter inputs, with standard subsystem settings/daily cost retained. Final balance can be adjusted after playtesting. BIZ-02's behavioral review remains pending and is carried into the implementation handoff; broader upgrade variety is deferred.
 
 **Dependencies:** FLEET-02A, BIZ-01 financial accounting, and BIZ-02 procurement.
 
@@ -411,15 +411,15 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 **Status:** Implemented prototype — signed -$50,000 opening cash, affordability-checked procurement accounting, capital reporting, editable pre-launch orbit selection, immediate launch, live fleet/globe updates, shared antenna allocation, and reset are implemented. The production build passes; behavioral verification remains pending. See the [BIZ-02 guide](BIZ_02_GROWTH_DESIGN.md).
 **Agreed:** Money constrains hardware, launches, operations, and business growth. Finance & Growth is a management tab.
 
-**Implemented work:** Finance & Growth shows company cash, income, costs, affordability, and the standard spacecraft purchase from explicit company/fleet state. Later growth work can connect spending to future-launch slew upgrades, launch cadence, and ground capacity.
+**Implemented work:** Finance & Growth shows company cash, income, costs, affordability, and Standard/Enhanced slew spacecraft purchases from explicit company/fleet state. Each spacecraft snapshots its purchased slew capability; see FLEET-02B.
 
 **Done when:** Every displayed financial figure is derived from company state and ledger entries; purchases validate affordability atomically and change fleet capacity; income reconciles from downlink settlement and spending reconciles to purchase/launch entries.
 
 **Agreed integration behavior:** The $100 spacecraft-day cost is a general mission operations charge; new spacecraft join at the first day boundary after launch with no proration. The player chooses orbit altitude, inclination, ascending node, and phase before launch. Each station antenna serves one spacecraft at a time; earliest pass start holds it until pass end, then it hands off to the earliest waiting spacecraft still in view, with spacecraft-ID ties. These are recorded in the [BIZ-02 guide](BIZ_02_GROWTH_DESIGN.md) and [Gameplay](GAMEPLAY.md).
 
-**Agreed first slice:** Offer one standard spacecraft package for immediate launch after player-selected altitude, inclination, ascending node, and phase. Defer paid slew upgrades to FLEET-02B. Use -$50,000 starting cash, $50,000,000 spacecraft cost, and $0 launch cost as configurable prototype values. Require sufficient cash for a purchase; the initial fleet must earn revenue to reach the purchase price. Show costs and remaining cash, then add a stable-ID spacecraft. Defer production queues, financing, ground-station construction, and unmodeled hardware.
+**Original BIZ-02 first slice:** Offer the standard spacecraft package for immediate launch after player-selected altitude, inclination, ascending node, and phase. FLEET-02B now extends procurement with the approved slew choice for new spacecraft. Use -$50,000 starting cash, $50,000,000 base spacecraft cost, and $0 launch cost as configurable prototype values. Require sufficient cash for a purchase; the initial fleet must earn revenue to reach the purchase price. Show costs and remaining cash, then add a stable-ID spacecraft. Defer production queues, financing, ground-station construction, and unmodeled hardware.
 
-**Dependencies:** BIZ-01 company ledger and FLEET-02A per-spacecraft capability. FLEET-02B follows procurement; neither additional orbit classes nor FLEET-03 maneuvers are prerequisites. See the [reviewed Layer 3 sequence](LAYER_3_PLAN.md).
+**Dependencies:** BIZ-01 company ledger and FLEET-02A per-spacecraft capability. FLEET-02B extends the implemented procurement flow; neither additional orbit classes nor FLEET-03 maneuvers are prerequisites. See the [reviewed Layer 3 sequence](LAYER_3_PLAN.md).
 
 ## Layer 4 — Tuning and refinement
 
@@ -471,14 +471,18 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 ## Suggested starting order
 
+**Playtesting priority (2026-10-16):** The user wants to begin trying the game soon and accepts configurable prototype values for additional spacecraft. The existing one-spacecraft capture/downlink/revenue loop is available now; see the [playtest steps](../README.md#try-the-single-spacecraft-revenue-loop). FLEET-02B and OPS-02 are feature work, not prerequisites for that first session. Use play observations to identify immediate usability and pacing fixes.
+
 OPS-04 and the approved CELL-04B automatic-continuation slice completed on 2026-10-14. The approved CELL-04A, OPS-03, OPS-01A, and CELL-02A prototype policies are recorded in [Gameplay](GAMEPLAY.md#agreed-operational-closure-policies-approved-2026-10-14). A request to take the next step selects the first incomplete item below.
 
-| Order | Tasks | Next deliverable |
-| --- | --- | --- |
-| 1 | **FLEET-02B**, **OPS-02 — Needs design** | Follow the [Layer 3 plan](LAYER_3_PLAN.md): one future-launch upgrade, then one station-outage response scenario, with explicit design decisions before implementation. |
-| Done | **BIZ-02 — Implemented prototype** | Pre-launch orbit choice, immediate spacecraft purchase, capital accounting, live fleet updates, and exclusive antenna handoff are in place; production build passes. Behavioral review remains pending. |
-| 2 | **TUNE-01**, **UI-04 — Needs design** | Layer 4: evaluate operating tradeoffs and revenue balance, then refine the management experience using observed issues. |
-| Later | **CLOUD-01 — Partial; data acquisition deferred** | When back on the network, download and validate the public climatology asset and replace the temporary flat baseline. |
+| Order | Tasks | Next deliverable | Model suggestion |
+| --- | --- | --- | --- |
+| 1 | **FLEET-02B — Implemented prototype**, then **BIZ-02 behavioral review** and **OPS-02 — Needs design** | Review the [Enhanced slew implementation](LAYER_3_PLAN.md#fleet-02b-design-brief) against its acceptance handoff and finish BIZ-02 purchase, reset, and antenna checks; then design one station-outage response scenario. | **Review and implementation:** gpt-6.1-sol, medium or high reasoning should be sufficient for these bounded checks. **OPS-02 design:** gpt-6-astra, high or xhigh reasoning, if the outage choices span finance, contacts, and simulation timing. |
+| Done | **BIZ-02 — Implemented prototype** | Pre-launch orbit choice, immediate spacecraft purchase, capital accounting, live fleet updates, and exclusive antenna handoff are in place; production build passes. Behavioral review remains pending. | gpt-6.1-sol, medium reasoning should be sufficient for the bounded behavior review. |
+| 2 | **TUNE-01**, **UI-04 — Needs design** | Layer 4: evaluate operating tradeoffs and revenue balance, then refine the management experience using observed issues. | gpt-6-astra, high reasoning, if balancing decisions span several interacting systems; otherwise gpt-6.1-sol, medium/high. |
+| Later | **CLOUD-01 — Partial; data acquisition deferred** | When back on the network, download and validate the public climatology asset and replace the temporary flat baseline. | gpt-6.1-sol, medium reasoning should be sufficient for the data preparation; use a stronger model only if source interpretation or integration raises design questions. |
+
+Model suggestions are optional guidance, not a requirement to switch models. Use the strongest reasoning model for open, cross-system design decisions; a workhorse model is enough for bounded implementation and verification.
 
 **Implemented foundation, not a pending queue:** SIM-01, OPS-03's static-contact/authored-TEL slice, CELL-03A/B, CELL-02A, CELL-04B automatic continuation, CELL-04C bounded search, OPS-01A integration, and OPS-01B simplified power are present. The prototype supports successive contact cycles with one spacecraft, clear weather, capacity-driven deletion, partial transfers, reserve-aware downlink, and full-delivery settlement. OPS-04, CELL-04B/C, and OPS-01B have verification coverage; market/access/power balance settings are not final balance decisions.
 
