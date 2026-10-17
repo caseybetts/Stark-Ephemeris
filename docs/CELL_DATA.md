@@ -28,8 +28,9 @@ The candidate mapping below remains **Proposed**, including its category selecti
 | Data centers | Source record or campus-polygon presence | record/polygon | Mixed source representation; count is not a uniform site measure |
 | Research sites | NOAA station records | station record | Narrow NOAA observation-station proxy |
 | World Heritage | Mapped site records | site record | Point locations; property area is not modeled |
+| Coastal cells | Binary coastline intersection | coastal cell | 1 for a land-eligible cell intersecting the coastline; no coastal area or land-fraction weighting |
 
-The implementation intentionally excludes mapped city population, coastline/border flags, and unsourced attributes from this candidate market mapping. The player-facing readout labels the rates as samples and shows their calculated contributions. Review remains open on whether each is a meaningful market category, whether the two power measures should both contribute, and how overlapping features/categories should affect value.
+The implementation intentionally excludes mapped city population, land-border flags, and unsourced attributes from this candidate market mapping. Coastal cells were added as a proposed exposure for the map's Land Categories selection; their sample rate is provisional. The player-facing readout labels rates as samples and shows calculated contributions. Review remains open on whether each is a meaningful market category, whether the two power measures should both contribute, and how overlapping features/categories should affect value.
 
 ## Source layers
 

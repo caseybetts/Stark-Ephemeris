@@ -14,7 +14,19 @@
           <div id="globe" class="globe"></div>
           <div class="top-bar">
             <a class="brand" href="#" aria-label="Stark Ephemeris home">
-              <span class="brand-mark" aria-hidden="true">S</span>
+              <svg class="brand-emblem" viewBox="0 0 48 48" aria-hidden="true">
+                <defs>
+                  <linearGradient id="brand-core" x1="0" x2="1" y1="0" y2="1">
+                    <stop offset="0" stop-color="#c6fff0" />
+                    <stop offset="1" stop-color="#49a999" />
+                  </linearGradient>
+                </defs>
+                <ellipse cx="24" cy="24" rx="19" ry="8.5" transform="rotate(-34 24 24)" fill="none" stroke="#73d7c1" stroke-opacity=".8" stroke-width="1.2" />
+                <ellipse cx="24" cy="24" rx="19" ry="8.5" transform="rotate(34 24 24)" fill="none" stroke="#ffbd70" stroke-opacity=".55" stroke-width=".9" />
+                <circle cx="24" cy="24" r="5.3" fill="url(#brand-core)" />
+                <circle cx="39.8" cy="11.4" r="2.4" fill="#f4f870" />
+                <circle cx="9.2" cy="32.5" r="1.6" fill="#a0f4df" />
+              </svg>
               <span>
                 <strong>STARK EPHEMERIS</strong>
                 <small>EARTH OBSERVATION SYSTEMS</small>
@@ -25,11 +37,15 @@
               <span id="run-state">SIMULATION RUNNING</span>
               <span class="clock-divider"></span>
               <time id="sim-clock">T+00:00:00</time>
+              <label class="top-time-factor" for="time-speed"><span>RATE</span>
+                <select id="time-speed" aria-label="Simulation speed">
+                  <option value="1">1×</option>
+                  <option value="60" selected>60×</option>
+                  <option value="300">300×</option>
+                </select>
+              </label>
             </div>
             <div class="top-actions">
-              <button class="icon-button" id="cell-grid-toggle" type="button" aria-pressed="false" disabled>
-                <span aria-hidden="true">▦</span><span>CELL GRID</span>
-              </button>
               <button class="icon-button" id="track-toggle" type="button" aria-pressed="true">
                 <span class="track-icon" aria-hidden="true">⌁</span>
                 <span>ORBIT TRACK</span>
@@ -119,13 +135,6 @@
                 <p class="eyebrow">WORLD STATE</p>
                 <h2 id="world-state-title">Current conditions</h2>
               </div>
-              <label class="time-factor" for="time-speed">TIME
-                <select id="time-speed" aria-label="Simulation speed">
-                  <option value="1">1×</option>
-                  <option value="60" selected>60×</option>
-                  <option value="300">300×</option>
-                </select>
-              </label>
             </div>
             <div class="condition-grid">
               <article class="condition-card">
@@ -217,16 +226,17 @@
                 <div><span>POWER FLOW</span><strong id="spacecraft-detail-power-flow">—</strong></div>
                 <div><span>POWER REASON</span><strong id="spacecraft-detail-power-reason">—</strong></div>
               </div>
+              <details class="spacecraft-tel-panel">
+                <summary>Current onboard TEL</summary>
+                <p class="spacecraft-tel-status" id="spacecraft-tel-status" aria-live="polite">No TEL has been uploaded to this spacecraft yet.</p>
+                <ol class="spacecraft-tel-commands" id="spacecraft-tel-commands" aria-label="Onboard TEL commands"></ol>
+              </details>
               <div class="spacecraft-plan-controls" aria-labelledby="spacecraft-plan-title">
                 <div>
-                  <p class="eyebrow" id="spacecraft-plan-title">GROUND PLAN FOR SELECTED SPACECRAFT</p>
-                  <p class="spacecraft-plan-description">Prepare commands for this spacecraft to upload at its next ground-station contact.</p>
+                  <p class="eyebrow" id="spacecraft-plan-title">AUTOMATIC FLIGHT PLAN</p>
+                  <p class="spacecraft-plan-description">The scheduler prepares and refreshes this spacecraft's plan automatically. Updates upload at an available ground-station contact.</p>
                 </div>
-                <div class="spacecraft-plan-actions">
-                  <button id="prepare-tel" class="preview-button" type="button">PREPARE AUTHORED TEL</button>
-                  <button id="generate-greedy-tel" class="preview-button preview-button-primary" type="button">GENERATE GREEDY TEL THROUGH NEXT CONTACT</button>
-                </div>
-                <p class="spacecraft-plan-status" id="spacecraft-plan-status" role="status" aria-live="polite">Select a spacecraft to prepare or generate its ground plan.</p>
+                <p class="spacecraft-plan-status" id="spacecraft-plan-status" role="status" aria-live="polite">Automatic planning starts when the cell market is ready.</p>
               </div>
             </section>
           </section>

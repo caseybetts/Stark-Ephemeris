@@ -1,6 +1,6 @@
 # Layer 3 implementation plan and readiness review
 
-Reviewed 2026-10-15 after BIZ-02 launch integration; FLEET-02B prototype designed and implemented 2026-10-16. The purchase flow, antenna allocation, and configurable slew option are implemented. The production build passes; focused behavior review remains. OPS-02 is the following bounded design task. The user's near-term priority is beginning playtesting; additional hardware detail can wait, and neither task is a prerequisite for trying the existing one-spacecraft revenue loop.
+Reviewed 2026-10-15 after BIZ-02 launch integration; FLEET-02B prototype designed and implemented 2026-10-16. The purchase flow, antenna allocation, and configurable slew option are implemented. The production build previously passed; focused behavior review remains. OPS-02's bounded design was drafted on 2026-10-17 and awaits review before implementation. The user's near-term priority is beginning playtesting; additional hardware detail can wait, and neither task is a prerequisite for trying the existing one-spacecraft revenue loop.
 
 ## Sequence
 
@@ -9,7 +9,7 @@ Reviewed 2026-10-15 after BIZ-02 launch integration; FLEET-02B prototype designe
 | BIZ-01 | Company accounting, downlink income, recurring costs | Implemented; retain its regression tests during growth work. |
 | BIZ-02 | Signed opening cash, capital spending, pre-launch orbit selection, immediate purchase, live fleet registration, reset, antenna sharing | Implemented prototype; production build passes. Behavioral verification remains pending. Decisions are recorded in the [growth guide](BIZ_02_GROWTH_DESIGN.md). |
 | FLEET-02B | Paid slew capability for new spacecraft | Implemented prototype; production build passes. Focused behavioral verification remains pending. |
-| OPS-02 | One understandable outage and response loop | Design a bounded scenario before adding randomness, repair costs, or degradation. |
+| OPS-02 | One understandable outage and response loop | [Design drafted](OPS_02_STATION_OUTAGE_DESIGN.md); proposed repair terms and contact recovery rules await review. Not implemented. |
 | Layer 4 handoff | Balance and usability observations | Record growth pacing and fleet performance evidence; preserve approved economic values until tuning is requested. |
 
 FLEET-03 orbital maneuvers remain a separately selectable task. Neither it, cloud-data acquisition, save/load, nor new infrastructure is required to start this Layer 3 slice. Deferred weather acquisition remains deferred.
@@ -70,9 +70,9 @@ After launch, show the installed slew option and numeric capability in spacecraf
 
 **Agreed:** Anomalies need understandable symptoms and consequential responses. Ground outages and missed contacts are within Layer 3; static station configuration alone does not implement them.
 
-**Recommended first design:** Start with a temporary outage at one ground station. Use an authored, deterministic event in development before adding a seeded random occurrence rule. Show the affected station, start time, operational impact, and recovery status in Summary and Ground Stations. Propose a choice between waiting for scheduled recovery and paying to expedite repair; both timing and price need a design decision. Do not silently use a display-only acknowledgement as the required consequential response.
+**Design drafted 2026-10-17:** The [station outage design](OPS_02_STATION_OUTAGE_DESIGN.md) now owns the detailed proposal, implementation handoff, and acceptance journeys. Start with one authored outage, announced at onset, and a default free recovery after 30 simulation minutes. Propose a $100 expedited repair restoring service two simulation minutes after acceptance, requiring sufficient cash. These are proposed configurable values, not approved economy changes.
 
-**Decisions required:** Whether this station-outage scenario is the first anomaly, when the player learns about it, outage/repair durations and price, whether repair may drive cash negative, and what restoring availability during an existing geometric pass means for TEL upload. Do not silently treat recovery as a new upload opportunity under the existing contact-episode rule.
+**Review required before implementation:** Accept or revise the scenario, repair terms, and explicit upload-latch extension in the design. The proposal permits a first upload on restoration if no usable antenna link has occurred in that geometric episode; it prevents a second upload after an earlier opportunity. It preserves the existing no-retry behavior after a power-depleted upload opportunity. These dynamic-outage rules are not yet gameplay agreements.
 
 **Implementation boundary:** One simulation-owned availability timeline must feed contact eligibility, execution, planning knowledge, and UI. Do not reveal unannounced future outages to the planner. Split time advancement at outage/recovery boundaries; stop transfer during an outage while preserving partial bytes and onboard TEL. Existing TEL continues until exhausted; show the outage as the reason for unavailable contact rather than changing capture rules. Multiple spacecraft using the station see the same outage. Replanning follows the approved refresh/locked-capture policies.
 

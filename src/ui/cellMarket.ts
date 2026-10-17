@@ -1,11 +1,11 @@
 import type { Viewer } from "cesium";
 import { loadCellGrid } from "../data/cells";
-import { CELL_LAYERS, UNSOURCED_ATTRIBUTES, cellBounds, cellLabel } from "../simulation/cells";
+import { UNSOURCED_ATTRIBUTES, cellBounds, cellLabel } from "../simulation/cells";
 import type { CellGrid, CellLayer } from "../simulation/cells";
 import type { CellMarketState } from "../simulation/cellMarketState";
 import type { GeographicLocation } from "../simulation/model";
 import type { CellOperationalVisualization } from "../simulation/operationalLoop";
-import { createCellLayer, economyDisplayMaximum } from "../rendering/cellLayer";
+import { categoryPriorityDisplayMaximum, createCellLayer } from "../rendering/cellLayer";
 
 const count = (value: number) => value.toLocaleString();
 const money = (value: number) => value.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -31,28 +31,17 @@ type CellMarketActions = {
   getSatelliteEarthFixedKm: () => { x: number; y: number; z: number } | null;
 };
 
-type CellVisualizationLayer = CellLayer | "maximumPriority" | "availablePriority" | "availableValue" | "scheduled" | "imaging";
-
-const VISUALIZATION_LAYERS: Record<CellVisualizationLayer, { label: string; description: string; palette: string }> = {
-  ...Object.fromEntries(Object.entries(CELL_LAYERS).map(([key, layer]) => [key, { ...layer, palette: "features" }])) as Record<CellLayer, { label: string; description: string; palette: string }>,
-  maximumPriority: { label: "Maximum priority", description: "Fresh-cell scheduling priority before value availability recovery." , palette: "priority-max" },
-  availablePriority: { label: "Current priority", description: "Priority available now after each cell’s value-availability recovery." , palette: "priority-now" },
-  availableValue: { label: "Current dollar value", description: "Potential payout available now; capture creates imagery, and downlink realizes revenue." , palette: "value" },
-  scheduled: { label: "Scheduled cells", description: "Cells in the selected spacecraft’s active onboard plan or pending ground plan." , palette: "scheduled" },
-  imaging: { label: "Satellite imaging a cell", description: "The active capture target and line of sight appear while a capture command is running." , palette: "imaging" },
-};
-
 export async function setupCellMarket(
   viewer: Viewer,
   actions: CellMarketActions,
-  onMounted: (refresh: () => void) => void,
+  onMounted: (refresh: () => void, focusCell: (index: number) => void) => void,
 ): Promise<void> {
   const panel = document.querySelector<HTMLElement>("#panel-orders")!;
-  const toggle = document.querySelector<HTMLButtonElement>("#cell-grid-toggle")!;
   panel.innerHTML = '<p class="cell-loading" role="status">Loading geographic cell data…</p>';
   try {
     const grid = await loadCellGrid();
-    onMounted(await mount(viewer, grid, actions, actions.getOrCreateMarket(grid), panel, toggle));
+    const mounted = await mount(viewer, grid, actions, actions.getOrCreateMarket(grid), panel);
+    onMounted(mounted.refresh, mounted.focusCell);
   } catch (error) {
     console.error("Cell market initialization failed", error);
     panel.replaceChildren();
@@ -67,7 +56,7 @@ export async function setupCellMarket(
   }
 }
 
-async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions, market: CellMarketState, panel: HTMLElement, toggle: HTMLButtonElement): Promise<() => void> {
+async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions, market: CellMarketState, panel: HTMLElement): Promise<{ refresh: () => void; focusCell: (index: number) => void }> {
   const { nowSeconds } = actions;
   panel.innerHTML = `
     <div class="cell-market-heading"><div><p class="eyebrow">GEOGRAPHIC MARKET</p><h2>Coverage & cell values</h2></div><span class="cell-tag">¼° × ¼° CELLS</span></div>
@@ -133,69 +122,55 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   const mapKey = document.createElement("aside");
   mapKey.className = "cell-map-key";
   mapKey.setAttribute("aria-label", "Cell map legend");
-  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span><button type="button" class="cell-overview">World view ↗</button></div><label class="cell-map-select-label">Land use categories<select id="cell-land-layer" aria-label="Land use categories"></select></label><label class="cell-map-select-label">Everything else<select id="cell-other-layer" aria-label="Everything else"></select></label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><p>Zoom for boundaries · Click to inspect</p>';
+  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span><button type="button" class="cell-overview">World view ↗</button></div><label class="cell-map-select-label">Land Categories<select id="cell-land-layer" aria-label="Land Categories"></select></label><label class="cell-map-select-label">Planning<select id="cell-planning-layer" aria-label="Planning"></select></label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><div class="cell-planning-key"><span><i class="planning-outline"></i>Scheduled cell</span><span><i class="planning-imaging"></i>Imaging target / line</span></div><p>Zoom for boundaries · Click to inspect</p>';
   document.querySelector(".globe-stage")!.append(mapKey);
   const landLayerSelect = mapKey.querySelector<HTMLSelectElement>("#cell-land-layer")!;
-  const otherLayerSelect = mapKey.querySelector<HTMLSelectElement>("#cell-other-layer")!;
-  const landUseKeys = new Set<CellVisualizationLayer>(["urban", "cropland", "pasture"]);
-  landLayerSelect.add(new Option("Choose a category", ""));
-  otherLayerSelect.add(new Option("Choose another layer", ""));
-  for (const [key, layer] of Object.entries(VISUALIZATION_LAYERS) as [CellVisualizationLayer, typeof VISUALIZATION_LAYERS[CellVisualizationLayer]][]) {
-    (landUseKeys.has(key) ? landLayerSelect : otherLayerSelect).add(new Option(layer.label, key));
-  }
-  otherLayerSelect.value = "coverage";
-  let selectedLayer: CellVisualizationLayer = "coverage";
+  const planningSelect = mapKey.querySelector<HTMLSelectElement>("#cell-planning-layer")!;
+  landLayerSelect.add(new Option("Choose category", ""));
+  for (const category of market.exposures.definitions) landLayerSelect.add(new Option(category.label, category.id));
+  landLayerSelect.value = market.exposures.definitions.some(category => category.id === "urban")
+    ? "urban" : market.exposures.definitions[0]?.id ?? "";
+  planningSelect.add(new Option("No planning outline", "none"));
+  planningSelect.add(new Option("Scheduled cells", "scheduled"));
+  planningSelect.add(new Option("Satellite imaging a cell", "imaging"));
+  planningSelect.value = "scheduled";
+  let selectedCategoryId = landLayerSelect.value || null;
+  let lastPlanningLayer: "none" | "scheduled" | "imaging" = "scheduled";
   let selected = -1;
-  let visible = true;
   let page = 0;
   let filtered = new Uint32Array();
   let visiblePayouts: { index: number; maximum: HTMLElement; available: HTMLElement }[] = [];
   let lastRefreshedAt = Number.NaN;
-  let lastMetricRefreshAt = Number.NEGATIVE_INFINITY;
+  let lastCategoryRefreshAt = Number.NEGATIVE_INFINITY;
   const ranks = new Map<string, Uint32Array>();
   const map = await createCellLayer(viewer, grid, (index, route) => {
     selectCell(index, false, route);
     document.querySelector<HTMLButtonElement>("#tab-orders")!.click();
   }, () => market, nowSeconds);
   mapKey.querySelector("button")!.addEventListener("click", () => map.overview());
-  toggle.disabled = false;
-  toggle.setAttribute("aria-pressed", "true");
-  toggle.addEventListener("click", () => setVisible(!visible));
-
-  function setVisible(show: boolean) {
-    visible = show; map.setVisible(show); mapKey.hidden = !show;
-    toggle.setAttribute("aria-pressed", String(show));
-  }
-
-  function setLayer() {
-    const layer = selectedLayer;
-    map.setMetric(layer);
-    mapKey.dataset.layer = layer;
-    mapKey.querySelector(".cell-map-layer-name")!.textContent = VISUALIZATION_LAYERS[layer].label;
-    (mapKey.querySelector(".cell-map-ramp") as HTMLElement).dataset.palette = VISUALIZATION_LAYERS[layer].palette;
-    const binary = ["urban", "border", "coastal"].includes(layer);
-    const scale = layer === "coverage" ? "Mapped land & coastal cells"
-      : layer === "scheduled" ? "Scheduled: orange · Active imaging: yellow"
-        : layer === "imaging" ? "Active target + satellite line of sight"
-          : layer === "availableValue" ? `0 → ${money(economyDisplayMaximum(layer, market))} scale reference / cell · log scale`
-            : ["maximumPriority", "availablePriority"].includes(layer) ? `0 → ${points(economyDisplayMaximum(layer, market))} priority-point scale reference / cell · log scale`
-            : binary ? "No mapped feature → Mapped feature" : `0 → ${count(grid.maximum(layer as CellLayer))} / cell · log scale`;
-    mapKey.querySelector(".cell-map-scale")!.textContent = scale;
-    element("cell-layer-note").textContent = VISUALIZATION_LAYERS[layer].description + (["coverage", "scheduled", "imaging"].includes(layer) ? "" : " Distant map pixels show the strongest cell within them.");
+  function setCategory() {
+    selectedCategoryId = landLayerSelect.value || null;
+    map.setCategory(selectedCategoryId);
+    const category = market.exposures.definitions.find(item => item.id === selectedCategoryId);
+    mapKey.querySelector(".cell-map-layer-name")!.textContent = category ? category.label + " · current priority" : "No category fill";
+    (mapKey.querySelector(".cell-map-ramp") as HTMLElement).dataset.palette = "priority-now";
+    const maximum = category ? categoryPriorityDisplayMaximum(category.id, market) : 0;
+    mapKey.querySelector(".cell-map-scale")!.textContent = category
+      ? points(maximum) + " priority points maximum · translucent fill"
+      : "Choose a category to show its priority contribution";
+    element("cell-layer-note").textContent = category
+      ? "Cell fill shows current " + category.label.toLowerCase() + " priority contribution: yellow (lower) to teal (higher)."
+      : "Cell fill shows the selected category’s current priority contribution.";
   }
   landLayerSelect.addEventListener("change", () => {
-    if (!landLayerSelect.value) return;
-    selectedLayer = landLayerSelect.value as CellVisualizationLayer;
-    otherLayerSelect.value = "";
-    setLayer(); setVisible(true);
+    setCategory();
   });
-  otherLayerSelect.addEventListener("change", () => {
-    if (!otherLayerSelect.value) return;
-    selectedLayer = otherLayerSelect.value as CellVisualizationLayer;
-    landLayerSelect.value = "";
-    setLayer(); setVisible(true);
+  planningSelect.addEventListener("change", () => {
+    lastPlanningLayer = planningSelect.value as typeof lastPlanningLayer;
+    map.setPlanningLayer(lastPlanningLayer);
   });
-  setLayer();
+  map.setPlanningLayer(lastPlanningLayer);
+  setCategory();
 
   function applyFilters() {
     const sort = element<HTMLSelectElement>("cell-sort").value as CellLayer;
@@ -313,15 +288,16 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
 
   let refreshSelectedImages: (() => void) | null = null;
   function refreshEconomy(force = false) {
-    if (panel.hidden && !force) return;
     const now = nowSeconds();
+    // The globe controls are available on every management tab, so keep its operational
+    // overlays current even while the Orders panel is hidden or simulation time is paused.
+    map.setOperationalOverlay(actions.getCellOperationalVisualization(), actions.getSatelliteEarthFixedKm());
+    if (panel.hidden && !force) return;
     if (!force && now === lastRefreshedAt) return;
     lastRefreshedAt = now;
-    map.setOperationalOverlay(actions.getCellOperationalVisualization(), actions.getSatelliteEarthFixedKm());
-    if (["maximumPriority", "availablePriority", "availableValue"].includes(selectedLayer)
-      && (force || now - lastMetricRefreshAt >= 3_600)) {
-      lastMetricRefreshAt = now;
-      map.refreshMetric();
+    if (selectedCategoryId && (force || now - lastCategoryRefreshAt >= 3_600)) {
+      lastCategoryRefreshAt = now;
+      map.refreshCategory();
     }
     refreshSelectedImages?.();
     element("cell-preview-cash").textContent = money(market.companyCashUsd);
@@ -343,7 +319,6 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
 
   function selectCell(index: number, fly: boolean, route?: { name: string; url?: string; latitudeDeg: number; longitudeDeg: number }) {
     selected = index;
-    if (fly) setVisible(true);
     map.select(index, fly);
     const content = element("cell-detail-content"); content.replaceChildren();
     const heading = document.createElement("h3");
@@ -359,7 +334,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     const location = document.createElement("p"); location.className = "cell-detail-coordinate";
     location.textContent = coordinate(cell.bounds.latitudeDeg, cell.bounds.longitudeDeg);
     const zoom = document.createElement("button"); zoom.type = "button"; zoom.className = "cell-button"; zoom.textContent = "Focus on globe ↗";
-    zoom.addEventListener("click", () => { setVisible(true); map.select(index, true); });
+    zoom.addEventListener("click", () => map.select(index, true));
     const economy = document.createElement("div"); economy.id = "cell-economy";
     const economyValues = document.createElement("div"); economyValues.id = "cell-economy-values";
     const preview = document.createElement("section"); preview.className = "cell-preview";
@@ -542,5 +517,8 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   excluded.textContent = `${grid.metadata.statistics.excludedPointFeatures.cities} city, ${grid.metadata.statistics.excludedPointFeatures.ports} port, ${grid.metadata.statistics.excludedPoints.researchSites} NOAA research-site, and ${grid.metadata.statistics.excludedPoints.monuments} World Heritage point records fall outside eligible land cells and are excluded.`;
   element("cell-limitations").append(excluded);
   applyFilters();
-  return () => refreshEconomy();
+  return {
+    refresh: () => refreshEconomy(),
+    focusCell: (index: number) => selectCell(index, true),
+  };
 }

@@ -14,6 +14,7 @@ export type CellCategoryExposureDefinition = {
  * market prices, player priority rates, and cadences remain scenario inputs.
  */
 export const PROPOSED_CELL_CATEGORIES: readonly CellCategoryExposureDefinition[] = [
+  { id: "coastal-cells", label: "Coastal cells", unit: "coastal-cell", sourceField: "flags.coastal", read: (grid, index) => grid.value(index, "coastal") },
   { id: "urban", label: "Urban footprint", unit: "km2", sourceField: "urbanAreaDeciKm2", read: (grid, index) => grid.urbanAreaDeciKm2[index] / 10 },
   { id: "cropland", label: "Cropland", unit: "km2", sourceField: "croplandHa", read: (grid, index) => grid.croplandHa[index] / 100 },
   { id: "pasture", label: "Pasture", unit: "km2", sourceField: "pastureHa", read: (grid, index) => grid.pastureHa[index] / 100 },

@@ -7,7 +7,7 @@ import { predictGroundContactWindows, type GroundContactWindow } from "./simulat
 import { GroundOperations } from "./simulation/groundOperations";
 import { createPrototypeCellMarket } from "./simulation/prototypeCellMarket";
 import { cellLookDirectionAt, evaluateCellCaptureOpportunity, nadirPointingAt, type CellCaptureScenario } from "./simulation/cellCapture";
-import { generateBoundedCellSchedule } from "./simulation/cellScheduler";
+import { cellLabel } from "./simulation/cells";
 import type { CellMarketState } from "./simulation/cellMarketState";
 import { OperationalLoop } from "./simulation/operationalLoop";
 import { CompanyFinance } from "./simulation/companyFinance";
@@ -47,8 +47,6 @@ const elements = {
   groundPlanStatus: document.querySelector<HTMLElement>("#ground-plan-status")!,
   telStatus: document.querySelector<HTMLElement>("#tel-status")!,
   telEvent: document.querySelector<HTMLElement>("#tel-event")!,
-  prepareTel: document.querySelector<HTMLButtonElement>("#prepare-tel")!,
-  generateGreedyTel: document.querySelector<HTMLButtonElement>("#generate-greedy-tel")!,
   spacecraftPlanStatus: document.querySelector<HTMLElement>("#spacecraft-plan-status")!,
   stationTableCount: document.querySelector<HTMLElement>("#station-table-count")!,
   stationTableBody: document.querySelector<HTMLTableSectionElement>("#station-table-body")!,
@@ -74,6 +72,8 @@ const elements = {
   spacecraftDetailPowerState: document.querySelector<HTMLElement>("#spacecraft-detail-power-state")!,
   spacecraftDetailPowerFlow: document.querySelector<HTMLElement>("#spacecraft-detail-power-flow")!,
   spacecraftDetailPowerReason: document.querySelector<HTMLElement>("#spacecraft-detail-power-reason")!,
+  spacecraftTelStatus: document.querySelector<HTMLElement>("#spacecraft-tel-status")!,
+  spacecraftTelCommands: document.querySelector<HTMLOListElement>("#spacecraft-tel-commands")!,
   contactRadius: document.querySelector<HTMLElement>("#contact-radius")!,
   locationCount: document.querySelector<HTMLElement>("#location-count")!,
   locationList: document.querySelector<HTMLElement>("#location-list")!,
@@ -333,6 +333,8 @@ function renderSelectedSpacecraft(
   snapshot: WorldSnapshot,
   power: ReturnType<OperationalLoop["getPowerSnapshot"]>,
   groundOperations: GroundOperations,
+  runtime: SimulationRuntime,
+  focusCellOnMap: (index: number) => void,
 ): void {
   elements.satelliteName.textContent = satellite.name;
   elements.satelliteIdentifier.textContent = `SPACECRAFT · ${satellite.id.toUpperCase()}`;
@@ -373,6 +375,69 @@ function renderSelectedSpacecraft(
   elements.spacecraftDetailPowerState.textContent = power.depleted ? "DEPLETED · RECHARGING" : power.radioPaused ? "DOWNLINK PAUSED" : "NOMINAL";
   elements.spacecraftDetailPowerFlow.textContent = `${power.generationW} W generation · ${power.loadW.toFixed(0)} W load · ${power.netW.toFixed(0)} W net`;
   elements.spacecraftDetailPowerReason.textContent = power.reason ?? "No active power restriction.";
+
+  const onboardCommands = groundState.onboardCommands;
+  const currentAction = runtime.getSatelliteState(satellite.id).currentAction;
+  const hasActiveTelCommand = currentAction?.kind === "tel-command";
+  const currentIndex = groundState.nextCommandIndex;
+  const pendingUpload = groundOperations.hasPendingGroundPlan(satellite.id);
+  const telVersion = groundState.onboardTelVersion;
+  const remainingCount = Math.max(0, onboardCommands.length - currentIndex);
+  elements.spacecraftPlanStatus.textContent = groundState.groundPlanVersion === 0
+    ? "Automatic scheduler is initializing or waiting for enough available contact opportunities to prepare the first TEL."
+    : pendingUpload
+      ? `Automatic ground plan V${groundState.groundPlanVersion} is ready and will upload at the next available contact.`
+      : `Automatic ground plan V${groundState.groundPlanVersion} is synchronized with the onboard TEL.`;
+  elements.spacecraftTelStatus.textContent = telVersion === null
+    ? groundState.groundPlanVersion > 0
+      ? `NO TEL ONBOARD · GROUND PLAN V${groundState.groundPlanVersion} AWAITS CONTACT`
+      : "NO TEL ONBOARD · AUTOMATIC PLAN INITIALIZING"
+    : `${groundState.mode === "standby" ? "STANDBY" : `ONBOARD TEL V${telVersion}`} · ${remainingCount} command${remainingCount === 1 ? "" : "s"} remaining${pendingUpload ? ` · Ground plan V${groundState.groundPlanVersion} awaits contact` : ""}${groundState.mode === "standby" && groundState.standbyCause === "tel-exhausted" ? " · TEL exhausted" : ""}`;
+  elements.spacecraftTelCommands.replaceChildren();
+  if (onboardCommands.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "spacecraft-tel-empty";
+    empty.textContent = groundState.groundPlanVersion > 0 && telVersion === null
+      ? `Ground plan V${groundState.groundPlanVersion} will upload at the next available contact.`
+      : groundState.standbyCause === "no-uploaded-tel"
+        ? "The automatic scheduler is preparing the first ground plan. It will upload at the next available contact."
+      : "No commands are currently stored onboard.";
+    elements.spacecraftTelCommands.append(empty);
+  } else {
+    onboardCommands.forEach((command, index) => {
+      const item = document.createElement("li");
+      item.className = "spacecraft-tel-command";
+      const status = index < currentIndex
+        ? "COMPLETED"
+        : index === currentIndex && hasActiveTelCommand
+          ? "IN PROGRESS"
+          : index === currentIndex
+            ? "NEXT"
+            : "QUEUED";
+      item.classList.toggle("spacecraft-tel-command-current", status === "IN PROGRESS" || status === "NEXT");
+      if (command.cellCapture) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "spacecraft-tel-cell";
+        button.textContent = `${cellLabel(command.cellCapture.cellIndex)} · ${command.label}`;
+        button.setAttribute("aria-label", `Center ${cellLabel(command.cellCapture.cellIndex)} on the map`);
+        button.addEventListener("click", () => focusCellOnMap(command.cellCapture!.cellIndex));
+        const stateLabel = document.createElement("span");
+        stateLabel.className = "spacecraft-tel-command-state";
+        stateLabel.textContent = status;
+        item.append(button, stateLabel);
+      } else {
+        const label = document.createElement("span");
+        label.className = "spacecraft-tel-command-label";
+        label.textContent = command.label;
+        const stateLabel = document.createElement("span");
+        stateLabel.className = "spacecraft-tel-command-state";
+        stateLabel.textContent = status;
+        item.append(label, stateLabel);
+      }
+      elements.spacecraftTelCommands.append(item);
+    });
+  }
 }
 
 function renderNearestStationContact(
@@ -575,6 +640,15 @@ async function start(): Promise<void> {
   // Geography loads independently so a data failure does not stop the world clock.
   let cellMarket: CellMarketState | null = null;
   let cellGrid: import("./simulation/cells").CellGrid | null = null;
+  const automaticallyPlannedSatellites = new Set<string>();
+  const enableAutomaticPlanning = (satelliteId: string, grid: import("./simulation/cells").CellGrid): void => {
+    if (automaticallyPlannedSatellites.has(satelliteId)) return;
+    operationalLoop.enableAutomaticPlanning(satelliteId, grid);
+    automaticallyPlannedSatellites.add(satelliteId);
+  };
+  const enableAutomaticPlanningForFleet = (grid: import("./simulation/cells").CellGrid): void => {
+    for (const satellite of fleet) enableAutomaticPlanning(satellite.id, grid);
+  };
   const refreshFinance = setupFinanceView(companyFinance);
   refreshFinance();
   let purchaseNotice: string | null = null;
@@ -636,6 +710,7 @@ async function start(): Promise<void> {
     finance: companyFinance,
   });
   let refreshCellMarket: (() => void) | null = null;
+  let focusCellOnMap: (index: number) => void = () => {};
   let selectedSatelliteEarthFixedKm: { x: number; y: number; z: number } | null = null;
   let captureSequence = 0;
   type DraftCapture = { id: string; cellIndex: number; target: GeographicLocation };
@@ -695,52 +770,6 @@ async function start(): Promise<void> {
     const version = operationalLoop.reviseGroundPlan(satellite.id, [], simulationRuntime.elapsedSeconds);
     return `Capture draft cleared. Empty ground plan V${version} will replace the onboard TEL at the next available contact.`;
   };
-  const generateGreedyTel = (grid: import("./simulation/cells").CellGrid): string => {
-    const satellite = fleet.find(({ id }) => id === selectedSatelliteId);
-    if (!satellite || !cellMarket) return "The spacecraft or cell market is not ready.";
-    const now = simulationRuntime.elapsedSeconds;
-    const windows = predictGroundContactWindows(
-      satellite,
-      surfaceObjects,
-      now,
-      now + 48 * 60 * 60,
-      { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 4 },
-    );
-    const episodes: GroundContactWindow[] = [];
-    for (const window of [...windows].sort((left, right) => left.startsAtSeconds - right.startsAtSeconds)) {
-      const previous = episodes.at(-1);
-      if (previous && window.startsAtSeconds <= previous.endsAtSeconds) {
-        previous.endsAtSeconds = Math.max(previous.endsAtSeconds, window.endsAtSeconds);
-      } else episodes.push({ ...window });
-    }
-    const distinctWindows = episodes.filter(window => window.startsAtSeconds >= now
-      && !window.continuesBeforeWindow && window.endsAtSeconds > now).slice(0, 2);
-    if (distinctWindows.length < 2) return "Could not generate a TEL: two separate available contacts were not found within 48 hours.";
-    const uploadContact = distinctWindows[0]!;
-    const nextContact = distinctWindows[1]!;
-    const schedule = generateBoundedCellSchedule({
-      satellite,
-      grid,
-      market: cellMarket,
-      startsAtSeconds: uploadContact.startsAtSeconds,
-      endsAtSeconds: nextContact.startsAtSeconds,
-      scenario: PROPOSED_CELL_CAPTURE_SCENARIO,
-      initialPointing: operationalLoop.getLastCommandedPointing(satellite.id)
-        ?? nadirPointingAt(satellite, uploadContact.startsAtSeconds),
-      powerConfiguration: operationalLoop.powerOperations.getConfiguration(satellite.id),
-      initialEnergyWh: operationalLoop.projectScheduledEnergy(satellite.id, now, uploadContact.startsAtSeconds),
-    });
-    clearCaptureDraftFor(satellite.id);
-    operationalLoop.reviseGroundPlan(satellite.id, schedule.commands, now);
-    operationalLoop.enableAutomaticPlanning(satellite.id, grid);
-    const groundPlanVersion = operationalLoop.groundOperations.getSatelliteState(satellite.id).groundPlanVersion;
-    captureDrafts.delete(satellite.id);
-    const first = schedule.decisions[0];
-    const choiceSummary = first
-      ? ` First choice: C${first.cellId.toString().padStart(7, "0")} at ${first.availablePriorityPoints.toFixed(2)} priority points${first.alternatives[0] ? `; next alternative C${first.alternatives[0].cellId.toString().padStart(7, "0")} scored ${first.alternatives[0].availablePriorityPoints.toFixed(2)}` : ""}.`
-      : " No positive-priority feasible capture was found; the plan contains explicit idle segments.";
-    return `Generated ground plan V${groundPlanVersion}: ${schedule.decisions.length} capture(s) across ${schedule.optimizationSegments} two-minute optimization segment(s), from ${uploadContact.stationName} to ${nextContact.stationName}. Total projected available priority: ${schedule.projectedPriorityPoints.toFixed(2)}. Idle commands explain gaps.${choiceSummary} ${schedule.search?.improvedOverGreedy ? "Bounded search improved the full plan over the greedy fallback." : "The greedy fallback remained best under the search budget."} Plan uploads only at contact. Automatic continuation is enabled.`;
-  };
   const advanceGroundOperations = (seconds: number) => operationalLoop.advanceBy(seconds);
   const setSimulationRunning = (running: boolean) => {
     simulation.running = running;
@@ -761,7 +790,9 @@ async function start(): Promise<void> {
   const resetPreview = () => {
     setSimulationRunning(false);
     operationalLoop.reset();
+    automaticallyPlannedSatellites.clear();
     fleet = operationalLoop.getFleet();
+    if (cellGrid) enableAutomaticPlanningForFleet(cellGrid);
     selectedSatelliteId = fleet[0]!.id;
     elements.purchaseOrbitAltitude.value = "550";
     elements.purchaseOrbitInclination.value = "53";
@@ -790,7 +821,9 @@ async function start(): Promise<void> {
       nowSeconds: () => simulationRuntime.elapsedSeconds,
       getOrCreateMarket: grid => {
         cellGrid = grid;
-        return cellMarket ??= createPrototypeCellMarket(grid, companyFinance);
+        const market = cellMarket ??= createPrototypeCellMarket(grid, companyFinance);
+        enableAutomaticPlanningForFleet(grid);
+        return market;
       },
       getSatelliteId: () => selectedSatelliteId,
       hasGroundContact: () => groundOperations.getSatelliteState(selectedSatelliteId).activeStationIds.length > 0,
@@ -805,7 +838,10 @@ async function start(): Promise<void> {
       getCellOperationalVisualization: () => operationalLoop.getCellOperationalVisualization(selectedSatelliteId),
       getSatelliteEarthFixedKm: () => selectedSatelliteEarthFixedKm,
     },
-    refresh => { refreshCellMarket = refresh; },
+    (refresh, focusCell) => {
+      refreshCellMarket = refresh;
+      focusCellOnMap = focusCell;
+    },
   ));
 
   const updateFleetViews = (snapshots: readonly WorldSnapshot[]) => {
@@ -836,7 +872,7 @@ async function start(): Promise<void> {
       contactForecasts.set(selectedSatellite.id, forecast);
     }
     renderSnapshot(selectedSnapshot, selectedSatellite, forecast.window);
-    renderSelectedSpacecraft(selectedSatellite, selectedSnapshot, operationalLoop.getPowerSnapshot(selectedSatellite.id), groundOperations);
+    renderSelectedSpacecraft(selectedSatellite, selectedSnapshot, operationalLoop.getPowerSnapshot(selectedSatellite.id), groundOperations, simulationRuntime, focusCellOnMap);
   };
 
   const commitPurchase = (): void => {
@@ -896,6 +932,7 @@ async function start(): Promise<void> {
 
     fleet = operationalLoop.getFleet();
     selectedSatelliteId = satelliteId;
+    if (cellGrid) enableAutomaticPlanning(satelliteId, cellGrid);
     contactForecasts.clear();
     globe.setSatellites(fleet);
     buildSpacecraftTable((nextSatelliteId) => {
@@ -933,44 +970,6 @@ async function start(): Promise<void> {
   });
 
   elements.pauseToggle.addEventListener("click", () => setSimulationRunning(!simulation.running));
-
-  elements.prepareTel.addEventListener("click", () => {
-    const satellite = fleet.find(({ id }) => id === selectedSatelliteId);
-    if (!satellite) return;
-    const now = simulationRuntime.elapsedSeconds;
-    const windows = predictGroundContactWindows(
-      satellite,
-      surfaceObjects,
-      now,
-      now + 48 * 60 * 60,
-      { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 4 },
-    );
-    const distinctWindows: GroundContactWindow[] = [];
-    for (const window of windows) {
-      const previous = distinctWindows.at(-1);
-      if (!previous || window.startsAtSeconds >= previous.endsAtSeconds) distinctWindows.push(window);
-      if (distinctWindows.length === 2) break;
-    }
-    if (distinctWindows.length < 2) {
-      elements.spacecraftPlanStatus.textContent = `Could not prepare a TEL for ${satellite.name}: two separate contacts were not found within 48 hours.`;
-      return;
-    }
-    const coverageSeconds = distinctWindows[1]!.startsAtSeconds - distinctWindows[0]!.startsAtSeconds;
-    const version = groundOperations.getSatelliteState(satellite.id).groundPlanVersion + 1;
-    clearCaptureDraftFor(satellite.id);
-    groundOperations.reviseGroundPlan(satellite.id, [
-      { id: `authored-v${version}-1`, label: "Authored autonomous segment 1", durationSeconds: coverageSeconds / 2 },
-      { id: `authored-v${version}-2`, label: "Authored autonomous segment 2", durationSeconds: coverageSeconds / 2 },
-    ], now);
-    elements.spacecraftPlanStatus.textContent = `Ground plan V${version} prepared for ${satellite.name}'s next two predicted contacts. It will upload at contact.`;
-  });
-
-  elements.generateGreedyTel.addEventListener("click", () => {
-    setSimulationRunning(false);
-    elements.spacecraftPlanStatus.textContent = cellGrid
-      ? generateGreedyTel(cellGrid)
-      : "Cell market is still loading; the spacecraft plan is not ready yet.";
-  });
 
   elements.timeSpeed.value = String(simulation.timeMultiplier);
   elements.timeSpeed.addEventListener("change", () => {

@@ -30,14 +30,18 @@ button { font: inherit; }
 .cesium-viewer-creditContainer { color: rgba(215, 231, 226, 0.64) !important; font-size: 9px !important; }
 .cesium-viewer-toolbar, .cesium-viewer-animationContainer, .cesium-viewer-timelineContainer { display: none !important; }
 
-.top-bar { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; align-items: center; justify-content: space-between; height: 82px; padding: 0 28px; border-bottom: 1px solid rgba(180, 212, 210, 0.09); background: linear-gradient(180deg, rgba(4, 12, 17, 0.84), rgba(4, 12, 17, 0)); }
+.top-bar { position: absolute; inset: 0 0 auto; z-index: 2; display: flex; align-items: center; justify-content: space-between; height: 82px; padding: 0 28px; background: linear-gradient(180deg, rgba(4, 12, 17, 0.84), rgba(4, 12, 17, 0)); }
 .brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
-.brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid rgba(115, 215, 193, 0.58); border-radius: 11px; color: var(--mint); font-size: 20px; font-weight: 750; transform: rotate(-8deg); }
+.brand-emblem { display: block; width: 46px; height: 46px; overflow: visible; filter: drop-shadow(0 0 8px rgba(115, 215, 193, 0.23)); transition: transform 180ms ease, filter 180ms ease; }
+.brand:hover .brand-emblem { transform: rotate(-8deg) scale(1.06); filter: drop-shadow(0 0 11px rgba(115, 215, 193, 0.48)); }
 .brand strong, .brand small { display: block; }
-.brand strong { font-size: 11px; letter-spacing: 0.15em; }
+.brand strong { font-size: 11px; letter-spacing: 0.18em; }
 .brand small { margin-top: 5px; color: var(--muted); font-size: 8px; letter-spacing: 0.16em; }
 .mission-clock { display: flex; align-items: center; gap: 10px; color: #c1d2d1; font-size: 9px; letter-spacing: 0.13em; }
 .mission-clock time { color: #eff5eb; font: 600 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: 0.06em; }
+.top-time-factor { display: inline-flex; align-items: center; gap: 6px; margin-left: 3px; padding-left: 10px; border-left: 1px solid rgba(200, 224, 220, 0.24); color: #728c90; font-size: 7px; letter-spacing: 0.1em; white-space: nowrap; }
+.top-time-factor select { min-height: 25px; padding: 3px 6px; border: 1px solid rgba(244, 248, 112, 0.25); border-radius: 5px; background: rgba(17, 31, 37, 0.88); color: var(--lime); cursor: pointer; font: 600 9px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.top-time-factor select:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
 .live-dot, .footer-live i { width: 6px; height: 6px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 10px rgba(115, 215, 193, 0.75); }
 .clock-divider { width: 1px; height: 15px; margin: 0 3px; background: rgba(200, 224, 220, 0.24); }
 .top-actions { display: flex; gap: 8px; }
@@ -149,6 +153,17 @@ button { font: inherit; }
 .spacecraft-detail-grid span, .spacecraft-detail-grid strong { display: block; }
 .spacecraft-detail-grid span { margin-bottom: 6px; color: #71898d; font-size: 7px; letter-spacing: 0.1em; }
 .spacecraft-detail-grid strong { color: #d9e5e1; font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.spacecraft-tel-panel { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+.spacecraft-tel-panel summary { color: #d9e5e1; cursor: pointer; font-size: 11px; font-weight: 600; }
+.spacecraft-tel-status { margin: 10px 0; color: #9bb1b2; font-size: 10px; line-height: 1.5; }
+.spacecraft-tel-commands { display: grid; gap: 5px; max-height: 260px; overflow: auto; margin: 0; padding: 0 5px 0 24px; }
+.spacecraft-tel-command { display: flex; min-height: 32px; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 8px; border: 1px solid rgba(175, 207, 205, 0.1); border-radius: 5px; background: rgba(16, 30, 38, 0.42); color: #9bb1b2; font-size: 10px; }
+.spacecraft-tel-command-current { border-color: rgba(90, 197, 176, 0.42); background: rgba(48, 122, 111, 0.12); }
+.spacecraft-tel-cell { border: 0; padding: 3px 0; background: none; color: #d1e8df; cursor: pointer; font: inherit; text-align: left; text-decoration: underline; text-decoration-color: rgba(119, 205, 178, 0.42); text-underline-offset: 3px; }
+.spacecraft-tel-cell:hover, .spacecraft-tel-cell:focus-visible { color: #8de1c4; }
+.spacecraft-tel-command-label { color: #c0cfcc; }
+.spacecraft-tel-command-state { flex: 0 0 auto; color: #81a6a2; font-size: 8px; letter-spacing: 0.08em; }
+.spacecraft-tel-empty { padding: 8px 0; color: #84999b; font-size: 10px; list-style: none; }
 .spacecraft-plan-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .spacecraft-plan-controls .eyebrow { margin: 0 0 5px; }
 .spacecraft-plan-description, .spacecraft-plan-status { margin: 0; color: #71878b; font-size: 8px; line-height: 1.5; }
@@ -185,8 +200,7 @@ button { font: inherit; }
 .section-heading { align-items: flex-end; margin-bottom: 13px; }
 .section-heading .eyebrow { margin-bottom: 5px; font-size: 7px; }
 .section-heading h2 { margin: 0; color: #dbe7e5; font-size: 12px; font-weight: 550; }
-.time-factor, .network-count { color: #728c90; font-size: 7px; letter-spacing: 0.08em; white-space: nowrap; }
-.time-factor select { margin-left: 5px; padding: 3px 5px; border: 1px solid rgba(244, 248, 112, 0.2); border-radius: 4px; outline: 0; background: #111f25; color: var(--lime); font: 600 9px ui-monospace, SFMono-Regular, Consolas, monospace; }
+.network-count { color: #728c90; font-size: 7px; letter-spacing: 0.08em; white-space: nowrap; }
 .condition-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .condition-card { min-height: 54px; gap: 9px; padding: 9px; border: 1px solid rgba(178, 212, 205, 0.1); border-radius: 7px; background: rgba(18, 34, 42, 0.57); }
 .condition-icon { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto; border-radius: 7px; font-size: 14px; }
@@ -251,7 +265,7 @@ button { font: inherit; }
 @media (max-width: 850px) {
   .sim-shell { grid-template-rows: clamp(280px, 44vh, 420px) auto; }
   .top-bar { height: 68px; padding: 0 12px; }
-  .brand-mark { width: 30px; height: 30px; }
+  .brand-emblem { width: 40px; height: 40px; }
   .brand strong { font-size: 9px; }
   .mission-clock { gap: 6px; font-size: 7px; }
   .mission-clock time { font-size: 10px; }
@@ -391,12 +405,17 @@ button { font: inherit; }
 .cell-map-ramp[data-palette=scheduled] { background: linear-gradient(90deg, #ff9b76, #f4f870); }
 .cell-map-ramp[data-palette=imaging] { background: linear-gradient(90deg, #547f78, #f4f870); }
 .cell-map-scale { display: block; margin-top: 6px; font-size: 9px; color: #abc4c0; }
+.cell-planning-key { display: grid; gap: 5px; margin-top: 9px; color: #abc4c0; font-size: 9px; }
+.cell-planning-key span { display: flex; align-items: center; gap: 7px; }
+.cell-planning-key i { display: inline-block; width: 17px; height: 9px; box-sizing: border-box; }
+.cell-planning-key .planning-outline { border: 2px solid #ff7043; }
+.cell-planning-key .planning-imaging { border-top: 3px solid #ffe45c; }
 .cell-map-key p { font-size: 9px; color: #78989b; margin: 8px 0 0; }
 @media (max-width: 1000px) { .cell-workspace { grid-template-columns: minmax(0, 1fr) 265px; } .cell-table th, .cell-table td { padding: 10px 8px; } }
 @media (max-width: 800px) { .cell-workspace { grid-template-columns: 1fr; } .cell-detail { order: -1; } .cell-attributes { grid-template-columns: 1fr auto 1fr auto; column-gap: 15px; } .cell-summary { grid-template-columns: 1fr 1fr; } .cell-summary > div { padding: 12px; } }
 @media (max-width: 600px) {
   .top-actions { gap: 4px; } .brand strong { display: none; }
-  .mission-clock { position: absolute; top: 61px; left: 13px; } .map-hud { display: none; }
+  .mission-clock { position: absolute; top: 61px; left: 13px; gap: 6px; } .top-time-factor { gap: 4px; margin-left: 0; padding-left: 6px; } .map-hud { display: none; }
   .cell-map-key { right: 10px; top: 94px; width: min(245px, calc(100vw - 20px)); padding: 10px; }
   .cell-map-key > div { gap: 3px; } .cell-map-key .eyebrow { font-size: 6px; } .cell-overview { font-size: 8px; }
   .cell-map-layer-name { font-size: 11px; } .cell-map-scale { font-size: 8px; }

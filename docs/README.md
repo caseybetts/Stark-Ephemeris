@@ -14,6 +14,7 @@ This folder contains the shared brief for product, gameplay, and implementation 
 | [Implementation outline](IMPLEMENTATION_OUTLINE.md) | Code boundaries, coordinate and orbit calculations, candidate first slice, and gaps an implementation agent must resolve |
 | [OPS-04 verification guide](OPS_04_VERIFICATION.md) | Starting baseline, shared operational orchestration, deterministic fixtures, acceptance scenarios, and implementation checks |
 | [OPS-01B power design and verification](OPS_01B_POWER_DESIGN.md) | Agreed prototype rules, implementation boundaries, starter fixtures, and completed acceptance results |
+| [OPS-02 station outage design](OPS_02_STATION_OUTAGE_DESIGN.md) | Proposed outage/repair journey, recovery and TEL rules, implementation boundaries, and acceptance handoff |
 | [CLOUD-01 design framework](CLOUD_01_DESIGN.md) | Approved cloud behavior, implemented deterministic model, and deferred NOAA ISCCP-H data handoff |
 | [CELL-04C bounded scheduler design](CELL_04C_DESIGN.md) | Implemented bounded search, fallback behavior, and verification slice |
 | [FLEET-03 orbit maneuver design](FLEET_03_ORBIT_MANEUVER_DESIGN.md) | Player orbit changes, automated safety/maintenance burns, fuel, timing, and implementation slices |

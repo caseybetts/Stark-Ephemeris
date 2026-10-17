@@ -1,44 +1,31 @@
 import {
-  Cartesian3, Cartographic, Color, ConstantProperty, Credit, Event, GeoJsonDataSource,
+  Cartesian2, Cartesian3, Cartographic, Color, ConstantPositionProperty, ConstantProperty, Credit, Event,
   GeographicTilingScheme, ImageryLayer, Math as CesiumMath, Rectangle,
-  ScreenSpaceEventHandler, ScreenSpaceEventType, TextureMagnificationFilter, TextureMinificationFilter,
+  LabelStyle, ScreenSpaceEventHandler, ScreenSpaceEventType, TextureMagnificationFilter, TextureMinificationFilter,
 } from "cesium";
-import type { Cartesian2, ImageryProvider, Viewer } from "cesium";
+import type { ImageryProvider, Viewer } from "cesium";
 import { cellBounds } from "../simulation/cells";
-import type { CellGrid, CellLayer } from "../simulation/cells";
+import type { CellGrid } from "../simulation/cells";
 import type { CellMarketState } from "../simulation/cellMarketState";
 import type { CellOperationalVisualization } from "../simulation/operationalLoop";
 import { rasterizeCellTile } from "../simulation/cellRaster";
 
-export type CellVisualizationLayer = CellLayer | "maximumPriority" | "availablePriority" | "availableValue" | "scheduled" | "imaging";
+export type CellPlanningLayer = "none" | "scheduled" | "imaging";
 type Route = { name: string; url?: string; latitudeDeg: number; longitudeDeg: number };
 
-export function economyDisplayMaximum(metric: CellVisualizationLayer, market: CellMarketState): number {
-  if (!["maximumPriority", "availablePriority", "availableValue"].includes(metric)) return 1;
-  const marketRates = new Map(market.getMarketReadout().map(rate => [rate.id, rate]));
-  const priorityRates = new Map(market.getPlayerPriorityRates().map(rate => [rate.categoryId, rate]));
-  return Math.max(1, market.exposures.definitions.reduce((total, definition) => {
-    const rate = metric === "availableValue"
-      ? marketRates.get(definition.id)!.marketPriceUsdPerUnit
-      : priorityRates.get(definition.id)!.pointsPerUnit;
-    return total + market.exposures.maximum(definition.id) * rate;
-  }, 0));
+export function categoryPriorityDisplayMaximum(categoryId: string, market: CellMarketState): number {
+  const rate = market.getPlayerPriorityRates().find(item => item.categoryId === categoryId);
+  return Math.max(1, market.exposures.maximum(categoryId) * (rate?.pointsPerUnit ?? 0));
 }
 
-function colorAt(t: number, layer: CellVisualizationLayer): [number, number, number] {
-  const ramps: Record<string, [[number, number, number], [number, number, number]]> = {
-    maximumPriority: [[28, 34, 82], [255, 195, 74]],
-    availablePriority: [[246, 222, 83], [18, 156, 137]],
-    availableValue: [[29, 57, 46], [227, 236, 103]],
-  };
-  const ramp = ramps[layer];
-  if (!ramp) return [42 + 212 * t, 124 + 78 * t, 130 - 32 * t].map(Math.round) as [number, number, number];
-  return ramp[0].map((start, index) => Math.round(start + (ramp[1][index]! - start) * t)) as [number, number, number];
+function colorAt(t: number): [number, number, number] {
+  const start = [246, 222, 83], end = [18, 156, 137];
+  return start.map((value, index) => Math.round(value + (end[index]! - value) * t)) as [number, number, number];
 }
 
 function createProvider(
   grid: CellGrid,
-  metric: CellVisualizationLayer,
+  categoryId: string | null,
   getMarket: () => CellMarketState,
   nowSeconds: () => number,
 ): ImageryProvider {
@@ -52,7 +39,7 @@ function createProvider(
       const values = new Float32Array(256 * 256).fill(-1);
       const market = getMarket();
       const now = nowSeconds();
-      const maximum = economyDisplayMaximum(metric, market);
+      const maximum = categoryId ? categoryPriorityDisplayMaximum(categoryId, market) : 1;
       const scale = 2 ** level, span = 720 / scale;
       const rowStart = y * span, columnStart = x * span;
       const rowFrom = Math.max(0, Math.floor(rowStart)), rowTo = Math.min(720, Math.ceil(rowStart + span));
@@ -61,11 +48,8 @@ function createProvider(
         const index = grid.indexById[row * 1440 + col];
         if (index < 0) continue;
         let cellValue = 0;
-        if (metric === "maximumPriority" || metric === "availablePriority" || metric === "availableValue") {
-          const economy = market.calculateCell(index, now);
-          cellValue = metric === "maximumPriority" ? economy.maximumPriorityPoints
-            : metric === "availablePriority" ? economy.availablePriorityPoints : economy.availablePayoutUsd;
-        }
+        if (categoryId) cellValue = market.calculateCell(index, now).categories
+          .find(category => category.categoryId === categoryId)?.availablePriorityPoints ?? 0;
         const top = Math.max(0, Math.floor((row - rowStart) * 256 / span));
         const bottom = Math.min(256, Math.ceil((row + 1 - rowStart) * 256 / span));
         const left = Math.max(0, Math.floor((col - columnStart) * 256 / span));
@@ -78,19 +62,19 @@ function createProvider(
       const canvas = document.createElement("canvas"); canvas.width = canvas.height = 256;
       const context = canvas.getContext("2d")!;
       const image = context.createImageData(256, 256);
-      if (metric === "maximumPriority" || metric === "availablePriority" || metric === "availableValue") {
+      if (categoryId) {
         const ceiling = Math.log1p(maximum);
         for (let pixel = 0; pixel < values.length; pixel++) {
           const value = values[pixel]!;
           if (value < 0) continue;
           const t = Math.log1p(value) / ceiling;
-          const [red, green, blue] = colorAt(t, metric);
+          const [red, green, blue] = colorAt(t);
           const offset = pixel * 4;
           image.data[offset] = red; image.data[offset + 1] = green; image.data[offset + 2] = blue;
-          image.data[offset + 3] = value === 0 ? 35 : 190;
+          image.data[offset + 3] = value === 0 ? 0 : 88;
         }
       } else {
-        image.data.set(rasterizeCellTile(grid, metric === "scheduled" || metric === "imaging" ? "coverage" : metric, x, y, level));
+        image.data.set(rasterizeCellTile(grid, "coverage", x, y, level));
       }
       context.putImageData(image, 0, 0);
       return Promise.resolve(canvas);
@@ -107,15 +91,8 @@ export async function createCellLayer(
 ) {
   let layer: ImageryLayer;
   let visible = true;
-  let selectedMetric: CellVisualizationLayer = "coverage";
-  let pipelineSource: GeoJsonDataSource | undefined;
-  if (grid.oilPipelineRoutes) {
-    pipelineSource = await GeoJsonDataSource.load(grid.oilPipelineRoutes as Parameters<typeof GeoJsonDataSource.load>[0], {
-      stroke: Color.fromCssColorString("#ffbd70"), strokeWidth: 2, clampToGround: true,
-    });
-    await viewer.dataSources.add(pipelineSource);
-    pipelineSource.show = false;
-  }
+  let selectedCategoryId: string | null = null;
+  let planningLayer: CellPlanningLayer = "none";
   const selection = viewer.entities.add({
     id: "selected-market-cell", show: false,
     rectangle: { coordinates: Rectangle.fromDegrees(0, 0, 0.25, 0.25),
@@ -125,27 +102,33 @@ export async function createCellLayer(
   const scheduledEntities = new Map<number, ReturnType<Viewer["entities"]["add"]>>();
   const activeCellEntity = viewer.entities.add({ id: "active-imaging-cell", show: false,
     rectangle: { coordinates: Rectangle.fromDegrees(0, 0, 0.25, 0.25),
-      material: Color.fromCssColorString("#f4f870").withAlpha(0.48),
-      outline: true, outlineColor: Color.fromCssColorString("#f4f870"), height: 150 },
+      material: Color.TRANSPARENT,
+      outline: true, outlineColor: Color.fromCssColorString("#ffe45c"), outlineWidth: 3, height: 1_500 },
+  });
+  const activeCellMarker = viewer.entities.add({ id: "active-imaging-cell-marker", show: false,
+    position: new ConstantPositionProperty(Cartesian3.fromDegrees(0, 0, 1_700)),
+    point: { pixelSize: 13, color: Color.fromCssColorString("#ffe45c"), outlineColor: Color.fromCssColorString("#17242a"), outlineWidth: 3, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    label: { text: "IMAGING", font: "bold 11px sans-serif", fillColor: Color.WHITE, outlineColor: Color.BLACK, outlineWidth: 3, style: LabelStyle.FILL_AND_OUTLINE, pixelOffset: new Cartesian2(0, -20), disableDepthTestDistance: Number.POSITIVE_INFINITY },
   });
   const imagingRay = viewer.entities.add({ id: "satellite-imaging-ray", show: false,
-    polyline: { positions: [], width: 3, material: Color.fromCssColorString("#f4f870").withAlpha(0.9), clampToGround: false },
+    polyline: { positions: [], width: 5, material: Color.fromCssColorString("#ffe45c"), clampToGround: false },
   });
   let selectedIndex = -1;
   let hasActiveCapture = false;
-  const setMetric = (metric: CellVisualizationLayer) => {
-    selectedMetric = metric;
+  let lastOperationalState: CellOperationalVisualization = { scheduledCellIndexes: [], activeCapture: null };
+  let lastSatelliteEarthFixedKm: { x: number; y: number; z: number } | null = null;
+  const setCategory = (categoryId: string | null) => {
+    selectedCategoryId = categoryId;
     if (layer) viewer.imageryLayers.remove(layer, true);
-    layer = new ImageryLayer(createProvider(grid, metric, getMarket, nowSeconds), {
+    layer = new ImageryLayer(createProvider(grid, categoryId, getMarket, nowSeconds), {
       magnificationFilter: TextureMagnificationFilter.NEAREST,
       minificationFilter: TextureMinificationFilter.NEAREST,
     });
     layer.show = visible;
-    if (pipelineSource) pipelineSource.show = visible && metric === "oilPipelines";
     viewer.imageryLayers.add(layer);
     viewer.scene.requestRender();
   };
-  setMetric("coverage");
+  setCategory(null);
   const clickHandler = new ScreenSpaceEventHandler(viewer.scene.canvas);
   clickHandler.setInputAction((event: { position: Cartesian2 }) => {
     if (!visible) return;
@@ -161,10 +144,7 @@ export async function createCellLayer(
     onSelect(grid.indexAt(latitudeDeg, longitudeDeg), name ? { name, url, latitudeDeg, longitudeDeg } : undefined);
   }, ScreenSpaceEventType.LEFT_CLICK);
 
-  return {
-    setMetric,
-    refreshMetric() { if (["maximumPriority", "availablePriority", "availableValue"].includes(selectedMetric)) setMetric(selectedMetric); },
-    setOperationalOverlay(state: CellOperationalVisualization, satelliteEarthFixedKm: { x: number; y: number; z: number } | null) {
+  const renderOperationalOverlay = (state: CellOperationalVisualization, satelliteEarthFixedKm: { x: number; y: number; z: number } | null) => {
       const uniqueIndexes = [...new Set(state.scheduledCellIndexes)];
       const keep = new Set(uniqueIndexes);
       for (const [index, entity] of scheduledEntities) if (!keep.has(index)) {
@@ -174,33 +154,48 @@ export async function createCellLayer(
         const b = cellBounds(grid.ids[index]!);
         scheduledEntities.set(index, viewer.entities.add({ id: `scheduled-cell-${index}`,
           rectangle: { coordinates: Rectangle.fromDegrees(b.west, b.south, b.east, b.north),
-            material: Color.fromCssColorString("#ff9b76").withAlpha(0.28),
-            outline: true, outlineColor: Color.fromCssColorString("#ff9b76"), height: 120 },
+            material: Color.TRANSPARENT,
+            outline: true, outlineColor: Color.fromCssColorString("#ff7043"), outlineWidth: 3, height: 1_000 },
         }));
       }
       const capture = state.activeCapture;
       hasActiveCapture = capture !== null;
-      const activeVisible = visible && (selectedMetric === "imaging" || selectedMetric === "scheduled") && capture !== null;
+      const activeVisible = visible && planningLayer === "imaging" && capture !== null;
       activeCellEntity.show = activeVisible;
-      imagingRay.show = visible && selectedMetric === "imaging" && capture !== null && satelliteEarthFixedKm !== null;
+      activeCellMarker.show = activeVisible;
+      imagingRay.show = visible && planningLayer === "imaging" && capture !== null && satelliteEarthFixedKm !== null;
       if (capture) {
         const b = cellBounds(grid.ids[capture.cellIndex]!);
         activeCellEntity.rectangle!.coordinates = new ConstantProperty(Rectangle.fromDegrees(b.west, b.south, b.east, b.north));
+        activeCellMarker.position = new ConstantPositionProperty(Cartesian3.fromDegrees(b.longitudeDeg, b.latitudeDeg, 1_700));
         if (satelliteEarthFixedKm) imagingRay.polyline!.positions = new ConstantProperty([
           new Cartesian3(satelliteEarthFixedKm.x * 1_000, satelliteEarthFixedKm.y * 1_000, satelliteEarthFixedKm.z * 1_000),
           Cartesian3.fromDegrees(capture.target.longitudeDeg, capture.target.latitudeDeg, 100),
         ]);
       }
-      for (const entity of scheduledEntities.values()) entity.show = visible && selectedMetric === "scheduled";
+      for (const entity of scheduledEntities.values()) entity.show = visible && planningLayer === "scheduled";
       viewer.scene.requestRender();
+  };
+
+  return {
+    setCategory,
+    refreshCategory() { if (selectedCategoryId) setCategory(selectedCategoryId); },
+    setPlanningLayer(mode: CellPlanningLayer) {
+      planningLayer = mode;
+      renderOperationalOverlay(lastOperationalState, lastSatelliteEarthFixedKm);
+    },
+    setOperationalOverlay(state: CellOperationalVisualization, satelliteEarthFixedKm: { x: number; y: number; z: number } | null) {
+      lastOperationalState = state;
+      lastSatelliteEarthFixedKm = satelliteEarthFixedKm;
+      renderOperationalOverlay(state, satelliteEarthFixedKm);
     },
     setVisible(show: boolean) {
       visible = show; layer.show = show;
-      if (pipelineSource) pipelineSource.show = show && selectedMetric === "oilPipelines";
       selection.show = show && selectedIndex !== -1;
-      for (const entity of scheduledEntities.values()) entity.show = show && selectedMetric === "scheduled";
-      activeCellEntity.show = show && (selectedMetric === "scheduled" || selectedMetric === "imaging") && hasActiveCapture;
-      imagingRay.show = show && selectedMetric === "imaging" && hasActiveCapture;
+      for (const entity of scheduledEntities.values()) entity.show = show && planningLayer === "scheduled";
+      activeCellEntity.show = show && planningLayer === "imaging" && hasActiveCapture;
+      activeCellMarker.show = activeCellEntity.show;
+      imagingRay.show = show && planningLayer === "imaging" && hasActiveCapture;
       viewer.scene.requestRender();
     },
     select(index: number, flyTo = false) {
@@ -219,10 +214,9 @@ export async function createCellLayer(
         orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 }, duration: 1.2 });
     },
     destroy() {
-      clickHandler.destroy(); viewer.entities.remove(selection); viewer.entities.remove(activeCellEntity); viewer.entities.remove(imagingRay);
+      clickHandler.destroy(); viewer.entities.remove(selection); viewer.entities.remove(activeCellEntity); viewer.entities.remove(activeCellMarker); viewer.entities.remove(imagingRay);
       for (const entity of scheduledEntities.values()) viewer.entities.remove(entity);
       viewer.imageryLayers.remove(layer, true);
-      if (pipelineSource) void viewer.dataSources.remove(pipelineSource, true);
     },
   };
 }
