@@ -32,12 +32,7 @@ const elements = {
   pauseIcon: document.querySelector<HTMLElement>("#pause-icon")!,
   trackToggle: document.querySelector<HTMLButtonElement>("#track-toggle")!,
   timeSpeed: document.querySelector<HTMLSelectElement>("#time-speed")!,
-  satCoordinate: document.querySelector<HTMLElement>("#sat-coordinate")!,
-  satAltitude: document.querySelector<HTMLElement>("#sat-altitude")!,
-  satelliteName: document.querySelector<HTMLElement>("#satellite-name")!,
-  satelliteIdentifier: document.querySelector<HTMLElement>("#satellite-identifier")!,
-  satSunState: document.querySelector<HTMLElement>("#sat-sun-state")!,
-  satContactState: document.querySelector<HTMLElement>("#sat-contact-state")!,
+  summarySatelliteCards: document.querySelector<HTMLElement>("#summary-satellite-cards")!,
   surfaceSunlit: document.querySelector<HTMLElement>("#surface-sunlit")!,
   eclipseState: document.querySelector<HTMLElement>("#eclipse-state")!,
   subsolarLongitude: document.querySelector<HTMLElement>("#subsolar-longitude")!,
@@ -51,7 +46,6 @@ const elements = {
   stationTableCount: document.querySelector<HTMLElement>("#station-table-count")!,
   stationTableBody: document.querySelector<HTMLTableSectionElement>("#station-table-body")!,
   spacecraftCount: document.querySelector<HTMLElement>("#spacecraft-count")!,
-  summaryFleetCount: document.querySelector<HTMLElement>("#summary-fleet-count")!,
   spacecraftTableBody: document.querySelector<HTMLTableSectionElement>("#spacecraft-table-body")!,
   purchaseOrbitAltitude: document.querySelector<HTMLInputElement>("#purchase-orbit-altitude")!,
   purchaseOrbitInclination: document.querySelector<HTMLInputElement>("#purchase-orbit-inclination")!,
@@ -113,7 +107,15 @@ type SpacecraftTableRow = {
   stationAccess: HTMLElement;
 };
 
+type SummarySatelliteCard = {
+  name: HTMLElement;
+  payload: HTMLElement;
+  power: HTMLElement;
+  contact: HTMLElement;
+};
+
 const spacecraftTableRows = new Map<string, SpacecraftTableRow>();
+const summarySatelliteCards = new Map<string, SummarySatelliteCard>();
 const stationAntennaCells = new Map<string, HTMLElement>();
 
 const formatCoordinate = (latitude: number, longitude: number): string => {
@@ -131,6 +133,10 @@ const formatDuration = (seconds: number): string => {
 };
 
 const formatDistance = (distanceKm: number): string => `${Math.round(distanceKm).toLocaleString()} km`;
+const formatCurrencyCents = (cents: number): string => (cents / 100).toLocaleString(undefined, {
+  style: "currency",
+  currency: "USD",
+});
 
 function renderStations(
   snapshot: ReturnType<typeof createWorldSnapshot>,
@@ -147,34 +153,26 @@ function renderStations(
       const row = document.createElement("div");
       row.className = "station-row";
       const marker = document.createElement("span");
-      const antenna = groundOperations.getAntennaState(contact.station.id);
-      const linked = activeStationIds.has(contact.station.id);
-      const waitingFor = antenna.ownerSatelliteId && antenna.ownerSatelliteId !== snapshot.satelliteId
-        ? fleet.find(({ id }) => id === antenna.ownerSatelliteId)?.name
-        : undefined;
-      const waiting = contact.geometricInRange && contact.stationOperational && !linked && Boolean(waitingFor);
-      marker.className = `row-marker ${linked ? "row-marker-active" : ""}`;
+      const isOperational = contact.stationOperational;
+      marker.className = `row-marker ${isOperational ? "row-marker-active" : ""}`;
       const copy = document.createElement("span");
       copy.className = "row-copy";
       const name = document.createElement("strong");
       name.textContent = contact.station.name;
       const detail = document.createElement("small");
-      detail.textContent = contact.station.description;
+      const averageDailyExpense = companyFinance.getAverageDailyGroundStationExpenseCents(
+        contact.station.id,
+        snapshot.elapsedSeconds,
+      );
+      detail.textContent = `3-DAY AVG EXPENSE · ${formatCurrencyCents(averageDailyExpense)} / DAY`;
       copy.append(name, detail);
       const state = document.createElement("span");
-      state.className = `row-state ${linked ? "row-state-active" : ""}`;
-      state.textContent = linked
-        ? "IN CONTACT"
-        : contact.geometricInRange && !contact.stationOperational
-          ? "STATION DOWN"
-          : waiting
-            ? `ANTENNA BUSY · ${waitingFor!.toUpperCase()}`
-          : formatDistance(contact.distanceKm);
+      state.className = `row-state ${isOperational ? "row-state-active" : "state-warning"}`;
+      state.textContent = isOperational ? "AVAILABLE" : "DOWN";
       row.append(marker, copy, state);
       return row;
     }),
   );
-  renderNearestStationContact(stations, nextWindow, snapshot.elapsedSeconds, groundOperations, snapshot.satelliteId);
   renderGroundControl(
     snapshot.satelliteId,
     snapshot.elapsedSeconds,
@@ -230,12 +228,18 @@ function renderGroundStationTable(): void {
         ? station.groundStationDetails.downlinkRateMbps.toLocaleString()
         : "UNCONFIGURED";
 
+      const contactCostCell = document.createElement("td");
+      contactCostCell.className = "table-rate";
+      contactCostCell.textContent = station.groundStationDetails
+        ? station.groundStationDetails.contactCostUsdPerMinute.toLocaleString(undefined, { style: "currency", currency: "USD" })
+        : "UNCONFIGURED";
+
       const antennaCell = document.createElement("td");
       antennaCell.className = "antenna-status-cell";
       antennaCell.textContent = "NO ACTIVE LINK";
       stationAntennaCells.set(station.id, antennaCell);
 
-      row.append(stationCell, locationCell, contactCell, uplinkCell, downlinkCell, antennaCell);
+      row.append(stationCell, locationCell, contactCell, uplinkCell, downlinkCell, contactCostCell, antennaCell);
       return row;
     }),
   );
@@ -260,7 +264,6 @@ function renderAntennaOccupancy(groundOperations: GroundOperations): void {
 
 function buildSpacecraftTable(onSelect: (satelliteId: string) => void): void {
   elements.spacecraftCount.textContent = `${fleet.length} SPACECRAFT`;
-  elements.summaryFleetCount.textContent = `${fleet.length} SPACECRAFT`;
   spacecraftTableRows.clear();
   elements.spacecraftTableBody.replaceChildren(
     ...fleet.map((satellite) => {
@@ -328,6 +331,101 @@ function renderSpacecraftTable(snapshots: readonly WorldSnapshot[], groundOperat
   }
 }
 
+function renderSummarySatelliteCards(
+  snapshots: readonly WorldSnapshot[],
+  forecasts: ReadonlyMap<string, GroundContactWindow | undefined>,
+  operationalLoop: OperationalLoop,
+  groundOperations: GroundOperations,
+  market: CellMarketState | null,
+): void {
+  const activeIds = new Set(snapshots.map(({ satelliteId }) => satelliteId));
+  const onboardImageCounts = new Map<string, number>();
+  for (const image of market?.getImages() ?? []) {
+    if (image.status === "onboard") {
+      onboardImageCounts.set(image.satelliteId, (onboardImageCounts.get(image.satelliteId) ?? 0) + 1);
+    }
+  }
+  for (const [satelliteId, card] of summarySatelliteCards) {
+    if (!activeIds.has(satelliteId)) {
+      card.name.closest("article")?.remove();
+      summarySatelliteCards.delete(satelliteId);
+    }
+  }
+
+  for (const snapshot of snapshots) {
+    const satellite = fleet.find(({ id }) => id === snapshot.satelliteId);
+    if (!satellite) continue;
+    let card = summarySatelliteCards.get(satellite.id);
+    if (!card) {
+      const article = document.createElement("article");
+      article.className = "satellite-card";
+      const heading = document.createElement("h2");
+      heading.className = "satellite-card-name";
+      const metrics = document.createElement("div");
+      metrics.className = "satellite-card-metrics";
+      const createMetric = (label: string): HTMLElement => {
+        const metric = document.createElement("div");
+        metric.className = "satellite-card-metric";
+        const caption = document.createElement("span");
+        caption.textContent = label;
+        const value = document.createElement("strong");
+        metric.append(caption, value);
+        metrics.append(metric);
+        return value;
+      };
+      card = {
+        name: heading,
+        payload: createMetric("PAYLOAD STATUS"),
+        power: createMetric("POWER STATUS"),
+        contact: createMetric("NEXT CONTACT"),
+      };
+      article.append(heading, metrics);
+      elements.summarySatelliteCards.append(article);
+      summarySatelliteCards.set(satellite.id, card);
+    }
+
+    card.name.textContent = satellite.name;
+    const payload = operationalLoop.getCellOperationalVisualization(satellite.id);
+    const onboardImageCount = onboardImageCounts.get(satellite.id) ?? 0;
+    card.payload.textContent = payload.activeCapture
+      ? `IMAGING · ${onboardImageCount} STORED`
+      : onboardImageCount > 0
+        ? `${onboardImageCount} IMAGE${onboardImageCount === 1 ? "" : "S"} ABOARD`
+        : market
+          ? "IDLE · NO IMAGERY"
+          : "AWAITING CELL DATA";
+
+    const power = operationalLoop.getPowerSnapshot(satellite.id);
+    const powerLabel = power.depleted
+      ? "DEPLETED"
+      : power.energyWh <= power.reserveWh
+        ? "AT RESERVE"
+        : "NOMINAL";
+    card.power.textContent = `${powerLabel} · ${Math.round(power.chargePercent)}%`;
+
+    const groundState = groundOperations.getSatelliteState(satellite.id);
+    const activeStationId = groundState.activeStationIds[0];
+    const activeStation = activeStationId
+      ? snapshot.stationContacts.find(contact => contact.station.id === activeStationId)?.station
+      : undefined;
+    const waitingContact = !activeStation
+      ? snapshot.stationContacts.find(contact => {
+        const owner = groundOperations.getAntennaState(contact.station.id).ownerSatelliteId;
+        return contact.geometricInRange && contact.stationOperational && owner !== null && owner !== satellite.id;
+      })
+      : undefined;
+    const nextWindow = forecasts.get(satellite.id);
+    const timeUntil = (seconds: number): string => formatDuration(seconds).replace(/^T\+/, "");
+    card.contact.textContent = activeStation
+      ? `${activeStation.name} · NOW`
+      : waitingContact
+        ? `${waitingContact.station.name} · NOW, WAITING`
+        : nextWindow
+          ? `${nextWindow.stationName} · IN ${timeUntil(nextWindow.startsAtSeconds - snapshot.elapsedSeconds)}`
+          : "NO CONTACT PREDICTED IN 24H";
+  }
+}
+
 function renderSelectedSpacecraft(
   satellite: SatelliteDefinition,
   snapshot: WorldSnapshot,
@@ -336,8 +434,6 @@ function renderSelectedSpacecraft(
   runtime: SimulationRuntime,
   focusCellOnMap: (index: number) => void,
 ): void {
-  elements.satelliteName.textContent = satellite.name;
-  elements.satelliteIdentifier.textContent = `SPACECRAFT · ${satellite.id.toUpperCase()}`;
   elements.spacecraftDetailTitle.textContent = satellite.name;
   elements.spacecraftDetailState.textContent = snapshot.satelliteEclipsed ? "EARTH ECLIPSE" : "SUNLIT";
   elements.spacecraftDetailState.classList.toggle("table-status-active", !snapshot.satelliteEclipsed);
@@ -440,47 +536,6 @@ function renderSelectedSpacecraft(
   }
 }
 
-function renderNearestStationContact(
-  stations: ReturnType<typeof createWorldSnapshot>["stationContacts"],
-  nextWindow: GroundContactWindow | undefined,
-  nowSeconds: number,
-  groundOperations: GroundOperations,
-  satelliteId: string,
-): void {
-  const activeStationIds = new Set(groundOperations.getSatelliteState(satelliteId).activeStationIds);
-  const activeContact = stations.find((contact) => activeStationIds.has(contact.station.id));
-  const nearestContact = [...stations].sort((left, right) => left.distanceKm - right.distanceKm)[0];
-  const waitingContact = stations.find(contact => {
-    const antenna = groundOperations.getAntennaState(contact.station.id);
-    return contact.geometricInRange && contact.stationOperational
-      && antenna.ownerSatelliteId !== null
-      && antenna.ownerSatelliteId !== satelliteId;
-  });
-  const waitingFor = waitingContact
-    ? groundOperations.getAntennaState(waitingContact.station.id).ownerSatelliteId
-    : null;
-  const waitingName = waitingFor ? fleet.find(({ id }) => id === waitingFor)?.name ?? waitingFor : null;
-  if (activeContact) {
-    elements.satContactState.textContent = `IN CONTACT · ${activeContact.station.name.toUpperCase()}`;
-    elements.satContactState.classList.remove("state-warning");
-  } else if (nearestContact?.geometricInRange && !nearestContact.stationOperational) {
-    elements.satContactState.textContent = `STATION DOWN · ${nearestContact.station.name.toUpperCase()}`;
-    elements.satContactState.classList.add("state-warning");
-  } else if (waitingContact && waitingName) {
-    elements.satContactState.textContent = `ANTENNA BUSY · ${waitingContact.station.name.toUpperCase()} SERVING ${waitingName.toUpperCase()}`;
-    elements.satContactState.classList.add("state-warning");
-  } else if (nextWindow) {
-    elements.satContactState.textContent = `NEXT · ${nextWindow.stationName.toUpperCase()} IN ${formatDuration(nextWindow.startsAtSeconds - nowSeconds)}`;
-    elements.satContactState.classList.remove("state-warning");
-  } else if (nearestContact) {
-    elements.satContactState.textContent = `NO LINK · ${formatDistance(nearestContact.distanceKm)} TO ${nearestContact.station.name.toUpperCase()}`;
-    elements.satContactState.classList.add("state-warning");
-  } else {
-    elements.satContactState.textContent = "NO STATIONS CONFIGURED";
-    elements.satContactState.classList.add("state-warning");
-  }
-}
-
 function renderGroundControl(
   satelliteId: string,
   nowSeconds: number,
@@ -556,19 +611,9 @@ function renderLocations(snapshot: ReturnType<typeof createWorldSnapshot>): void
 
 function renderSnapshot(
   snapshot: WorldSnapshot,
-  currentSatellite: SatelliteDefinition,
   nextWindow: GroundContactWindow | undefined,
 ): void {
-  const lat = snapshot.subSatellitePoint.latitudeDeg;
-  const lon = snapshot.subSatellitePoint.longitudeDeg;
-
   elements.simClock.textContent = formatDuration(snapshot.elapsedSeconds);
-  elements.satCoordinate.textContent = formatCoordinate(lat, lon);
-  elements.satAltitude.textContent = `${Math.round(currentSatellite.orbit.altitudeKm)} km`;
-
-  const illuminated = !snapshot.satelliteEclipsed;
-  elements.satSunState.textContent = illuminated ? "SOLAR ARRAY LIT" : "EARTH ECLIPSE";
-  elements.satSunState.classList.toggle("state-warning", !illuminated);
   elements.eclipseState.textContent = snapshot.satelliteEclipsed ? "IN UMBRA" : "SUNLIT";
   elements.eclipseState.classList.toggle("warning-text", snapshot.satelliteEclipsed);
 
@@ -621,6 +666,55 @@ function setupManagementTabs(): void {
   });
 }
 
+function setupWorkspaceLayout(resizeGlobe: () => void): void {
+  const shell = document.querySelector<HTMLElement>(".sim-shell")!;
+  const controls = [...document.querySelectorAll<HTMLButtonElement>("[data-layout-direction]")];
+  const syncControls = () => {
+    const layout = shell.dataset.layout;
+    controls.forEach((button) => {
+      const direction = button.dataset.layoutDirection;
+      const visible = layout === "split"
+        || (layout === "map" && direction === "right")
+        || (layout === "info" && direction === "left");
+      const label = layout === "split"
+        ? direction === "left" ? "Collapse information section" : "Collapse map section"
+        : layout === "map" ? "Expand information section" : "Expand map section";
+      button.hidden = !visible;
+      button.setAttribute("aria-label", label);
+      button.title = label;
+    });
+  };
+  controls.forEach((button) => button.addEventListener("click", () => {
+    const direction = button.dataset.layoutDirection;
+    const layout = shell.dataset.layout;
+    if (layout === "split") shell.dataset.layout = direction === "left" ? "map" : "info";
+    else shell.dataset.layout = "split";
+    syncControls();
+    window.setTimeout(resizeGlobe, 280);
+  }));
+  syncControls();
+  window.addEventListener("resize", resizeGlobe);
+}
+
+function updateMiniGlobe(snapshots: readonly WorldSnapshot[]): void {
+  const layer = document.querySelector<SVGGElement>("#mini-globe-satellites");
+  if (!layer) return;
+  const colors = ["#f4f870", "#72d7ff", "#ff9b76", "#c4a7ff", "#7ce2a4"];
+  layer.replaceChildren(...snapshots.map((snapshot, index) => {
+    const point = snapshot.satelliteEarthFixedKm;
+    const scale = 54 / 7_000;
+    const x = Math.max(28, Math.min(152, 90 + point.x * scale));
+    const y = Math.max(28, Math.min(152, 90 - point.z * scale));
+    const marker = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    marker.setAttribute("class", "mini-globe-satellite");
+    marker.setAttribute("cx", String(x));
+    marker.setAttribute("cy", String(y));
+    marker.setAttribute("r", "3.5");
+    marker.setAttribute("fill", colors[index % colors.length]!);
+    return marker;
+  }));
+}
+
 async function start(): Promise<void> {
   setupManagementTabs();
   renderGroundStationTable();
@@ -630,6 +724,10 @@ async function start(): Promise<void> {
 
   const { createGlobeView } = await import("./rendering/globe");
   const globe = await createGlobeView(fleet, surfaceObjects);
+  setupWorkspaceLayout(() => {
+    globe.viewer.resize();
+    globe.viewer.scene.requestRender();
+  });
   buildSpacecraftTable((satelliteId) => {
     selectedSatelliteId = satelliteId;
     globe.setSelectedSatellite(satelliteId);
@@ -649,7 +747,7 @@ async function start(): Promise<void> {
   const enableAutomaticPlanningForFleet = (grid: import("./simulation/cells").CellGrid): void => {
     for (const satellite of fleet) enableAutomaticPlanning(satellite.id, grid);
   };
-  const refreshFinance = setupFinanceView(companyFinance);
+  const refreshFinance = setupFinanceView(companyFinance, () => simulationRuntime.elapsedSeconds);
   refreshFinance();
   let purchaseNotice: string | null = null;
   let purchaseNoticeWarning = false;
@@ -846,32 +944,49 @@ async function start(): Promise<void> {
 
   const updateFleetViews = (snapshots: readonly WorldSnapshot[]) => {
     globe.update(snapshots);
+    updateMiniGlobe(snapshots);
     selectedSatelliteEarthFixedKm = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId)?.satelliteEarthFixedKm ?? null;
     renderSpacecraftTable(snapshots, groundOperations);
     renderAntennaOccupancy(groundOperations);
+
+    const forecasts = new Map<string, GroundContactWindow | undefined>();
+    for (const snapshot of snapshots) {
+      const satellite = fleet.find(({ id }) => id === snapshot.satelliteId);
+      if (!satellite) continue;
+      let forecast = contactForecasts.get(satellite.id);
+      if (!forecast || snapshot.elapsedSeconds >= forecast.computedAt + 900
+        || (forecast.window && snapshot.elapsedSeconds > forecast.window.endsAtSeconds)) {
+        const windows = predictGroundContactWindows(
+          satellite,
+          surfaceObjects,
+          snapshot.elapsedSeconds,
+          snapshot.elapsedSeconds + CONTACT_FORECAST_HORIZON_SECONDS,
+          { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 1 },
+        );
+        const active = snapshot.stationContacts.find((contact) => contact.available);
+        forecast = {
+          computedAt: snapshot.elapsedSeconds,
+          window: active
+            ? windows.find((window) => window.stationId === active.station.id)
+            : windows[0],
+        };
+        contactForecasts.set(satellite.id, forecast);
+      }
+      forecasts.set(satellite.id, forecast.window);
+    }
+    renderSummarySatelliteCards(
+      snapshots,
+      forecasts,
+      operationalLoop,
+      groundOperations,
+      cellMarket,
+    );
+
     const selectedSnapshot = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId);
     const selectedSatellite = fleet.find(({ id }) => id === selectedSatelliteId);
     if (!selectedSnapshot || !selectedSatellite) return;
-    let forecast = contactForecasts.get(selectedSatellite.id);
-    if (!forecast || selectedSnapshot.elapsedSeconds >= forecast.computedAt + 900
-      || (forecast.window && selectedSnapshot.elapsedSeconds > forecast.window.endsAtSeconds)) {
-      const windows = predictGroundContactWindows(
-        selectedSatellite,
-        surfaceObjects,
-        selectedSnapshot.elapsedSeconds,
-        selectedSnapshot.elapsedSeconds + CONTACT_FORECAST_HORIZON_SECONDS,
-        { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, maximumWindowsPerStation: 1 },
-      );
-      const active = selectedSnapshot.stationContacts.find((contact) => contact.available);
-      forecast = {
-        computedAt: selectedSnapshot.elapsedSeconds,
-        window: active
-          ? windows.find((window) => window.stationId === active.station.id)
-          : windows[0],
-      };
-      contactForecasts.set(selectedSatellite.id, forecast);
-    }
-    renderSnapshot(selectedSnapshot, selectedSatellite, forecast.window);
+    const nextWindow = forecasts.get(selectedSatellite.id);
+    renderSnapshot(selectedSnapshot, nextWindow);
     renderSelectedSpacecraft(selectedSatellite, selectedSnapshot, operationalLoop.getPowerSnapshot(selectedSatellite.id), groundOperations, simulationRuntime, focusCellOnMap);
   };
 

@@ -9,7 +9,25 @@
   </head>
   <body>
     <div id="app">
-      <main class="sim-shell">
+      <main class="sim-shell" data-layout="split">
+        <div class="mini-globe" aria-label="Compact globe and satellite orbit overview" aria-hidden="true">
+          <svg class="mini-globe-graphic" viewBox="0 0 180 180" role="presentation">
+            <defs><clipPath id="mini-globe-clip"><circle cx="90" cy="90" r="64" /></clipPath></defs>
+            <circle cx="90" cy="90" r="64" fill="#0b202b" stroke="#73d7c1" stroke-opacity=".55" />
+            <g class="mini-globe-grid" clip-path="url(#mini-globe-clip)">
+              <ellipse cx="90" cy="90" rx="28" ry="64" />
+              <ellipse cx="90" cy="90" rx="52" ry="64" />
+              <ellipse cx="90" cy="90" rx="64" ry="22" />
+              <ellipse cx="90" cy="90" rx="64" ry="45" />
+            </g>
+            <g class="mini-globe-orbits" aria-hidden="true">
+              <ellipse cx="90" cy="90" rx="78" ry="31" transform="rotate(-28 90 90)" />
+              <ellipse cx="90" cy="90" rx="78" ry="31" transform="rotate(34 90 90)" />
+            </g>
+            <g id="mini-globe-satellites"></g>
+          </svg>
+          <span>ORBIT OVERVIEW</span>
+        </div>
         <section class="globe-stage" aria-label="Earth and satellite visualization">
           <div id="globe" class="globe"></div>
           <div class="top-bar">
@@ -71,6 +89,11 @@
           </div>
         </section>
 
+        <div class="layout-switcher" role="group" aria-label="Collapse or expand workspace sections">
+          <button type="button" data-layout-direction="left" aria-label="Collapse information section" title="Collapse information section"><span aria-hidden="true">←</span></button>
+          <button type="button" data-layout-direction="right" aria-label="Collapse map section" title="Collapse map section"><span aria-hidden="true">→</span></button>
+        </div>
+
         <section class="operations-panel" aria-label="Management data">
           <header class="panel-header">
             <div>
@@ -92,42 +115,10 @@
           <section class="management-tabpanel" id="panel-summary" role="tabpanel" aria-labelledby="tab-summary" tabindex="0">
           <div class="summary-intro">
             <p class="eyebrow">LIVE WORLD MODEL</p>
-            <p>Prototype spacecraft and Earth conditions update as the simulation runs. Review company cash and operating results in the Finance &amp; Growth view.</p>
             <div class="summary-company-metric"><span>COMPANY CASH</span><strong id="summary-company-cash">$0.00</strong><span class="summary-cash-warning" id="summary-company-warning" hidden>NEGATIVE BALANCE</span></div>
-            <div class="summary-company-metric"><span>FLEET</span><strong id="summary-fleet-count">1 SPACECRAFT</strong></div>
+            <div class="summary-company-metric"><span>3-DAY AVG DAILY REVENUE</span><strong id="summary-average-daily-revenue">$0.00</strong></div>
           </div>
-          <section class="satellite-card" aria-labelledby="satellite-name">
-            <div class="satellite-card-top">
-              <div class="satellite-identity">
-                <div class="satellite-symbol" aria-hidden="true"><span></span></div>
-                <div>
-                  <p class="eyebrow" id="satellite-identifier">SPACECRAFT 001</p>
-                  <h2 id="satellite-name">Asteria-1</h2>
-                </div>
-              </div>
-              <span class="status-pill status-good" id="sat-status"><i></i> TRACKED</span>
-            </div>
-            <div class="satellite-position">
-              <div>
-                <span class="metric-label">SUBSATELLITE POINT</span>
-                <strong id="sat-coordinate">—</strong>
-              </div>
-              <div class="altitude-value">
-                <span class="metric-label">ALTITUDE</span>
-                <strong id="sat-altitude">—</strong>
-              </div>
-            </div>
-            <div class="satellite-state-row">
-              <div class="state-item">
-                <span class="state-glyph sun-glyph" aria-hidden="true">☼</span>
-                <span class="state-copy"><small>POWER SOURCE</small><strong id="sat-sun-state">—</strong></span>
-              </div>
-              <div class="state-item">
-                <span class="state-glyph link-glyph" aria-hidden="true">⌁</span>
-                <span class="state-copy"><small>GROUND CONTACT</small><strong id="sat-contact-state">—</strong></span>
-              </div>
-            </div>
-          </section>
+          <section class="fleet-summary-cards" id="summary-satellite-cards" aria-label="Spacecraft status"></section>
 
           <section class="section-block" aria-labelledby="world-state-title">
             <div class="section-heading">
@@ -262,6 +253,7 @@
                       <th scope="col">Site status</th>
                       <th scope="col">Uplink rate (Mbps)</th>
                       <th scope="col">Downlink rate (Mbps)</th>
+                      <th scope="col">Contact cost ($/min)</th>
                       <th scope="col">Antenna assignment</th>
                     </tr>
                   </thead>

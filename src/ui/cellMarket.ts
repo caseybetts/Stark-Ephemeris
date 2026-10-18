@@ -48,11 +48,14 @@ export async function setupCellMarket(
     const message = document.createElement("p");
     message.className = "cell-loading";
     message.setAttribute("role", "alert");
-    message.textContent = "The cell data could not be loaded. The rest of the simulation is still available.";
+    message.textContent = "The cell market could not be initialized. The rest of the simulation is still available.";
+    const detail = document.createElement("small");
+    detail.className = "cell-load-error-detail";
+    detail.textContent = error instanceof Error ? error.message : String(error);
     const retry = document.createElement("button");
     retry.type = "button"; retry.className = "cell-button"; retry.textContent = "Retry cell data";
     retry.addEventListener("click", () => void setupCellMarket(viewer, actions, onMounted));
-    panel.append(message, retry);
+    panel.append(message, detail, retry);
   }
 }
 
@@ -122,7 +125,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   const mapKey = document.createElement("aside");
   mapKey.className = "cell-map-key";
   mapKey.setAttribute("aria-label", "Cell map legend");
-  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span><button type="button" class="cell-overview">World view ↗</button></div><label class="cell-map-select-label">Land Categories<select id="cell-land-layer" aria-label="Land Categories"></select></label><label class="cell-map-select-label">Planning<select id="cell-planning-layer" aria-label="Planning"></select></label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><div class="cell-planning-key"><span><i class="planning-outline"></i>Scheduled cell</span><span><i class="planning-imaging"></i>Imaging target / line</span></div><p>Zoom for boundaries · Click to inspect</p>';
+  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span></div><label class="cell-map-select-label">Land Categories<select id="cell-land-layer" aria-label="Land Categories"></select></label><label class="cell-map-select-label">Planning<select id="cell-planning-layer" aria-label="Planning"></select></label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><div class="cell-planning-key"><span><i class="planning-outline"></i>Scheduled cell</span><span><i class="planning-imaging"></i>Imaging target / line</span></div><p>Zoom for boundaries · Click to inspect</p>';
   document.querySelector(".globe-stage")!.append(mapKey);
   const landLayerSelect = mapKey.querySelector<HTMLSelectElement>("#cell-land-layer")!;
   const planningSelect = mapKey.querySelector<HTMLSelectElement>("#cell-planning-layer")!;
@@ -147,7 +150,6 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     selectCell(index, false, route);
     document.querySelector<HTMLButtonElement>("#tab-orders")!.click();
   }, () => market, nowSeconds);
-  mapKey.querySelector("button")!.addEventListener("click", () => map.overview());
   function setCategory() {
     selectedCategoryId = landLayerSelect.value || null;
     map.setCategory(selectedCategoryId);

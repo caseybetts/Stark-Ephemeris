@@ -20,7 +20,7 @@ Record revenue from the existing `image-downlinked` event using its frozen captu
 
 ### Operating costs — proposal
 
-For an initial playable economy, charge simple recurring operating costs daily, with configurable rates for each configured spacecraft and ground station. Generate entries at exact day boundaries as time advances so large and small time steps produce the same ledger. These costs are placeholders for balance and should be visible as their own categories. The sample rates are $100 per spacecraft-day for general mission operations and $25 per station-day; they are intentionally simple values, not real-world operating costs. The spacecraft charge does not consume propellant or affect performance.
+For an initial playable economy, charge simple recurring operating costs daily, with configurable rates for each configured spacecraft and ground station. Generate entries at exact day boundaries as time advances so large and small time steps produce the same ledger. These costs are placeholders for balance and should be visible as their own categories. The sample rates are $100 per spacecraft-day for general mission operations and $25 per station-day; they are intentionally simple values, not real-world operating costs. The spacecraft charge does not consume propellant or affect performance. Also charge each station's independently configured per-minute rate while its antenna is assigned to a spacecraft; the current sample rate is $100 per contact minute.
 
 Allow cash to fall below zero and show a clear low/negative-cash warning. Do not stop routine operations or downlink settlement because of a negative balance. Purchases and other discretionary spending can still validate affordability in BIZ-02.
 
@@ -42,6 +42,7 @@ Show current cash, cumulative realized revenue, cumulative operating costs, and 
 ## Implemented prototype behavior
 
 - Charges $100 per configured spacecraft-day and $25 per configured ground-station-day at exact simulation-day boundaries. Rates are centralized, integer-cent configuration values and remain sample balance inputs.
+- Charges each station's configured contact rate for antenna-assigned contact intervals. Cumulative sub-cent fractions are rounded to the nearest cent; current stations use $100 per contact minute.
 - Credits a frozen image quote once on full downlink; capture, partial transfer, and deletion create no cash revenue.
 - Allows a negative balance and shows a warning while routine operations continue.
 - Finance & Growth reports whole-run cash, net cash movement, realized revenue, operating costs, capital spending, net operating result, and a newest-first ledger with timestamp, category, source, and amount.

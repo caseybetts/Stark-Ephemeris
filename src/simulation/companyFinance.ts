@@ -6,6 +6,7 @@ export type FinanceEntryKind =
   | "downlink-revenue"
   | "spacecraft-operating-cost"
   | "ground-station-operating-cost"
+  | "ground-station-contact-cost"
   | "spacecraft-procurement";
 
 export type FinanceEntry = {
@@ -70,6 +71,8 @@ export class CompanyFinance {
   private operatingCostsCentsValue = 0;
   private capitalSpendingCentsValue = 0;
   private accruedThroughDay = 0;
+  private contactSecondsByStation = new Map<string, number>();
+  private contactCostCentsByStation = new Map<string, number>();
   private revisionValue = 0;
 
   constructor(configuration: CompanyFinanceConfiguration = {}) {
@@ -90,6 +93,42 @@ export class CompanyFinance {
   get realizedRevenueUsd(): number { return this.realizedRevenueCentsValue / 100; }
   get spacecraftCostUsdPerDay(): number { return this.spacecraftCostCentsPerDay / 100; }
   get groundStationCostUsdPerDay(): number { return this.groundStationCostCentsPerDay / 100; }
+
+  getAverageDailyRevenueCents(timeSeconds: number, dayCount = 3): number {
+    if (!Number.isFinite(timeSeconds) || timeSeconds < 0) throw new RangeError("Finance time must be finite and non-negative");
+    if (!Number.isSafeInteger(dayCount) || dayCount <= 0) throw new RangeError("Average period must be a positive number of days");
+    const currentDay = Math.floor(timeSeconds / SIMULATION_DAY_SECONDS);
+    const firstDay = Math.max(0, currentDay - dayCount + 1);
+    const startSeconds = firstDay * SIMULATION_DAY_SECONDS;
+    const endSeconds = (currentDay + 1) * SIMULATION_DAY_SECONDS;
+    const revenueCents = this.entries.reduce((total, entry) =>
+      entry.kind === "downlink-revenue"
+        && entry.timeSeconds >= startSeconds
+        && entry.timeSeconds < endSeconds
+        ? total + entry.amountCents
+        : total,
+    0);
+    return Math.round(revenueCents / (currentDay - firstDay + 1));
+  }
+
+  getAverageDailyGroundStationExpenseCents(stationId: string, timeSeconds: number, dayCount = 3): number {
+    if (!stationId.trim()) throw new Error("Ground station ID is required");
+    if (!Number.isFinite(timeSeconds) || timeSeconds < 0) throw new RangeError("Finance time must be finite and non-negative");
+    if (!Number.isSafeInteger(dayCount) || dayCount <= 0) throw new RangeError("Average period must be a positive number of days");
+    const currentDay = Math.floor(timeSeconds / SIMULATION_DAY_SECONDS);
+    const firstDay = Math.max(0, currentDay - dayCount + 1);
+    const startSeconds = firstDay * SIMULATION_DAY_SECONDS;
+    const endSeconds = (currentDay + 1) * SIMULATION_DAY_SECONDS;
+    const expenseCents = this.entries.reduce((total, entry) =>
+      entry.sourceId === stationId
+        && (entry.kind === "ground-station-operating-cost" || entry.kind === "ground-station-contact-cost")
+        && entry.timeSeconds >= startSeconds
+        && entry.timeSeconds < endSeconds
+        ? total - entry.amountCents
+        : total,
+    0);
+    return Math.round(expenseCents / (currentDay - firstDay + 1));
+  }
 
   recordDownlinkRevenue(eventId: string, imageId: string, timeSeconds: number, revenueUsd: number): FinanceEntry {
     if (!eventId.trim() || !imageId.trim()) throw new Error("Settlement and image IDs are required");
@@ -183,6 +222,42 @@ export class CompanyFinance {
     }
   }
 
+  /** Charge for allocated antenna time, rounding cumulative fractional cents to the nearest cent. */
+  recordGroundStationContactTime(
+    stationId: string,
+    startsAtSeconds: number,
+    endsAtSeconds: number,
+    costUsdPerMinute: number,
+  ): FinanceEntry | null {
+    if (!stationId.trim()) throw new Error("Ground station ID is required");
+    if (!Number.isFinite(startsAtSeconds) || startsAtSeconds < 0
+      || !Number.isFinite(endsAtSeconds) || endsAtSeconds < startsAtSeconds) {
+      throw new RangeError("Ground station contact interval must be finite and non-negative");
+    }
+    const rateCentsPerMinute = dollarsToCents(costUsdPerMinute, "Ground station contact rate");
+    if (endsAtSeconds === startsAtSeconds || rateCentsPerMinute === 0) return null;
+
+    const durationSeconds = endsAtSeconds - startsAtSeconds;
+    const totalContactSeconds = (this.contactSecondsByStation.get(stationId) ?? 0) + durationSeconds;
+    const totalCostCents = Math.round(totalContactSeconds * rateCentsPerMinute / 60);
+    const previouslyChargedCents = this.contactCostCentsByStation.get(stationId) ?? 0;
+    const amountCents = totalCostCents - previouslyChargedCents;
+    if (!Number.isSafeInteger(totalCostCents) || !Number.isSafeInteger(amountCents)) {
+      throw new RangeError("Ground station contact cost exceeds the supported range");
+    }
+    this.contactSecondsByStation.set(stationId, totalContactSeconds);
+    if (amountCents <= 0) return null;
+
+    this.contactCostCentsByStation.set(stationId, totalCostCents);
+    return this.append({
+      id: `operating-cost:ground-station-contact:${stationId}:total:${totalCostCents}`,
+      timeSeconds: endsAtSeconds,
+      kind: "ground-station-contact-cost",
+      sourceId: stationId,
+      amountCents: -amountCents,
+    });
+  }
+
   getSnapshot(): CompanyFinanceSnapshot {
     return {
       startingCashCents: this.startingCashCents,
@@ -206,6 +281,8 @@ export class CompanyFinance {
     this.operatingCostsCentsValue = 0;
     this.capitalSpendingCentsValue = 0;
     this.accruedThroughDay = 0;
+    this.contactSecondsByStation.clear();
+    this.contactCostCentsByStation.clear();
     this.revisionValue += 1;
   }
 
@@ -234,6 +311,7 @@ export class CompanyFinance {
         break;
       case "spacecraft-operating-cost":
       case "ground-station-operating-cost":
+      case "ground-station-contact-cost":
         if (entry.amountCents > 0) throw new RangeError("Operating cost cannot be positive");
         this.operatingCostsCentsValue -= entry.amountCents;
         break;

@@ -228,6 +228,17 @@ export class OperationalLoop {
       this.groundOperations.advanceBy(end - now, [...this.fleetById.values()], this.stations,
         (startsAtSeconds, endsAtSeconds, contacts) => {
           const market = this.getMarket();
+          for (const contact of contacts) {
+            const contactRate = contact.station.groundStationDetails?.contactCostUsdPerMinute;
+            if (contact.station.kind === "ground-station" && contactRate !== undefined) {
+              this.finance.recordGroundStationContactTime(
+                contact.station.id,
+                startsAtSeconds,
+                endsAtSeconds,
+                contactRate,
+              );
+            }
+          }
           const radioContacts = contacts.filter(contact => this.powerOperations.radioIsRunning(contact.satelliteId));
           const deliveryBoundary = market
             ? this.imageryOperations.nextDeliveryBoundary(market, startsAtSeconds, radioContacts)

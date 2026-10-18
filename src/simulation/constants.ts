@@ -45,7 +45,7 @@ export const INITIAL_FLEET: FleetState = {
   satellites: [DEFAULT_SATELLITE],
 };
 
-// Prototype site data only. Rates are configurable placeholders and do not yet affect downlink simulation.
+// Prototype site data only. Each station's contact charge can be tuned independently.
 export const SURFACE_OBJECTS = [
   {
     id: "colorado-relay",
@@ -57,6 +57,7 @@ export const SURFACE_OBJECTS = [
       operationalStatus: "available",
       uplinkRateMbps: 10,
       downlinkRateMbps: 100,
+      contactCostUsdPerMinute: 100,
     },
   },
   {
@@ -69,6 +70,33 @@ export const SURFACE_OBJECTS = [
       operationalStatus: "available",
       uplinkRateMbps: 10,
       downlinkRateMbps: 100,
+      contactCostUsdPerMinute: 100,
+    },
+  },
+  {
+    id: "perth-relay",
+    name: "Perth Relay",
+    kind: "ground-station",
+    location: { latitudeDeg: -31.9505, longitudeDeg: 115.8605 },
+    description: "Ground station · Perth",
+    groundStationDetails: {
+      operationalStatus: "available",
+      uplinkRateMbps: 10,
+      downlinkRateMbps: 100,
+      contactCostUsdPerMinute: 100,
+    },
+  },
+  {
+    id: "santiago-relay",
+    name: "Santiago Relay",
+    kind: "ground-station",
+    location: { latitudeDeg: -33.4489, longitudeDeg: -70.6693 },
+    description: "Ground station · Santiago",
+    groundStationDetails: {
+      operationalStatus: "available",
+      uplinkRateMbps: 10,
+      downlinkRateMbps: 100,
+      contactCostUsdPerMinute: 100,
     },
   },
   {

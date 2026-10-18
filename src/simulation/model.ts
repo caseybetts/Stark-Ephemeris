@@ -16,6 +16,8 @@ export type GroundStationSiteDetails = {
   operationalStatus: "available" | "down";
   uplinkRateMbps: number;
   downlinkRateMbps: number;
+  /** Cost charged per minute while this station's antenna is assigned to a spacecraft. */
+  contactCostUsdPerMinute: number;
 };
 
 export type SurfaceObject = {

@@ -33,9 +33,9 @@ These are intended subject areas; the specific formulas and interactions remain 
 
 ### Agreed layout and navigation
 
-- Keep the globe/visualization at the top of the screen and show the selected data view below it.
+- **Workspace layout:** Put management information on the left and the globe/visualization on the right. Center arrow tabs collapse either side in split view and expand the hidden side when one view is maximized. When the map is hidden, retain a compact upper-right wireframe globe with visible orbit paths and current satellite markers. This changes presentation only; tab selection and simulation state persist across layout changes.
 - The data area has tabs for **Summary**, **Spacecraft**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default tab and replaces the current single readout as the overview.
-- Summary brings together fleet-wide and company information, current exceptions, and the operational indicators that need attention.
+- Summary brings together fleet-wide and company information, current exceptions, and the operational indicators that need attention. Each spacecraft card shows its name, payload status, power status, and next ground-station contact with time remaining. Its ground-station list shows station name, operational status, and average daily expense over the latest three simulation days (or all available days during the first two days). Summary also shows company cash and a running average of realized daily revenue over that same period.
 - Use tables wherever they suit lists and comparisons, especially in Spacecraft, Orders, and Ground Stations. Selecting a row should make its subject easy to locate in the globe view.
 - The Orders view includes a searchable cell market list. Globe controls split **Land Categories** (priority-contributing category fill) from **Planning** (scheduled and active-work outlines).
 - The Orders globe supports maximum cell priority, current available priority, current available dollar value, scheduled capture cells, and an active satellite-to-cell imaging view. Dollar value on the map is potential payout; only a completed downlink realizes revenue.
@@ -233,7 +233,7 @@ The current prototype exposes the geographic grid in Orders and on the globe, wi
 
 ## Company finances — BIZ-01 prototype
 
-Revenue enters company cash only when an image is fully downlinked, using its frozen capture-time quote. The ledger shows this income alongside daily sample operating charges of $100 per configured spacecraft and $25 per configured ground station. Cash may become negative; show a warning without stopping routine operations or settlement. Starting funds and purchases belong to BIZ-02. See the [BIZ-01 finance design](BIZ_01_FINANCE_DESIGN.md).
+Revenue enters company cash only when an image is fully downlinked, using its frozen capture-time quote. The ledger shows this income alongside daily sample operating charges of $100 per configured spacecraft and $25 per configured ground station, plus each station's independently configured contact-time rate (currently $100 per minute while its antenna is assigned). Cash may become negative; show a warning without stopping routine operations or settlement. Starting funds and purchases belong to BIZ-02. See the [BIZ-01 finance design](BIZ_01_FINANCE_DESIGN.md).
 
 ## Company growth — BIZ-02 prototype
 
