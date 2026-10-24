@@ -34,12 +34,13 @@ These are intended subject areas; the specific formulas and interactions remain 
 ### Agreed layout and navigation
 
 - **Workspace layout:** Put management information on the left and the globe/visualization on the right. Center arrow tabs collapse either side in split view and expand the hidden side when one view is maximized. When the map is hidden, retain a compact upper-right wireframe globe with visible orbit paths and current satellite markers. This changes presentation only; tab selection and simulation state persist across layout changes.
-- The data area has tabs for **Summary**, **Spacecraft**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default tab and replaces the current single readout as the overview.
+- The data area has tabs for **Summary**, **Spacecraft**, **Schedule**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default tab and replaces the current single readout as the overview.
 - Summary brings together fleet-wide and company information, current exceptions, and the operational indicators that need attention. Each spacecraft card shows its name, payload status, power status, and next ground-station contact with time remaining. Its ground-station list shows station name, operational status, and average daily expense over the latest three simulation days (or all available days during the first two days). Summary also shows company cash and a running average of realized daily revenue over that same period.
 - Use tables wherever they suit lists and comparisons, especially in Spacecraft, Orders, and Ground Stations. Selecting a row should make its subject easy to locate in the globe view.
 - The Orders view includes a searchable cell market list. Globe controls split **Land Categories** (priority-contributing category fill) from **Planning** (scheduled and active-work outlines).
 - The Orders globe supports maximum cell priority, current available priority, current available dollar value, scheduled capture cells, and an active satellite-to-cell imaging view. Dollar value on the map is potential payout; only a completed downlink realizes revenue.
 - The selected spacecraft's Spacecraft view has a collapsible current onboard TEL. It lists commands in onboard order with completed, in-progress, next, or queued status; capture-cell entries can focus that cell on the globe. It distinguishes no ground plan prepared from a plan waiting for contact. This is a readout of existing operational state, not a new scheduling or upload rule.
+- The Schedule view has one collapsible table per spacecraft for every cell capture in its current onboard TEL. Each cell row shows current overall priority points, total available dollar value, and calculated available priority points for each land-use category. It reads the uploaded TEL and current market state; ground-side plan changes remain absent until contact upload.
 
 ### Information each view should support
 

@@ -27,15 +27,16 @@ This document records implementation constraints and architecture direction. The
 ### Agreed direction
 
 - Preserve the macro layout with the globe/visualization at the top and the active data view below it.
-- The data view uses tabs for **Summary**, **Spacecraft**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default and replaces the current single readout as the overview.
+- The data view uses tabs for **Summary**, **Spacecraft**, **Schedule**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default and replaces the current single readout as the overview.
 - Summary combines fleet-wide state, company information, operational exceptions, and key indicators that need attention.
 - Prefer tables for lists and comparisons, especially spacecraft, orders, and ground stations. Selecting a row should connect that record to its object or location on the globe.
 - The Orders view includes a searchable, filterable, sortable cell-market list and cell details. Its map controls can show category exposure, calculated cell value, or repeat-purchase state once defined.
 - The Spacecraft view presents one row per configured satellite, current modeled position and state, and a detail view for the selected spacecraft. Selection highlights that spacecraft's globe marker and orbit.
+- The Schedule view groups each spacecraft's current onboard TEL in a collapsible table. List every scheduled cell capture with current total available priority points, current total available payout, and available priority points from each land-use category. Values are derived from the current market, player priority rates, recovery state, and simulation time; this view does not edit the TEL.
 
 ### Open interface decisions
 
-- Exact columns, summary metrics, sorting defaults, and detail-panel contents for each tab. The Spacecraft prototype uses orbit altitude, subsatellite point, sunlight/eclipse, and antenna link/wait state; its detail view also shows inclination. Other accessibility refinements remain open.
+- Exact columns, summary metrics, sorting defaults, and detail-panel contents for Summary, Spacecraft, Orders, Ground Stations, and Finance & Growth. The Spacecraft prototype uses orbit altitude, subsatellite point, sunlight/eclipse, and antenna link/wait state; its detail view also shows inclination. Other accessibility refinements remain open.
 - How selected table rows focus or highlight objects in the globe, and how that interaction works on narrow screens.
 - Whether tables should support bulk actions as fleet and order volumes grow.
 
@@ -62,6 +63,7 @@ This document records implementation constraints and architecture direction. The
 - Designers and game content should describe surface locations in familiar latitude/longitude terms, with altitude/height where needed. Coordinate conversion should be an implementation detail.
 - The displayed globe stays fixed while satellite markers and their paths move relative to the surface as game time advances.
 - Keep satellite altitude to scale in the visualization. Make the satellite marker visible with a glowing dot; an orbit path can be shown optionally. Marker size is a visual choice and does not change simulated position or altitude.
+- Show the displayed 3D orbit path as half an orbit ahead and half an orbit behind each satellite's current position. Keep its orbital geometry stable and move it relative to the fixed globe as simulation time advances; it does not change the propagated satellite state.
 - Use the current 550 km / 53° orbit as a configurable suggestion. Each launch can set its own altitude, inclination, ascending node, and phase before it enters the fleet.
 - Approximate ground-station contact with a constant distance threshold for the prototype. Treat this as a gameplay approximation of visibility; it can later become altitude-dependent or use a more exact line-of-sight/elevation rule.
 

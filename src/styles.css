@@ -188,6 +188,27 @@ button { font: inherit; }
 .spacecraft-plan-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .preview-button-primary { border-color: rgba(115, 215, 193, 0.5); background: rgba(115, 215, 193, 0.14); }
 .spacecraft-plan-status { grid-column: 1 / -1; min-height: 1.5em; }
+.schedule-panel { min-height: max(420px, calc(100vh - clamp(300px, 42vh, 480px) - 158px)); padding: 20px 24px 24px; }
+.schedule-panel > .table-explainer { margin: 0 0 14px; }
+.schedule-spacecraft-list { display: grid; gap: 10px; }
+.schedule-spacecraft { overflow: hidden; border: 1px solid rgba(175, 207, 205, 0.12); border-radius: 7px; background: rgba(16, 30, 38, 0.45); }
+.schedule-spacecraft > summary { display: flex; min-height: 47px; align-items: center; gap: 12px; padding: 8px 13px; color: #dbe7e4; cursor: pointer; list-style: none; }
+.schedule-spacecraft > summary::-webkit-details-marker { display: none; }
+.schedule-spacecraft > summary::before { color: var(--mint); content: "▸"; font-size: 12px; }
+.schedule-spacecraft[open] > summary::before { content: "▾"; }
+.schedule-spacecraft-summary strong { min-width: 110px; font-size: 11px; font-weight: 600; }
+.schedule-spacecraft-status { color: #90aaa9; font-size: 8px; letter-spacing: 0.07em; }
+.schedule-capture-count { margin-left: auto; color: #aec7c0; font-size: 8px; letter-spacing: 0.1em; white-space: nowrap; }
+.schedule-empty { margin: 0; padding: 13px 18px 16px 36px; color: #8ea4a5; font-size: 10px; line-height: 1.5; }
+.schedule-table-scroll { min-height: 120px; max-height: min(44vh, 430px); flex: none; }
+.schedule-table { width: max(100%, 1500px); height: auto; }
+.schedule-table thead th { position: sticky; top: 0; z-index: 2; }
+.schedule-table th:first-child { min-width: 170px; }
+.schedule-table td.schedule-number-cell { color: #c2d2ce; font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; text-align: right; white-space: nowrap; }
+.schedule-cell-link { display: block; border: 0; padding: 0; background: none; color: #d1e8df; cursor: pointer; font: inherit; text-align: left; text-decoration: underline; text-decoration-color: rgba(119, 205, 178, 0.42); text-underline-offset: 3px; }
+.schedule-cell-link:hover, .schedule-cell-link:focus-visible { color: #8de1c4; }
+.schedule-command-label { display: block; margin-top: 4px; color: #71898d; font-size: 8px; font-weight: 400; white-space: normal; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 .fleet-summary-cards { display: grid; gap: 8px; margin: 13px 16px 2px; }
 .satellite-card { display: grid; grid-template-columns: minmax(90px, 0.85fr) minmax(0, 2.15fr); align-items: center; gap: 12px; margin: 0; padding: 10px 12px; border: 1px solid rgba(115, 215, 193, 0.16); border-radius: 9px; background: linear-gradient(135deg, rgba(26, 57, 59, 0.55), rgba(15, 31, 39, 0.75) 55%, rgba(14, 27, 35, 0.82)); }
 .satellite-card-name { min-width: 0; margin: 0; overflow-wrap: anywhere; color: #f1f5eb; font-size: 12px; font-weight: 600; }

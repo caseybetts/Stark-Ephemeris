@@ -15,18 +15,18 @@ export type CellCategoryExposureDefinition = {
  */
 export const PROPOSED_CELL_CATEGORIES: readonly CellCategoryExposureDefinition[] = [
   { id: "coastal-cells", label: "Coastal cells", unit: "coastal-cell", sourceField: "flags.coastal", read: (grid, index) => grid.value(index, "coastal") },
-  { id: "urban", label: "Urban footprint", unit: "km2", sourceField: "urbanAreaDeciKm2", read: (grid, index) => grid.urbanAreaDeciKm2[index] / 10 },
+  { id: "urban", label: "Urban Footprint", unit: "km2", sourceField: "urbanAreaDeciKm2", read: (grid, index) => grid.urbanAreaDeciKm2[index] / 10 },
   { id: "cropland", label: "Cropland", unit: "km2", sourceField: "croplandHa", read: (grid, index) => grid.croplandHa[index] / 100 },
   { id: "pasture", label: "Pasture", unit: "km2", sourceField: "pastureHa", read: (grid, index) => grid.pastureHa[index] / 100 },
-  { id: "cities", label: "Mapped populated-place records", unit: "city-record", sourceField: "cityCounts", read: (grid, index) => grid.cityCounts[index] },
-  { id: "ports", label: "Mapped port records", unit: "port-record", sourceField: "portCounts", read: (grid, index) => grid.portCounts[index] },
-  { id: "power-plants", label: "Mapped power-plant records", unit: "plant-record", sourceField: "powerPlantCounts", read: (grid, index) => grid.powerPlantCounts[index] },
-  { id: "power-capacity", label: "Mapped power capacity", unit: "MW", sourceField: "powerCapacityMw", read: (grid, index) => grid.powerCapacityMw[index] },
-  { id: "oil-pipelines", label: "Mapped oil pipeline route features", unit: "route-feature", sourceField: "oilPipelineCounts", read: (grid, index) => grid.oilPipelineCounts[index] },
-  { id: "military-installations", label: "Military installation polygon presence", unit: "installation-polygon", sourceField: "militarySiteCounts", read: (grid, index) => grid.militarySiteCounts[index] },
-  { id: "data-centers", label: "Mapped data-center records/polygon presence", unit: "data-center-record-or-polygon", sourceField: "dataCenterCounts", read: (grid, index) => grid.dataCenterCounts[index] },
-  { id: "research-sites", label: "NOAA research station records", unit: "station-record", sourceField: "researchSiteCounts", read: (grid, index) => grid.researchSiteCounts[index] },
-  { id: "world-heritage", label: "Mapped World Heritage site records", unit: "site-record", sourceField: "monumentCounts", read: (grid, index) => grid.monumentCounts[index] },
+  { id: "cities", label: "Populated Record", unit: "city-record", sourceField: "cityCounts", read: (grid, index) => grid.cityCounts[index] },
+  { id: "ports", label: "Ports", unit: "port-record", sourceField: "portCounts", read: (grid, index) => grid.portCounts[index] },
+  { id: "power-plants", label: "Power-plants", unit: "plant-record", sourceField: "powerPlantCounts", read: (grid, index) => grid.powerPlantCounts[index] },
+  { id: "power-capacity", label: "Power Capacity", unit: "MW", sourceField: "powerCapacityMw", read: (grid, index) => grid.powerCapacityMw[index] },
+  { id: "oil-pipelines", label: "Oil Pipeline", unit: "route-feature", sourceField: "oilPipelineCounts", read: (grid, index) => grid.oilPipelineCounts[index] },
+  { id: "military-installations", label: "Military Installation", unit: "installation-polygon", sourceField: "militarySiteCounts", read: (grid, index) => grid.militarySiteCounts[index] },
+  { id: "data-centers", label: "Data-centers", unit: "data-center-record-or-polygon", sourceField: "dataCenterCounts", read: (grid, index) => grid.dataCenterCounts[index] },
+  { id: "research-sites", label: "NOAA Research Station", unit: "station-record", sourceField: "researchSiteCounts", read: (grid, index) => grid.researchSiteCounts[index] },
+  { id: "world-heritage", label: "World Heritage Sites", unit: "site-record", sourceField: "monumentCounts", read: (grid, index) => grid.monumentCounts[index] },
 ];
 
 /** Provides normalized exposures on demand without building per-cell objects. */

@@ -19,9 +19,13 @@ import {
   VerticalOrigin,
   Viewer,
 } from "cesium";
-import { SIMULATED_DAY_SECONDS } from "../simulation/constants";
 import type { SatelliteDefinition, SurfaceObject, WorldSnapshot } from "../simulation/model";
-import { rotateInertialToEarthFixed, satellitePositionInertial } from "../simulation/world";
+import { SIMULATED_DAY_SECONDS } from "../simulation/constants";
+import {
+  circularOrbitPeriodSeconds,
+  rotateInertialToEarthFixed,
+  satellitePositionInertial,
+} from "../simulation/world";
 import { earthFixedKilometersToCartesian, locationToCartesian } from "./coordinates";
 
 export type GlobeView = {
@@ -38,14 +42,18 @@ function inertialKilometersToCartesian(positionKm: { x: number; y: number; z: nu
   return new Cartesian3(positionKm.x * 1_000, positionKm.y * 1_000, positionKm.z * 1_000);
 }
 
-function orbitPathPositions(satellite: SatelliteDefinition): Cartesian3[] {
+function orbitArcPositions(
+  satellite: SatelliteDefinition,
+  startPhaseDeg: number,
+  endPhaseDeg: number,
+): Cartesian3[] {
   const path: Cartesian3[] = [];
-  const samples = 180;
+  const samples = 90;
 
   for (let index = 0; index <= samples; index += 1) {
-    const phaseDegrees = satellite.orbit.initialPhaseDeg + (360 * index) / samples;
+    const phaseDegrees = startPhaseDeg + ((endPhaseDeg - startPhaseDeg) * index) / samples;
     const position = satellitePositionInertial(
-      { ...satellite.orbit, initialPhaseDeg: phaseDegrees },
+      { ...satellite.orbit, ascendingNodeDeg: 0, inclinationDeg: 0, initialPhaseDeg: phaseDegrees },
       0,
     );
     path.push(inertialKilometersToCartesian(position));
@@ -54,13 +62,77 @@ function orbitPathPositions(satellite: SatelliteDefinition): Cartesian3[] {
   return path;
 }
 
-function orbitEarthFixedMatrix(elapsedSeconds: number): Matrix4 {
+function orbitEarthFixedMatrix(satellite: SatelliteDefinition, elapsedSeconds: number): Matrix4 {
+  const radians = Math.PI / 180;
   const earthAngle = (2 * Math.PI * elapsedSeconds) / SIMULATED_DAY_SECONDS;
-  return Matrix4.fromRotationTranslation(
+  const currentPhase = (satellite.orbit.initialPhaseDeg * radians)
+    + (2 * Math.PI * elapsedSeconds) / circularOrbitPeriodSeconds(satellite.orbit.altitudeKm);
+  const inclination = satellite.orbit.inclinationDeg * radians;
+  const ascendingNode = satellite.orbit.ascendingNodeDeg * radians;
+  const orbitalOrientation = Matrix3.multiply(
+    Matrix3.fromRotationZ(ascendingNode),
+    Matrix3.multiply(
+      Matrix3.fromRotationX(inclination),
+      Matrix3.fromRotationZ(currentPhase),
+      new Matrix3(),
+    ),
+    new Matrix3(),
+  );
+  const earthFixedOrientation = Matrix3.multiply(
     Matrix3.fromRotationZ(-earthAngle),
+    orbitalOrientation,
+    new Matrix3(),
+  );
+  return Matrix4.fromRotationTranslation(
+    earthFixedOrientation,
     Cartesian3.ZERO,
     new Matrix4(),
   );
+}
+
+function createOrbitPrimitive(
+  satellite: SatelliteDefinition,
+  startPhaseDeg: number,
+  endPhaseDeg: number,
+  color: Color,
+): Primitive {
+  return new Primitive({
+    geometryInstances: new GeometryInstance({
+      geometry: new PolylineGeometry({
+        positions: orbitArcPositions(satellite, startPhaseDeg, endPhaseDeg),
+        width: 2,
+        vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
+      }),
+    }),
+    appearance: new PolylineMaterialAppearance({
+      material: Material.fromType("PolylineGlow", {
+        color,
+        glowPower: 0.12,
+      }),
+      translucent: true,
+    }),
+    modelMatrix: Matrix4.IDENTITY,
+    asynchronous: false,
+  });
+}
+
+function createOrbitVisual(satellite: SatelliteDefinition, selected: boolean, color: Color) {
+  const ahead = createOrbitPrimitive(
+    satellite,
+    0,
+    180,
+    color.withAlpha(selected ? 0.82 : 0.46),
+  );
+  const behind = createOrbitPrimitive(
+    satellite,
+    -180,
+    0,
+    color.withAlpha(selected ? 0.3 : 0.16),
+  );
+  const modelMatrix = orbitEarthFixedMatrix(satellite, 0);
+  ahead.modelMatrix = modelMatrix;
+  behind.modelMatrix = modelMatrix;
+  return { ahead, behind };
 }
 
 function addSurfaceObject(viewer: Viewer, object: SurfaceObject) {
@@ -166,26 +238,9 @@ export async function createGlobeView(
         verticalOrigin: VerticalOrigin.BOTTOM,
       },
     });
-    const orbit = viewer.scene.primitives.add(
-      new Primitive({
-        geometryInstances: new GeometryInstance({
-          geometry: new PolylineGeometry({
-            positions: orbitPathPositions(satellite),
-            width: 2,
-            vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
-          }),
-        }),
-        appearance: new PolylineMaterialAppearance({
-          material: Material.fromType("PolylineGlow", {
-            color: color.withAlpha(selectedInitially ? 0.74 : 0.4),
-            glowPower: 0.12,
-          }),
-          translucent: true,
-        }),
-        modelMatrix: orbitEarthFixedMatrix(0),
-        asynchronous: false,
-      }),
-    );
+    const orbit = createOrbitVisual(satellite, selectedInitially, color);
+    viewer.scene.primitives.add(orbit.ahead);
+    viewer.scene.primitives.add(orbit.behind);
     return { entity, orbit };
   };
   const satelliteVisuals = new Map<string, ReturnType<typeof createSatelliteVisual>>(
@@ -202,7 +257,8 @@ export async function createGlobeView(
       visual.entity.point!.pixelSize = new ConstantProperty(selected ? 13 : 9);
       visual.entity.point!.outlineWidth = new ConstantProperty(selected ? 3 : 2);
       visual.entity.label!.show = new ConstantProperty(selected);
-      visual.orbit.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.74 : 0.4);
+      visual.orbit.ahead.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.82 : 0.46);
+      visual.orbit.behind.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.3 : 0.16);
     });
     viewer.scene.requestRender();
   };
@@ -221,7 +277,11 @@ export async function createGlobeView(
         visual.entity.position = new ConstantPositionProperty(
           earthFixedKilometersToCartesian(snapshot.satelliteEarthFixedKm),
         );
-        visual.orbit.modelMatrix = orbitEarthFixedMatrix(snapshot.elapsedSeconds);
+        const satellite = satelliteDefinitions.find((item) => item.id === snapshot.satelliteId);
+        if (!satellite) continue;
+        const modelMatrix = orbitEarthFixedMatrix(satellite, snapshot.elapsedSeconds);
+        visual.orbit.ahead.modelMatrix = modelMatrix;
+        visual.orbit.behind.modelMatrix = modelMatrix;
       }
 
       const surfaceSnapshot = snapshots[0];
@@ -240,7 +300,8 @@ export async function createGlobeView(
     setSatellites(nextSatellites) {
       for (const visual of satelliteVisuals.values()) {
         viewer.entities.remove(visual.entity);
-        viewer.scene.primitives.remove(visual.orbit);
+        viewer.scene.primitives.remove(visual.orbit.ahead);
+        viewer.scene.primitives.remove(visual.orbit.behind);
       }
       satelliteVisuals.clear();
       satelliteDefinitions = [...nextSatellites];
@@ -257,7 +318,10 @@ export async function createGlobeView(
       applySelectedSatellite(satelliteId);
     },
     setTrackVisible(visible) {
-      for (const visual of satelliteVisuals.values()) visual.orbit.show = visible;
+      for (const visual of satelliteVisuals.values()) {
+        visual.orbit.ahead.show = visible;
+        visual.orbit.behind.show = visible;
+      }
       viewer.scene.requestRender();
     },
     setSurfaceObjectsVisible(visible) {

@@ -9,13 +9,13 @@ import type { CompanyFinance } from "./companyFinance";
  */
 export const PROTOTYPE_MARKET_PRICE_USD_PER_UNIT: Readonly<Record<string, number>> = {
   "coastal-cells": 100,
-  urban: 50,
-  cropland: 30,
-  pasture: 20,
+  urban: 10,
+  cropland: 2,
+  pasture: 1,
   cities: 60,
   ports: 40,
   "power-plants": 500,
-  "power-capacity": 150,
+  "power-capacity": 0.5,
   "oil-pipelines": 200,
   "military-installations": 200,
   "data-centers": 1000,

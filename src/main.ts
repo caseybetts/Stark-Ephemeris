@@ -14,6 +14,7 @@ import { CompanyFinance } from "./simulation/companyFinance";
 import { getSpacecraftEquipmentOption, quoteSpacecraftPurchase, purchaseSpacecraftWithEquipment } from "./simulation/spacecraftCatalog";
 import type { GeographicLocation, SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
 import { setupFinanceView } from "./ui/finance";
+import { setupScheduleView } from "./ui/schedule";
 
 declare global {
   interface Window {
@@ -809,6 +810,14 @@ async function start(): Promise<void> {
   });
   let refreshCellMarket: (() => void) | null = null;
   let focusCellOnMap: (index: number) => void = () => {};
+  const refreshSchedule = setupScheduleView({
+    root: document.querySelector<HTMLElement>("#panel-schedule")!,
+    getFleet: () => fleet,
+    groundOperations,
+    getMarket: () => cellMarket,
+    getElapsedSeconds: () => simulationRuntime.elapsedSeconds,
+    focusCell: index => focusCellOnMap(index),
+  });
   let selectedSatelliteEarthFixedKm: { x: number; y: number; z: number } | null = null;
   let captureSequence = 0;
   type DraftCapture = { id: string; cellIndex: number; target: GeographicLocation };
@@ -981,6 +990,7 @@ async function start(): Promise<void> {
       groundOperations,
       cellMarket,
     );
+    refreshSchedule();
 
     const selectedSnapshot = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId);
     const selectedSatellite = fleet.find(({ id }) => id === selectedSatelliteId);
