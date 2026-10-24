@@ -5,7 +5,7 @@ import type { CellGrid, CellLayer } from "../simulation/cells";
 import type { CellMarketState } from "../simulation/cellMarketState";
 import type { GeographicLocation } from "../simulation/model";
 import type { CellOperationalVisualization } from "../simulation/operationalLoop";
-import { categoryPriorityDisplayMaximum, createCellLayer } from "../rendering/cellLayer";
+import { categoryPriorityDisplayMaximum, createCellLayer, type CellPlanningLayer } from "../rendering/cellLayer";
 
 const count = (value: number) => value.toLocaleString();
 const money = (value: number) => value.toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -136,9 +136,10 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   planningSelect.add(new Option("No planning outline", "none"));
   planningSelect.add(new Option("Scheduled cells", "scheduled"));
   planningSelect.add(new Option("Satellite imaging a cell", "imaging"));
+  planningSelect.add(new Option("Maximum dollar value", "maximum-value"));
   planningSelect.value = "scheduled";
   let selectedCategoryId = landLayerSelect.value || null;
-  let lastPlanningLayer: "none" | "scheduled" | "imaging" = "scheduled";
+  let lastPlanningLayer: CellPlanningLayer = "scheduled";
   let selected = -1;
   let page = 0;
   let filtered = new Uint32Array();
@@ -150,26 +151,43 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     selectCell(index, false, route);
     document.querySelector<HTMLButtonElement>("#tab-orders")!.click();
   }, () => market, nowSeconds);
-  function setCategory() {
-    selectedCategoryId = landLayerSelect.value || null;
-    map.setCategory(selectedCategoryId);
+  function updateMapLayerLegend() {
+    const layerName = mapKey.querySelector<HTMLElement>(".cell-map-layer-name")!;
+    const ramp = mapKey.querySelector<HTMLElement>(".cell-map-ramp")!;
+    const scale = mapKey.querySelector<HTMLElement>(".cell-map-scale")!;
+    const planningKey = mapKey.querySelector<HTMLElement>(".cell-planning-key")!;
+    if (lastPlanningLayer === "maximum-value") {
+      layerName.textContent = "Maximum dollar value · centered cell dots";
+      ramp.dataset.palette = "value";
+      scale.textContent = "Log scale · blue low to red high";
+      planningKey.hidden = true;
+      element("cell-layer-note").textContent = "Centered dot colors show each cell’s maximum potential payout at full VAM, from blue (lower) through green, yellow, and orange to red (higher); this is not current available value or realized revenue.";
+      return;
+    }
+    planningKey.hidden = false;
     const category = market.exposures.definitions.find(item => item.id === selectedCategoryId);
-    mapKey.querySelector(".cell-map-layer-name")!.textContent = category ? category.label + " · current priority" : "No category fill";
-    (mapKey.querySelector(".cell-map-ramp") as HTMLElement).dataset.palette = "priority-now";
+    layerName.textContent = category ? category.label + " · current priority" : "No category fill";
+    ramp.dataset.palette = "priority-now";
     const maximum = category ? categoryPriorityDisplayMaximum(category.id, market) : 0;
-    mapKey.querySelector(".cell-map-scale")!.textContent = category
+    scale.textContent = category
       ? points(maximum) + " priority points maximum · translucent fill"
       : "Choose a category to show its priority contribution";
     element("cell-layer-note").textContent = category
       ? "Cell fill shows current " + category.label.toLowerCase() + " priority contribution: yellow (lower) to teal (higher)."
-      : "Cell fill shows the selected category’s current priority contribution.";
+      : "The selected category’s current priority contribution is shown as a translucent fill.";
+  }
+  function setCategory() {
+    selectedCategoryId = landLayerSelect.value || null;
+    map.setCategory(selectedCategoryId);
+    updateMapLayerLegend();
   }
   landLayerSelect.addEventListener("change", () => {
     setCategory();
   });
   planningSelect.addEventListener("change", () => {
-    lastPlanningLayer = planningSelect.value as typeof lastPlanningLayer;
+    lastPlanningLayer = planningSelect.value as CellPlanningLayer;
     map.setPlanningLayer(lastPlanningLayer);
+    updateMapLayerLegend();
   });
   map.setPlanningLayer(lastPlanningLayer);
   setCategory();

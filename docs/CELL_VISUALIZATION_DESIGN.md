@@ -8,7 +8,7 @@ Give the player a fast geographic read of where value and work are, while keepin
 
 ## Map modes and encoding
 
-The globe overlay has two independent selectors. **Land Categories** chooses one priority category and controls the translucent cell fill. **Planning** controls operational outlines and can be changed without clearing the category fill.
+The globe overlay has two independent selectors. **Land Categories** chooses one priority category and controls the translucent cell fill. **Planning** controls operational outlines or the maximum-dollar-value dot layer and can be changed without clearing the category fill.
 
 | Mode | What it shows | Encoding |
 | --- | --- | --- |
@@ -16,16 +16,17 @@ The globe overlay has two independent selectors. **Land Categories** chooses one
 | No planning outline | No scheduled or active work outlines | Category fill remains visible |
 | Scheduled cells | Capture cells on the selected spacecraft’s onboard plan or pending ground plan | Orange outline only |
 | Satellite imaging a cell | Current capture target and line from spacecraft to cell | Yellow target outline, marker, “IMAGING” label, and thick line of sight |
+| Maximum dollar value | Maximum potential payout for every eligible cell, assuming full VAM | Log-scaled blue-to-green-to-yellow-to-orange-to-red dots centered in each cell; category fill remains visible |
 
-Land Categories options come from the active market exposure definitions, so every category that contributes to priority is available, including military installations and coastal cells. Coastal cells are now a candidate binary exposure (1 for cells intersecting the coastline); its prototype rate and final market approval remain open. The selected category's available priority is normalized to that category's maximum at its current player rate. Selecting a cell still shows exact values and priority.
+Land Categories options come from the active market exposure definitions, so every category that contributes to priority is available, including military installations and coastal cells. Coastal cells are now a candidate binary exposure (1 for cells intersecting the coastline); its prototype rate and final market approval remain open. The selected category's available priority is normalized to that category's maximum at its current player rate. Selecting a cell still shows exact values and priority. Maximum dollar value sums each cell's category maximum payouts using current sample market prices, without applying recovery/VAM; its dot scale is logarithmic.
 
-Dollar values remain numeric in the Orders table and selected-cell details. The globe fill is reserved for the selected category's current priority contribution; it is not a cash or revenue heatmap.
+Dollar values remain numeric in the Orders table and selected-cell details. The translucent globe fill continues to show current priority contribution; maximum payout uses a separate centered-dot layer and is potential value, not realized revenue.
 
 Scheduled-cell state follows the currently selected spacecraft. A pending ground plan is visibly labeled as scheduled, though it is not yet aboard the spacecraft; an uploaded plan reflects work available to execution. These outlines refresh while any management tab is open, since their controls live on the globe. The active imaging line, target outline, and label appear only while a capture command is running. The selected-cell outline remains separate so inspection does not look like planned or active work.
 
 ## Implementation boundary
 
-- Fill values come from `CellMarketState.calculateCell` and its per-category available priority contribution; map colors do not affect scheduling.
+- Land-category fill values come from `CellMarketState.calculateCell` and its per-category available priority contribution. Maximum-value dots use category exposure multiplied by current market rates at full VAM. Map colors do not affect scheduling.
 - Schedule and active-capture overlays read the selected spacecraft’s operational plan and current runtime action. They do not add a new schedule, change plan upload timing, or predict imaging footprints.
 - The imaging line is an operational cue, not a sensor geometry or ground-footprint model. Its target rectangle is the project’s existing quarter-degree market cell.
 - Geographic dataset attributes remain available in the Orders table and cell details. Their current source definitions, limitations, and units stay authoritative in [Cell grid data](CELL_DATA.md).

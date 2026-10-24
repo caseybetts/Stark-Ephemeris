@@ -5,6 +5,7 @@ import {
   ConstantProperty,
   ConstantPositionProperty,
   EllipsoidTerrainProvider,
+  GeoJsonDataSource,
   GeometryInstance,
   HeightReference,
   HorizontalOrigin,
@@ -19,6 +20,7 @@ import {
   VerticalOrigin,
   Viewer,
 } from "cesium";
+import type { DataSource, ImageryLayer } from "cesium";
 import type { SatelliteDefinition, SurfaceObject, WorldSnapshot } from "../simulation/model";
 import { SIMULATED_DAY_SECONDS } from "../simulation/constants";
 import {
@@ -34,6 +36,7 @@ export type GlobeView = {
   setSatellites(satellites: readonly SatelliteDefinition[]): void;
   setSelectedSatellite(satelliteId: string): void;
   setTrackVisible(visible: boolean): void;
+  setBasemapVisible(visible: boolean): void;
   setSurfaceObjectsVisible(visible: boolean): void;
   destroy(): void;
 };
@@ -191,12 +194,33 @@ export async function createGlobeView(
   viewer.scene.screenSpaceCameraController.maximumZoomDistance = 45_000_000;
   viewer.scene.globe.depthTestAgainstTerrain = false;
 
+  let basemapLayer: ImageryLayer | undefined;
   try {
     const earthImagery = await TileMapServiceImageryProvider.fromUrl(CesiumBaseUrl("Assets/Textures/NaturalEarthII"));
-    viewer.imageryLayers.addImageryProvider(earthImagery);
+    basemapLayer = viewer.imageryLayers.addImageryProvider(earthImagery);
   } catch {
     viewer.scene.globe.baseColor = Color.fromCssColorString("#163640");
     console.warn("Natural Earth II imagery did not load; using the globe base color.");
+  }
+
+  let countryBoundaries: DataSource | undefined;
+  try {
+    const response = await fetch(new URL(`${import.meta.env.BASE_URL}data/cells/country-boundaries.geojson.gz`, window.location.href));
+    if (!response.ok) throw new Error(`Country boundaries returned ${response.status}`);
+    const compressed = await response.arrayBuffer();
+    const decoded = new Uint8Array(compressed);
+    const geoJsonText = decoded[0] === 0x1f && decoded[1] === 0x8b
+      ? await new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream("gzip"))).text()
+      : new TextDecoder().decode(decoded);
+    const boundaryData = await GeoJsonDataSource.load(JSON.parse(geoJsonText), {
+      stroke: Color.fromCssColorString("#8fa3ad"),
+      strokeWidth: 1.1,
+      clampToGround: true,
+    });
+    boundaryData.show = false;
+    countryBoundaries = await viewer.dataSources.add(boundaryData);
+  } catch (error) {
+    console.warn("Country boundary outlines did not load.", error);
   }
 
   viewer.camera.setView({
@@ -322,6 +346,12 @@ export async function createGlobeView(
         visual.orbit.ahead.show = visible;
         visual.orbit.behind.show = visible;
       }
+      viewer.scene.requestRender();
+    },
+    setBasemapVisible(visible) {
+      if (basemapLayer) basemapLayer.show = visible;
+      viewer.scene.globe.baseColor = Color.fromCssColorString(visible ? "#102c39" : "#071016");
+      if (countryBoundaries) countryBoundaries.show = !visible;
       viewer.scene.requestRender();
     },
     setSurfaceObjectsVisible(visible) {

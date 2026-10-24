@@ -65,6 +65,7 @@ button { font: inherit; }
 .top-actions { display: flex; gap: 8px; }
 .icon-button { display: flex; align-items: center; gap: 6px; min-height: 29px; padding: 0 8px; border: 1px solid rgba(202, 227, 218, 0.18); border-radius: 6px; background: rgba(9, 20, 26, 0.6); color: #c7d8d5; cursor: pointer; font-size: 7px; letter-spacing: 0.07em; transition: border-color 150ms ease, background 150ms ease; }
 .icon-button:hover, .icon-button[aria-pressed="true"] { border-color: rgba(115, 215, 193, 0.57); background: rgba(24, 58, 61, 0.42); color: #ecf5e9; }
+.icon-button:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
 .track-icon { color: var(--lime); font-size: 17px; line-height: 0; }
 
 .map-hud { position: absolute; z-index: 2; top: 99px; left: 29px; display: flex; gap: 8px; color: rgba(198, 218, 215, 0.58); font-size: 8px; letter-spacing: 0.15em; }
@@ -463,11 +464,12 @@ button { font: inherit; }
 .cell-map-key[data-layer=coverage] .cell-map-ramp { background: #43c7b1; }
 .cell-map-ramp[data-palette=priority-max] { background: linear-gradient(90deg, #1c2252, #ffc34a); }
 .cell-map-ramp[data-palette=priority-now] { background: linear-gradient(90deg, #f6de53, #129c89); }
-.cell-map-ramp[data-palette=value] { background: linear-gradient(90deg, #1d392e, #e3ec67); }
+.cell-map-ramp[data-palette=value] { background: linear-gradient(90deg, #2563eb, #22c55e, #facc15, #f97316, #ef4444); }
 .cell-map-ramp[data-palette=scheduled] { background: linear-gradient(90deg, #ff9b76, #f4f870); }
 .cell-map-ramp[data-palette=imaging] { background: linear-gradient(90deg, #547f78, #f4f870); }
 .cell-map-scale { display: block; min-width: 0; overflow: hidden; font-size: 7px; color: #abc4c0; text-overflow: ellipsis; white-space: nowrap; }
 .cell-planning-key { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: #abc4c0; font-size: 7px; }
+.cell-planning-key[hidden] { display: none; }
 .cell-planning-key span { display: flex; align-items: center; gap: 7px; }
 .cell-planning-key i { display: inline-block; width: 17px; height: 9px; box-sizing: border-box; }
 .cell-planning-key .planning-outline { border: 2px solid #ff7043; }

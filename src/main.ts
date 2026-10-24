@@ -32,6 +32,7 @@ const elements = {
   pauseLabel: document.querySelector<HTMLElement>("#pause-label")!,
   pauseIcon: document.querySelector<HTMLElement>("#pause-icon")!,
   trackToggle: document.querySelector<HTMLButtonElement>("#track-toggle")!,
+  basemapToggle: document.querySelector<HTMLButtonElement>("#basemap-toggle")!,
   timeSpeed: document.querySelector<HTMLSelectElement>("#time-speed")!,
   summarySatelliteCards: document.querySelector<HTMLElement>("#summary-satellite-cards")!,
   surfaceSunlit: document.querySelector<HTMLElement>("#surface-sunlit")!,
@@ -735,6 +736,7 @@ async function start(): Promise<void> {
   });
   globe.setSelectedSatellite(selectedSatelliteId);
   globe.setTrackVisible(simulation.showTrack);
+  globe.setBasemapVisible(true);
 
   // Geography loads independently so a data failure does not stop the world clock.
   let cellMarket: CellMarketState | null = null;
@@ -1092,6 +1094,13 @@ async function start(): Promise<void> {
     simulation.showTrack = !simulation.showTrack;
     elements.trackToggle.setAttribute("aria-pressed", String(simulation.showTrack));
     globe.setTrackVisible(simulation.showTrack);
+  });
+
+  elements.basemapToggle.addEventListener("click", () => {
+    const visible = elements.basemapToggle.getAttribute("aria-pressed") !== "true";
+    elements.basemapToggle.setAttribute("aria-pressed", String(visible));
+    elements.basemapToggle.setAttribute("aria-label", visible ? "Hide basemap imagery" : "Show basemap imagery");
+    globe.setBasemapVisible(visible);
   });
 
   elements.pauseToggle.addEventListener("click", () => setSimulationRunning(!simulation.running));

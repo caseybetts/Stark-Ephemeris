@@ -10,7 +10,7 @@ import type { CellMarketState } from "../simulation/cellMarketState";
 import type { CellOperationalVisualization } from "../simulation/operationalLoop";
 import { rasterizeCellTile } from "../simulation/cellRaster";
 
-export type CellPlanningLayer = "none" | "scheduled" | "imaging";
+export type CellPlanningLayer = "none" | "scheduled" | "imaging" | "maximum-value";
 type Route = { name: string; url?: string; latitudeDeg: number; longitudeDeg: number };
 
 export function categoryPriorityDisplayMaximum(categoryId: string, market: CellMarketState): number {
@@ -21,6 +21,12 @@ export function categoryPriorityDisplayMaximum(categoryId: string, market: CellM
 function colorAt(t: number): [number, number, number] {
   const start = [246, 222, 83], end = [18, 156, 137];
   return start.map((value, index) => Math.round(value + (end[index]! - value) * t)) as [number, number, number];
+}
+
+function maximumCellValueScaleCeiling(market: CellMarketState): number {
+  const prices = new Map(market.getMarketReadout().map(category => [category.id, category.marketPriceUsdPerUnit]));
+  return Math.max(1, market.exposures.definitions.reduce((sum, definition) =>
+    sum + market.exposures.maximum(definition.id) * (prices.get(definition.id) ?? 0), 0));
 }
 
 function createProvider(
@@ -82,6 +88,96 @@ function createProvider(
   };
 }
 
+function maximumValueColorAt(value: number): [number, number, number] {
+  const stops: readonly (readonly [number, number, number])[] = [
+    [37, 99, 235],   // blue
+    [34, 197, 94],   // green
+    [250, 204, 21],  // yellow
+    [249, 115, 22],  // orange
+    [239, 68, 68],   // red
+  ];
+  const position = Math.max(0, Math.min(1, value)) * (stops.length - 1);
+  const startIndex = Math.min(stops.length - 2, Math.floor(position));
+  const segment = position - startIndex;
+  const start = stops[startIndex]!;
+  const end = stops[startIndex + 1]!;
+  return start.map((channel, index) => Math.round(channel + (end[index]! - channel) * segment)) as [number, number, number];
+}
+
+function createMaximumValueDotProvider(
+  grid: CellGrid,
+  getMarket: () => CellMarketState,
+): ImageryProvider {
+  const tilingScheme = new GeographicTilingScheme();
+  return {
+    tileWidth: 256, tileHeight: 256, minimumLevel: 0, maximumLevel: 9,
+    tilingScheme, rectangle: tilingScheme.rectangle, hasAlphaChannel: true,
+    errorEvent: new Event(), credit: new Credit("Maximum potential cell payout: sample market rates and mapped geographic exposures"),
+    proxy: undefined!, tileDiscardPolicy: undefined!, getTileCredits: () => [], pickFeatures: () => undefined,
+    requestImage(x, y, level) {
+      const market = getMarket();
+      const prices = new Map(market.getMarketReadout().map(category => [category.id, category.marketPriceUsdPerUnit]));
+      const scaleCeiling = Math.log1p(maximumCellValueScaleCeiling(market));
+      const scale = 2 ** level, span = 720 / scale;
+      const rowStart = y * span, columnStart = x * span;
+      const pixelsPerCell = 256 / span;
+      const radius = Math.min(2.4, Math.max(0.75, pixelsPerCell * 0.24));
+      const pixelRadius = Math.ceil(radius);
+      const bufferWidth = 256 + pixelRadius * 2;
+      const centers = new Float32Array(bufferWidth * bufferWidth).fill(-1);
+      const marginCells = Math.ceil(pixelRadius / pixelsPerCell);
+      const rowFrom = Math.max(0, Math.floor(rowStart - marginCells));
+      const rowTo = Math.min(720, Math.ceil(rowStart + span + marginCells));
+      const colFrom = Math.max(0, Math.floor(columnStart - marginCells));
+      const colTo = Math.min(1440, Math.ceil(columnStart + span + marginCells));
+
+      for (let row = rowFrom; row < rowTo; row++) for (let col = colFrom; col < colTo; col++) {
+        const index = grid.indexById[row * 1440 + col];
+        if (index < 0) continue;
+        const maximumValue = market.exposures.forCell(index).reduce((sum, exposure) =>
+          sum + exposure.quantity * (prices.get(exposure.categoryId) ?? 0), 0);
+        const normalized = Math.log1p(maximumValue) / scaleCeiling;
+        const centerX = Math.floor((col + 0.5 - columnStart) * pixelsPerCell) + pixelRadius;
+        const centerY = Math.floor((row + 0.5 - rowStart) * pixelsPerCell) + pixelRadius;
+        if (centerX < 0 || centerX >= bufferWidth || centerY < 0 || centerY >= bufferWidth) continue;
+        const pixel = centerY * bufferWidth + centerX;
+        centers[pixel] = Math.max(centers[pixel]!, normalized);
+      }
+
+      const canvas = document.createElement("canvas"); canvas.width = canvas.height = 256;
+      const context = canvas.getContext("2d")!;
+      const image = context.createImageData(256, 256);
+      const painted = new Float32Array(256 * 256).fill(-1);
+      const radiusSquared = radius * radius;
+      for (let center = 0; center < centers.length; center++) {
+        const value = centers[center]!;
+        if (value < 0) continue;
+        const centerX = (center % bufferWidth) - pixelRadius;
+        const centerY = Math.floor(center / bufferWidth) - pixelRadius;
+        for (let dy = -pixelRadius; dy <= pixelRadius; dy++) for (let dx = -pixelRadius; dx <= pixelRadius; dx++) {
+          if ((dx * dx) + (dy * dy) > radiusSquared) continue;
+          const x = centerX + dx, y = centerY + dy;
+          if (x < 0 || x >= 256 || y < 0 || y >= 256) continue;
+          const pixel = y * 256 + x;
+          painted[pixel] = Math.max(painted[pixel]!, value);
+        }
+      }
+      for (let pixel = 0; pixel < painted.length; pixel++) {
+        const value = painted[pixel]!;
+        if (value < 0) continue;
+        const [red, green, blue] = maximumValueColorAt(value);
+        const offset = pixel * 4;
+        image.data[offset] = red;
+        image.data[offset + 1] = green;
+        image.data[offset + 2] = blue;
+        image.data[offset + 3] = 220;
+      }
+      context.putImageData(image, 0, 0);
+      return Promise.resolve(canvas);
+    },
+  };
+}
+
 export async function createCellLayer(
   viewer: Viewer,
   grid: CellGrid,
@@ -90,6 +186,7 @@ export async function createCellLayer(
   nowSeconds: () => number,
 ) {
   let layer: ImageryLayer;
+  let maximumValueLayer: ImageryLayer | null = null;
   let visible = true;
   let selectedCategoryId: string | null = null;
   let planningLayer: CellPlanningLayer = "none";
@@ -126,6 +223,7 @@ export async function createCellLayer(
     });
     layer.show = visible;
     viewer.imageryLayers.add(layer);
+    if (maximumValueLayer) viewer.imageryLayers.raiseToTop(maximumValueLayer);
     viewer.scene.requestRender();
   };
   setCategory(null);
@@ -174,6 +272,7 @@ export async function createCellLayer(
         ]);
       }
       for (const entity of scheduledEntities.values()) entity.show = visible && planningLayer === "scheduled";
+      if (maximumValueLayer) maximumValueLayer.show = visible && planningLayer === "maximum-value";
       viewer.scene.requestRender();
   };
 
@@ -182,6 +281,15 @@ export async function createCellLayer(
     refreshCategory() { if (selectedCategoryId) setCategory(selectedCategoryId); },
     setPlanningLayer(mode: CellPlanningLayer) {
       planningLayer = mode;
+      if (mode === "maximum-value" && !maximumValueLayer) {
+        maximumValueLayer = new ImageryLayer(createMaximumValueDotProvider(grid, getMarket), {
+          magnificationFilter: TextureMagnificationFilter.NEAREST,
+          minificationFilter: TextureMinificationFilter.NEAREST,
+        });
+        maximumValueLayer.show = visible;
+        viewer.imageryLayers.add(maximumValueLayer);
+      }
+      if (maximumValueLayer) maximumValueLayer.show = visible && mode === "maximum-value";
       renderOperationalOverlay(lastOperationalState, lastSatelliteEarthFixedKm);
     },
     setOperationalOverlay(state: CellOperationalVisualization, satelliteEarthFixedKm: { x: number; y: number; z: number } | null) {
@@ -191,6 +299,7 @@ export async function createCellLayer(
     },
     setVisible(show: boolean) {
       visible = show; layer.show = show;
+      if (maximumValueLayer) maximumValueLayer.show = show && planningLayer === "maximum-value";
       selection.show = show && selectedIndex !== -1;
       for (const entity of scheduledEntities.values()) entity.show = show && planningLayer === "scheduled";
       activeCellEntity.show = show && planningLayer === "imaging" && hasActiveCapture;
@@ -216,6 +325,7 @@ export async function createCellLayer(
     destroy() {
       clickHandler.destroy(); viewer.entities.remove(selection); viewer.entities.remove(activeCellEntity); viewer.entities.remove(activeCellMarker); viewer.entities.remove(imagingRay);
       for (const entity of scheduledEntities.values()) viewer.entities.remove(entity);
+      if (maximumValueLayer) viewer.imageryLayers.remove(maximumValueLayer, true);
       viewer.imageryLayers.remove(layer, true);
     },
   };

@@ -83,6 +83,21 @@ def estimate_urban_area(reader):
     return area_deci_km2.astype("<u2").ravel()
 
 
+def write_country_boundaries(reader):
+    """Export the pinned Natural Earth land-boundary lines for the dark globe mode."""
+    features = []
+    for shape in reader.iterShapes():
+        geometry = shape.__geo_interface__
+        features.append({"type": "Feature", "properties": {}, "geometry": geometry})
+    payload = json.dumps(
+        {"type": "FeatureCollection", "features": features},
+        separators=(",", ":"),
+    ).encode("utf-8")
+    target = OUTPUT / "country-boundaries.geojson.gz"
+    target.write_bytes(gzip.compress(payload, mtime=0))
+    return {"features": len(features), "compressedBytes": target.stat().st_size}
+
+
 def point_feature_counts(features, eligible):
     counts = np.zeros(ROWS * COLS, dtype="<u2")
     excluded = 0
@@ -173,6 +188,8 @@ def build():
     paths = {s["key"]: read_source(s) for s in sources}
     readers = {key: shapefile.Reader(str(paths[key]), encoding="utf-8")
                for key in ("land", "coastline", "cities", "ports", "urban", "borders")}
+    boundary_output = write_country_boundaries(readers["borders"])
+    print("Wrote Natural Earth country boundaries", boundary_output, flush=True)
     print("Rasterizing land and attribute layers", flush=True)
     eligible = burn(readers["land"]).astype(bool)
     urban_presence = burn(readers["urban"])

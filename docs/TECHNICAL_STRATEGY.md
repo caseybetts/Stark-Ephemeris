@@ -9,7 +9,7 @@ This document records implementation constraints and architecture direction. The
 - **Initial emphasis:** Simulation mechanics and status views. The orbital display can be a simple visual layer.
 - **Initial persistence assumption:** Local browser save data is sufficient for a prototype; no account or shared cloud save is currently required.
 - **Provisional prototype stack:** TypeScript for application code, Vite for the static client build, and CesiumJS for the 3D globe.
-- **Provisional Earth display:** Cesium's bundled Natural Earth II imagery is used without a Cesium ion token; the renderer falls back to a plain globe color if the texture fails to load.
+- **Provisional Earth display:** Cesium's bundled Natural Earth II imagery is used without a Cesium ion token. The map controls can hide the imagery and show Natural Earth land-border outlines over a dark globe; the plain globe color remains the fallback if imagery fails to load.
 
 ## Architecture direction
 
@@ -30,7 +30,7 @@ This document records implementation constraints and architecture direction. The
 - The data view uses tabs for **Summary**, **Spacecraft**, **Schedule**, **Orders**, **Ground Stations**, and **Finance & Growth**. Summary is the default and replaces the current single readout as the overview.
 - Summary combines fleet-wide state, company information, operational exceptions, and key indicators that need attention.
 - Prefer tables for lists and comparisons, especially spacecraft, orders, and ground stations. Selecting a row should connect that record to its object or location on the globe.
-- The Orders view includes a searchable, filterable, sortable cell-market list and cell details. Its map controls can show category exposure, calculated cell value, or repeat-purchase state once defined.
+- The Orders view includes a searchable, filterable, sortable cell-market list and cell details. Its map controls show current category priority fills, maximum potential dollar value outlines, scheduled cells, and active imaging.
 - The Spacecraft view presents one row per configured satellite, current modeled position and state, and a detail view for the selected spacecraft. Selection highlights that spacecraft's globe marker and orbit.
 - The Schedule view groups each spacecraft's current onboard TEL in a collapsible table. List every scheduled cell capture with current total available priority points, current total available payout, and available priority points from each land-use category. Values are derived from the current market, player priority rates, recovery state, and simulation time; this view does not edit the TEL.
 
