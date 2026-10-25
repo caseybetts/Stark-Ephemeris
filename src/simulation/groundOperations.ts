@@ -10,6 +10,7 @@ export type TaskEventCommand = {
   cellCapture?: {
     cellIndex: number;
     target: { latitudeDeg: number; longitudeDeg: number };
+    forecastCloudCoverPercent?: number;
   };
 };
 

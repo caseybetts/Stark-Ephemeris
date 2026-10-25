@@ -99,18 +99,4 @@ export const SURFACE_OBJECTS = [
       contactCostUsdPerMinute: 100,
     },
   },
-  {
-    id: "singapore-market",
-    name: "Singapore Market",
-    kind: "imaging-market",
-    location: { latitudeDeg: 1.3521, longitudeDeg: 103.8198 },
-    description: "Imaging market · Singapore",
-  },
-  {
-    id: "manaus-market",
-    name: "Amazon Basin Market",
-    kind: "imaging-market",
-    location: { latitudeDeg: -3.119, longitudeDeg: -60.0217 },
-    description: "Imaging market · Manaus",
-  },
 ] as const;

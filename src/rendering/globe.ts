@@ -139,15 +139,14 @@ function createOrbitVisual(satellite: SatelliteDefinition, selected: boolean, co
 }
 
 function addSurfaceObject(viewer: Viewer, object: SurfaceObject) {
-  const isStation = object.kind === "ground-station";
   return viewer.entities.add({
     id: object.id,
     name: object.name,
     description: object.description,
     position: locationToCartesian(object.location),
     point: {
-      pixelSize: isStation ? 9 : 7,
-      color: isStation ? Color.fromCssColorString("#ffbd70") : Color.fromCssColorString("#73d7c1"),
+      pixelSize: 9,
+      color: Color.fromCssColorString("#ffbd70"),
       outlineColor: Color.fromCssColorString("#071016"),
       outlineWidth: 2,
       heightReference: HeightReference.NONE,
@@ -306,17 +305,6 @@ export async function createGlobeView(
         const modelMatrix = orbitEarthFixedMatrix(satellite, snapshot.elapsedSeconds);
         visual.orbit.ahead.modelMatrix = modelMatrix;
         visual.orbit.behind.modelMatrix = modelMatrix;
-      }
-
-      const surfaceSnapshot = snapshots[0];
-      if (surfaceSnapshot) {
-        for (const { object, entity } of surfaceEntities) {
-          if (object.kind === "imaging-market") {
-            const state = surfaceSnapshot.surfaceObjects.find((item) => item.object.id === object.id);
-            const color = state?.sunlit ? "#73d7c1" : "#547f78";
-            entity.point!.color = new ConstantProperty(Color.fromCssColorString(color));
-          }
-        }
       }
 
       viewer.scene.requestRender();

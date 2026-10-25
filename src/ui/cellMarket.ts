@@ -6,17 +6,31 @@ import type { CellMarketState } from "../simulation/cellMarketState";
 import type { GeographicLocation } from "../simulation/model";
 import type { CellOperationalVisualization } from "../simulation/operationalLoop";
 import { categoryPriorityDisplayMaximum, createCellLayer, type CellPlanningLayer } from "../rendering/cellLayer";
+import { monthlyCloudBaselineAtPercent, WEATHER_EPOCH_UTC_MS } from "../simulation/weather";
 
 const count = (value: number) => value.toLocaleString();
 const money = (value: number) => value.toLocaleString(undefined, { style: "currency", currency: "USD" });
 const amount = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 const points = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 2 });
 const unitLabel = (unit: string) => unit === "km2" ? "km²" : unit;
+const marketPriceUnitLabels: Readonly<Record<string, string>> = {
+  km2: "km²",
+  "city-record": "city",
+  "port-record": "port",
+  "plant-record": "plant",
+  "route-feature": "route",
+  "installation-polygon": "installation",
+  "data-center-record-or-polygon": "data center",
+  "station-record": "station",
+  "site-record": "site",
+};
+const marketPriceUnitLabel = (unit: string) => marketPriceUnitLabels[unit] ?? unitLabel(unit);
 const coordinate = (latitude: number, longitude: number) => `${Math.abs(latitude).toFixed(3)}°${latitude >= 0 ? "N" : "S"}, ${Math.abs(longitude).toFixed(3)}°${longitude >= 0 ? "E" : "W"}`;
 const PAGE_SIZE = 10;
 
 type CellMarketActions = {
   nowSeconds: () => number;
+  getCloudBaselineTable: () => Uint8Array | undefined;
   getOrCreateMarket: (grid: CellGrid) => CellMarketState;
   getSatelliteId: () => string;
   hasGroundContact: () => boolean;
@@ -74,7 +88,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       <div><span>PARTIAL DOWNLINKS</span><strong id="cell-partial-transfers">0</strong><small id="cell-transferred-bytes">0 MiB transferred</small></div>
       <div><span>VALUE LOST TO DELETION</span><strong id="cell-lost-imagery-value">$0</strong><small id="cell-deleted-imagery-count">0 images deleted</small></div>
     </div>
-    <section class="cell-market-rates" aria-label="Prototype market rates"><div class="cell-market-rates-heading"><div><p class="eyebrow">PROTOTYPE MARKET — SAMPLE RATES</p><h3>Category market readout</h3></div><p>Prices and cadences are sample market data. Priority rates feed scheduling scores; candidate categories and overlap rules remain under review.</p></div><div class="table-scroll"><table class="operations-table cell-rates-table"><thead><tr><th scope="col">Category</th><th scope="col">Market price</th><th scope="col">Refresh cadence</th><th scope="col">Priority points per unit</th></tr></thead><tbody id="cell-rate-body"></tbody></table></div></section>
+    <section class="cell-market-rates" aria-label="Prototype market rates"><div class="cell-market-rates-heading"><div><p class="eyebrow">PROTOTYPE MARKET — SAMPLE RATES</p><h3>Category market readout</h3></div><p>Prices and cadences are sample market data. Priority rates feed scheduling scores; candidate categories and overlap rules remain under review.</p></div><div class="table-scroll"><table class="operations-table cell-rates-table"><thead><tr><th scope="col">Priority</th><th scope="col">Category</th><th scope="col">Market price</th><th scope="col">Refresh cadence</th></tr></thead><tbody id="cell-rate-body"></tbody></table></div></section>
     <div class="cell-controls">
       <label class="cell-search-label">Find a cell<input id="cell-search" type="search" placeholder="City, port, cell ID, or latitude, longitude" autocomplete="off" /></label>
       <label>Show<select id="cell-filter"><option value="coverage">All eligible cells</option><option value="cityCount">With cities & towns</option><option value="portCount">With ports</option><option value="urban">With urban footprint</option><option value="border">Land borders</option><option value="coastal">Coastal cells</option><option value="cropland">With cropland</option><option value="pasture">With pasture</option><option value="powerPlants">With power plants</option><option value="oilPipelines">With oil pipelines</option><option value="militarySites">With military installations</option><option value="dataCenters">With data centers</option><option value="researchSites">With NOAA research sites</option><option value="monuments">With World Heritage sites</option></select></label>
@@ -103,7 +117,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     const priority = priorityById.get(definition.id)!;
     const row = document.createElement("tr");
     const name = document.createElement("th"); name.scope = "row"; name.textContent = definition.label;
-    const marketPrice = document.createElement("td"); marketPrice.textContent = `${money(price.marketPriceUsdPerUnit)} / ${unitLabel(price.unit)}`;
+    const marketPrice = document.createElement("td"); marketPrice.textContent = `${money(price.marketPriceUsdPerUnit)} / ${marketPriceUnitLabel(price.unit)}`;
     const cadence = document.createElement("td"); cadence.textContent = `${amount(price.cadenceSeconds / 86_400)} days`;
     const control = document.createElement("td");
     const input = document.createElement("input"); input.type = "number"; input.min = "0"; input.step = "any";
@@ -119,24 +133,26 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       actions.notifySchedulingInputsChanged();
       refreshEconomy(true);
     });
-    control.append(input); row.append(name, marketPrice, cadence, control); return row;
+    control.append(input); row.append(control, name, marketPrice, cadence); return row;
   });
   element("cell-rate-body").replaceChildren(...rateRows);
   const mapKey = document.createElement("aside");
   mapKey.className = "cell-map-key";
   mapKey.setAttribute("aria-label", "Cell map legend");
-  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span></div><label class="cell-map-select-label">Land Categories<select id="cell-land-layer" aria-label="Land Categories"></select></label><label class="cell-map-select-label">Planning<select id="cell-planning-layer" aria-label="Planning"></select></label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><div class="cell-planning-key"><span><i class="planning-outline"></i>Scheduled cell</span><span><i class="planning-imaging"></i>Imaging target / line</span></div><p>Zoom for boundaries · Click to inspect</p>';
+  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span></div><label class="cell-map-select-label">Fill layer<select id="cell-land-layer" aria-label="Cell fill layer"></select></label><label class="cell-map-select-label">Planning<select id="cell-planning-layer" aria-label="Planning"></select></label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><div class="cell-planning-key"><span><i class="planning-outline"></i>Scheduled cell</span><span><i class="planning-imaging"></i>Imaging target / line</span></div><p>Zoom for boundaries · Click to inspect</p>';
   document.querySelector(".globe-stage")!.append(mapKey);
   const landLayerSelect = mapKey.querySelector<HTMLSelectElement>("#cell-land-layer")!;
   const planningSelect = mapKey.querySelector<HTMLSelectElement>("#cell-planning-layer")!;
   landLayerSelect.add(new Option("Choose category", ""));
   for (const category of market.exposures.definitions) landLayerSelect.add(new Option(category.label, category.id));
+  landLayerSelect.add(new Option("Monthly average cloud cover", "cloud-cover"));
   landLayerSelect.value = market.exposures.definitions.some(category => category.id === "urban")
     ? "urban" : market.exposures.definitions[0]?.id ?? "";
   planningSelect.add(new Option("No planning outline", "none"));
   planningSelect.add(new Option("Scheduled cells", "scheduled"));
   planningSelect.add(new Option("Satellite imaging a cell", "imaging"));
   planningSelect.add(new Option("Maximum dollar value", "maximum-value"));
+  planningSelect.add(new Option("Current priority", "current-priority"));
   planningSelect.value = "scheduled";
   let selectedCategoryId = landLayerSelect.value || null;
   let lastPlanningLayer: CellPlanningLayer = "scheduled";
@@ -150,12 +166,30 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   const map = await createCellLayer(viewer, grid, (index, route) => {
     selectCell(index, false, route);
     document.querySelector<HTMLButtonElement>("#tab-orders")!.click();
-  }, () => market, nowSeconds);
+  }, () => market, nowSeconds, actions.getCloudBaselineTable);
   function updateMapLayerLegend() {
     const layerName = mapKey.querySelector<HTMLElement>(".cell-map-layer-name")!;
     const ramp = mapKey.querySelector<HTMLElement>(".cell-map-ramp")!;
     const scale = mapKey.querySelector<HTMLElement>(".cell-map-scale")!;
     const planningKey = mapKey.querySelector<HTMLElement>(".cell-planning-key")!;
+    if (selectedCategoryId === "cloud-cover") {
+      const monthIndex = new Date(WEATHER_EPOCH_UTC_MS + nowSeconds() * 1000).getUTCMonth();
+      const monthName = new Date(Date.UTC(2020, monthIndex, 1)).toLocaleString(undefined, { month: "long", timeZone: "UTC" });
+      layerName.textContent = "Monthly average cloud cover · cell fill";
+      ramp.dataset.palette = "priority-now";
+      scale.textContent = `0–100% · ${monthName} simulation month`;
+      planningKey.hidden = lastPlanningLayer === "maximum-value" || lastPlanningLayer === "current-priority";
+      element("cell-layer-note").textContent = "Fill shows the selected simulation month’s average cloud cover for eligible ¼° market cells. The January 2013 source map is repeated across all months; its 1° value is shared by the quarter-degree cells inside it.";
+      return;
+    }
+    if (lastPlanningLayer === "current-priority") {
+      layerName.textContent = "Current priority · centered cell dots";
+      ramp.dataset.palette = "value";
+      scale.textContent = "Log scale · blue low to red high";
+      planningKey.hidden = true;
+      element("cell-layer-note").textContent = "Centered dot colors show each cell’s current total available priority across all categories, adjusted by its recovery (VAM), from blue (lower) through green, yellow, and orange to red (higher).";
+      return;
+    }
     if (lastPlanningLayer === "maximum-value") {
       layerName.textContent = "Maximum dollar value · centered cell dots";
       ramp.dataset.palette = "value";
@@ -271,7 +305,10 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     target.replaceChildren();
     const heading = document.createElement("h4"); heading.textContent = "Calculated cell value";
     const totals = document.createElement("dl"); totals.className = "cell-attributes";
+    const cloudTable = actions.getCloudBaselineTable();
+    const cloudMonth = new Date(WEATHER_EPOCH_UTC_MS + nowSeconds() * 1000).getUTCMonth();
     const entries: [string, string][] = [
+      ...(cloudTable ? [["Monthly average cloud cover", `${monthlyCloudBaselineAtPercent(cloudTable, grid.ids[selected]!, cloudMonth)}% · ${new Date(Date.UTC(2020, cloudMonth, 1)).toLocaleString(undefined, { month: "long", timeZone: "UTC" })}`] as [string, string]] : []),
       ["Maximum payout", money(snapshot.maximumPayoutUsd)],
       ["Available payout", money(snapshot.availablePayoutUsd)],
       ["Maximum priority", `${points(snapshot.maximumPriorityPoints)} points`],
@@ -312,13 +349,14 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     // The globe controls are available on every management tab, so keep its operational
     // overlays current even while the Orders panel is hidden or simulation time is paused.
     map.setOperationalOverlay(actions.getCellOperationalVisualization(), actions.getSatelliteEarthFixedKm());
+    if (force || now - lastCategoryRefreshAt >= 3_600) {
+      lastCategoryRefreshAt = now;
+      if (selectedCategoryId) map.refreshCategory();
+      map.refreshCurrentPriority();
+    }
     if (panel.hidden && !force) return;
     if (!force && now === lastRefreshedAt) return;
     lastRefreshedAt = now;
-    if (selectedCategoryId && (force || now - lastCategoryRefreshAt >= 3_600)) {
-      lastCategoryRefreshAt = now;
-      map.refreshCategory();
-    }
     refreshSelectedImages?.();
     element("cell-preview-cash").textContent = money(market.companyCashUsd);
     const imagery = market.getImagerySummary();

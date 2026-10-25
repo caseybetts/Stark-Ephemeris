@@ -10,7 +10,7 @@ export type Vector3Km = {
   z: number;
 };
 
-export type SurfaceObjectKind = "ground-station" | "imaging-market";
+export type SurfaceObjectKind = "ground-station";
 
 export type GroundStationSiteDetails = {
   operationalStatus: "available" | "down";

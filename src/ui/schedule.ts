@@ -17,6 +17,7 @@ type ScheduleRowView = {
   cellIndex: number;
   overallPriority: HTMLElement;
   overallValue: HTMLElement;
+  forecastCloudCover: HTMLElement;
   categoryPriorities: Map<string, HTMLElement>;
 };
 
@@ -137,12 +138,17 @@ export function setupScheduleView(options: ScheduleViewOptions): () => void {
         table.className = "operations-table schedule-table";
         const caption = document.createElement("caption");
         caption.className = "visually-hidden";
-        caption.textContent = `${satellite.name} current onboard TEL scheduled cell priorities and values`;
+        caption.textContent = `${satellite.name} current onboard TEL scheduled cell priorities, values, and cloud forecasts`;
         table.append(caption);
 
         const head = document.createElement("thead");
         const headerRow = document.createElement("tr");
-        for (const label of ["Scheduled cell", "Overall priority", "Overall available value ($)"]) {
+        for (const label of [
+          "Scheduled cell",
+          "Overall priority",
+          "Overall available value ($)",
+          "Forecast cloud cover (%)",
+        ]) {
           const header = document.createElement("th");
           header.scope = "col";
           header.textContent = label;
@@ -182,6 +188,14 @@ export function setupScheduleView(options: ScheduleViewOptions): () => void {
           const overallValue = document.createElement("td");
           overallValue.className = "schedule-number-cell";
           row.append(overallValue);
+          const forecastCloudCover = document.createElement("td");
+          forecastCloudCover.className = "schedule-number-cell";
+          const forecastPercent = capture.forecastCloudCoverPercent;
+          forecastCloudCover.textContent = forecastPercent === undefined ? "—" : `${forecastPercent}%`;
+          if (forecastPercent !== undefined) {
+            forecastCloudCover.title = "Forecasted mean cloud cover over this collection interval when the schedule was prepared.";
+          }
+          row.append(forecastCloudCover);
           const categoryPriorities = new Map<string, HTMLElement>();
           for (const category of categoryDefinitions) {
             const value = document.createElement("td");
@@ -193,6 +207,7 @@ export function setupScheduleView(options: ScheduleViewOptions): () => void {
             cellIndex: capture.cellIndex,
             overallPriority,
             overallValue,
+            forecastCloudCover,
             categoryPriorities,
           });
           body.append(row);
@@ -230,7 +245,12 @@ export function setupScheduleView(options: ScheduleViewOptions): () => void {
           satellite.id,
           satellite.name,
           state.onboardTelVersion,
-          state.onboardCommands.map(command => [command.id, command.label, command.cellCapture?.cellIndex ?? null]),
+          state.onboardCommands.map(command => [
+            command.id,
+            command.label,
+            command.cellCapture?.cellIndex ?? null,
+            command.cellCapture?.forecastCloudCoverPercent ?? null,
+          ]),
         ];
       }),
       categories: market?.exposures.definitions.map(category => [category.id, category.label]) ?? null,

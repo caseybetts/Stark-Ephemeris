@@ -15,6 +15,8 @@ import { getSpacecraftEquipmentOption, quoteSpacecraftPurchase, purchaseSpacecra
 import type { GeographicLocation, SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
 import { setupFinanceView } from "./ui/finance";
 import { setupScheduleView } from "./ui/schedule";
+import { loadCloudBaseline } from "./data/weather";
+import { cloudForecastForInterval } from "./simulation/weather";
 
 declare global {
   interface Window {
@@ -71,8 +73,6 @@ const elements = {
   spacecraftTelStatus: document.querySelector<HTMLElement>("#spacecraft-tel-status")!,
   spacecraftTelCommands: document.querySelector<HTMLOListElement>("#spacecraft-tel-commands")!,
   contactRadius: document.querySelector<HTMLElement>("#contact-radius")!,
-  locationCount: document.querySelector<HTMLElement>("#location-count")!,
-  locationList: document.querySelector<HTMLElement>("#location-list")!,
 };
 
 let fleet: readonly SatelliteDefinition[] = [...INITIAL_FLEET.satellites];
@@ -590,27 +590,6 @@ function renderGroundControl(
   elements.telEvent.textContent = latestEvent?.detail ?? "No ground-control events yet.";
 }
 
-function renderLocations(snapshot: ReturnType<typeof createWorldSnapshot>): void {
-  const markets = snapshot.surfaceObjects.filter(({ object }) => object.kind === "imaging-market");
-  const sunlitCount = markets.filter(({ sunlit }) => sunlit).length;
-  elements.locationCount.textContent = `${sunlitCount} / ${markets.length} IN SUN`;
-  elements.locationList.replaceChildren(
-    ...markets.map(({ object, sunlit }) => {
-      const row = document.createElement("div");
-      row.className = "location-row";
-      const marker = document.createElement("span");
-      marker.className = `row-marker ${sunlit ? "row-marker-sunlit" : "row-marker-night"}`;
-      const name = document.createElement("strong");
-      name.textContent = object.name;
-      const state = document.createElement("span");
-      state.className = `location-state ${sunlit ? "location-state-sunlit" : ""}`;
-      state.textContent = sunlit ? "DAYLIGHT" : "NIGHT";
-      row.append(marker, name, state);
-      return row;
-    }),
-  );
-}
-
 function renderSnapshot(
   snapshot: WorldSnapshot,
   nextWindow: GroundContactWindow | undefined,
@@ -619,13 +598,13 @@ function renderSnapshot(
   elements.eclipseState.textContent = snapshot.satelliteEclipsed ? "IN UMBRA" : "SUNLIT";
   elements.eclipseState.classList.toggle("warning-text", snapshot.satelliteEclipsed);
 
-  const daylightLocations = snapshot.surfaceObjects.filter(({ sunlit }) => sunlit).length;
-  elements.surfaceSunlit.textContent = `${daylightLocations} / ${snapshot.surfaceObjects.length} LOCATIONS`;
+  const groundStations = snapshot.surfaceObjects.filter(({ object }) => object.kind === "ground-station");
+  const daylightStations = groundStations.filter(({ sunlit }) => sunlit).length;
+  elements.surfaceSunlit.textContent = `${daylightStations} / ${groundStations.length} STATIONS`;
   const subsolarLongitude = (Math.atan2(snapshot.sunDirectionEarthFixed.y, snapshot.sunDirectionEarthFixed.x) * 180) / Math.PI;
   elements.subsolarLongitude.textContent = `${subsolarLongitude.toFixed(1)}°`;
 
   renderStations(snapshot, nextWindow, groundOperations, simulationRuntime);
-  renderLocations(snapshot);
 }
 
 function setupManagementTabs(): void {
@@ -799,11 +778,23 @@ async function start(): Promise<void> {
       updatePurchaseStatus(`Ready to launch in the selected orbit: ${orbit}.`);
     }
   };
+  let cloudBaseline: Awaited<ReturnType<typeof loadCloudBaseline>> = undefined;
+  try {
+    cloudBaseline = await loadCloudBaseline();
+  } catch (error) {
+    console.warn("Cloud baseline unavailable; using the temporary 50% baseline.", error);
+  }
+  const weatherConfiguration = {
+    seed: 20261014,
+    epochUtcMs: Date.parse("2026-01-01T00:00:00Z"),
+    baselinePercent: 50,
+    ...(cloudBaseline ? { baselineTable: cloudBaseline.table, baselineVersion: cloudBaseline.version } : {}),
+  };
   const operationalLoop = new OperationalLoop({
     fleet,
     stations: surfaceObjects,
     scenario: PROPOSED_CELL_CAPTURE_SCENARIO,
-    weather: { seed: 20261014, epochUtcMs: Date.parse("2026-01-01T00:00:00Z"), baselinePercent: 50 },
+    weather: weatherConfiguration,
     getMarket: () => cellMarket,
     storageCapacityBytesBySatellite: Object.fromEntries(fleet.map(({ id }) => [id, PROTOTYPE_STORAGE_CAPACITY_BYTES])),
     runtime: simulationRuntime,
@@ -861,7 +852,17 @@ async function start(): Promise<void> {
         id: item.id,
         label: `Capture cell ${item.cellIndex}`,
         durationSeconds,
-        cellCapture: { cellIndex: item.cellIndex, target: { ...item.target } },
+        cellCapture: {
+          cellIndex: item.cellIndex,
+          target: { ...item.target },
+          forecastCloudCoverPercent: cloudForecastForInterval(
+            weatherConfiguration,
+            cellGrid!.ids[item.cellIndex]!,
+            now,
+            feasibility.collectionStartsAtSeconds,
+            feasibility.completesAtSeconds,
+          ).forecastPercent,
+        },
       };
       cursorSeconds += durationSeconds;
       previousPointing = cellLookDirectionAt(satellite, item.target, cursorSeconds);
@@ -928,6 +929,7 @@ async function start(): Promise<void> {
     globe.viewer,
     {
       nowSeconds: () => simulationRuntime.elapsedSeconds,
+      getCloudBaselineTable: () => cloudBaseline?.table,
       getOrCreateMarket: grid => {
         cellGrid = grid;
         const market = cellMarket ??= createPrototypeCellMarket(grid, companyFinance);

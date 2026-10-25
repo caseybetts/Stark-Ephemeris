@@ -1,21 +1,21 @@
 # CLOUD-01 cloud, forecast, and capture design framework
 
-**Status: prototype behavior approved 2026-10-14; deterministic simulation slice implemented, public NOAA baseline selected.** [Gameplay](GAMEPLAY.md#agreed-scheduling-behavior) remains the source of truth. The runtime still uses a temporary flat 50% baseline until the NOAA table is downloaded and processed; the source choice itself is resolved.
+**Status: prototype behavior approved 2026-10-14; deterministic simulation slice implemented.** [Gameplay](GAMEPLAY.md#agreed-scheduling-behavior) remains the source of truth. A temporary spatial baseline has been built from the January 2013 NOAA HGM Basic map and is repeated across all 12 calendar months. The agreed 2004–2013 climatology remains the target for the completed asset.
 
 ## Goal and boundaries
 
 Give the capture loop a deterministic, spatially varying cloud condition and give the ground scheduler a separate, imperfect estimate of capture usability. The same scenario must replay identically across playback speeds, time partitions, and replanning. Actual weather is authoritative only when a capture executes; the planner must never inspect it.
 
-Keep the model renderer-independent and local. There is no live weather service, account, or backend requirement. Clouds affect image usability, not satellite power, contact availability, geometric access, cell value, or downlink. Cloud graphics are optional presentation work and are not part of this task.
+Keep the model renderer-independent and local. There is no live weather service, account, or backend requirement. Clouds affect image usability, not satellite power, contact availability, geometric access, cell value, or downlink. The Orders globe has a read-only monthly-average cloud fill sourced from the baseline table; animated weather graphics and forecast maps remain out of scope.
 
 ## Agreed behavior to preserve
 
-- Use NOAA/NCEI's ISCCP-H HGM Basic monthly mean cloud amount as the seasonal baseline. Average matching months over 1984–2013 (30 complete years). HGM is already a global 1° equal-angle grid, so no spatial regridding is needed.
+- Use NOAA/NCEI's ISCCP-H HGM Basic monthly mean cloud amount as the seasonal baseline. For the prototype, average matching months over 2004–2013 (10 complete years), the final decade of the originally selected climatology period. HGM is already a global 1° equal-angle grid, so no spatial regridding is needed.
 - Generate deterministic hourly actual cloud cover at 1° around the monthly baseline, then deterministic actual cover for a targeted ¼° cell around its parent 1° value. Clamp both values to [0, 1] and hold them for that hourly bucket.
 - Keep forecast information separate and imperfect. A schedule may use estimated usable-capture probability; it may not read hidden actual conditions or reroll its forecast on every planning pass.
 - An actual weather failure creates no image or revenue and does not reset cell VAM. These rules do not change the already-agreed quote-at-successful-capture and full-downlink settlement lifecycle.
 
-The selected source is NOAA/NCEI's public [ISCCP-H Series](https://www.ncei.noaa.gov/products/international-satellite-cloud-climatology). Its Basic HGM files are CF-compliant NetCDF, 1° equal-angle monthly grids, available from the [direct download directory](https://www.ncei.noaa.gov/data/international-satellite-cloud-climate-project-isccp-h-series-data/access/isccp-basic/hgm/) or [THREDDS](https://www.ncei.noaa.gov/thredds/catalog/satellite/cdr-isccp-h.html); user registration is optional. Use the `cldamt` mean cloud amount variable in percent. The product covers July 1983 through June 2017, which supports the complete 1984–2013 averaging window. Preserve the dataset DOI, product version, variable, years, access date, checksum, and source citation in the derived asset manifest. NOAA states that data may be freely used and redistributed, and asks users to cite the dataset as specified on its page.
+The selected source is NOAA/NCEI's public [ISCCP-H Series](https://www.ncei.noaa.gov/products/international-satellite-cloud-climatology). Its Basic HGM files are CF-compliant NetCDF, 1° equal-angle monthly grids, available from the [direct download directory](https://www.ncei.noaa.gov/data/international-satellite-cloud-climate-project-isccp-h-series-data/access/isccp-basic/hgm/) or [THREDDS](https://www.ncei.noaa.gov/thredds/catalog/satellite/cdr-isccp-h.html); user registration is optional. Use the `cldamt` mean cloud amount variable in percent. The product covers July 1983 through June 2017, which supports the selected 2004–2013 decade. Preserve the dataset DOI, product version, variable, years, access date, checksum, and source citation in the derived asset manifest. NOAA states that data may be freely used and redistributed, and asks users to cite the dataset as specified on its page.
 
 ## Proposed system boundary
 
@@ -30,9 +30,9 @@ Put the data-processing script and its manifest under a reproducible data/build 
 
 ## Proposed data and time model
 
-The 1° weather grid has 180 latitude rows × 360 longitude columns and matches the Basic HGM source resolution. For each calendar month, equally average its 30 monthly `cldamt` values from 1984–2013. Confirm source axis order, latitude direction, longitude convention, units, fill values, and monthly coverage. Reorder the source's 0–360° longitude and south-to-north latitude axes to the runtime's expected grid order. Validate dimensions, range, all 360 source months, and known sample cells before writing the 777,600-byte month-major Uint8 table.
+The 1° weather grid has 180 latitude rows × 360 longitude columns and matches the Basic HGM source resolution. For each calendar month, equally average its 10 monthly `cldamt` values from 2004–2013. Confirm source axis order, latitude direction, longitude convention, units, fill values, and monthly coverage. Reorder the source's 0–360° longitude and south-to-north latitude axes to the runtime's expected grid order. Validate dimensions, range, all 120 source months, and known sample cells before writing the 777,600-byte month-major Uint8 table.
 
-**Storage/precision proposal:** Store cover as integer percentage points from 0–100. The baseline is then 777,600 bytes (about 0.74 MiB), with a maximum quantization error of 0.5 percentage point. Quantize the monthly 30-year mean once during preprocessing. Use the same integer unit for actual cloud and forecast display/comparison; convert only at existing APIs that require a fraction. This is enough precision for a threshold-based whole-cell success rule and avoids retaining insignificant decimal digits.
+**Storage/precision proposal:** Store cover as integer percentage points from 0–100. The baseline is then 777,600 bytes (about 0.74 MiB), with a maximum quantization error of 0.5 percentage point. Quantize the monthly 10-year mean once during preprocessing. Use the same integer unit for actual cloud and forecast display/comparison; convert only at existing APIs that require a fraction. This is enough precision for a threshold-based whole-cell success rule and avoids retaining insignificant decimal digits.
 
 The current runtime has elapsed seconds but no simulation calendar. **Proposal:** add an explicit UTC `simulationEpoch` to scenario configuration and derive weather month and hour as `simulationEpoch + simulationSeconds`; never consult the machine clock. The epoch should be serialized with a scenario/save if saves are introduced. Choose a default epoch before implementation, and define whether leap-day/calendar behavior follows ordinary UTC Gregorian time. If the first slice has no save format, the epoch still belongs in the scenario definition so every run is reproducible.
 
@@ -98,7 +98,7 @@ These are proposed playtest knobs, not realism targets:
 | Forecast | Coarse shared six-hour signal with keyed lead-dependent error and four weights (4 to 1) | Agreed; bands/error spreads are tuning inputs |
 | Planner scoring | Scale projected available priority by forecast weight; raw market priority and payout remain unchanged | Agreed |
 | Retry | No automatic retry or cooldown; later ordinary planning may reconsider | Agreed |
-| Player forecast display | Optional short risk band/age; no map required | Optional |
+| Player forecast display | Show forecasted mean cloud cover beside each scheduled collection; no map required | Implemented in the Scheduled cells table |
 
 Before implementation, review the starter package and settle any changes to the calendar, spreads, threshold, failure behavior, and forecast weights. Keep validation at the level of deterministic replay, monotone weights, broad forecast direction, and responsive planning; high forecast accuracy is not a goal. The low-cost proposal avoids high-precision probability calculations.
 
@@ -117,7 +117,7 @@ Before implementation, review the starter package and settle any changes to the 
 
 ### Efficiency and modeling limits
 
-- A Uint8 baseline uses 777,600 bytes (about 0.74 MiB). Load it once as a typed array; a JSON object per cell is unnecessary. Stream historical months during preprocessing rather than loading 30 years globally into browser memory.
+- A Uint8 baseline uses 777,600 bytes (about 0.74 MiB). Load it once as a typed array; a JSON object per cell is unnecessary. Stream the 120 historical months during preprocessing rather than loading them globally into browser memory.
 - Actual weather costs keyed integer hashes and table lookups only when a capture candidate or outcome requests a cell/hour. Parent values can be reused across child cells. A small bounded cache may help during plan builds, but deterministic results must not depend on cache hits. No hourly global sweep or new simulation loop is needed.
 - Forecast scoring is integer lookup and multiplication. Apply it after geometric/power feasibility and deduplicate opportunities by forecast-weighted score. Keep raw priority as a tie-breaker where appropriate. Benchmark only to confirm plan generation stays responsive; avoid a general profiling framework for this feature.
 - The shared six-hour component creates a broad persistent pattern; smaller hourly and ¼° draws retain local variation. Coarse region edges and calendar-month changes may still be visible. Accept those simple boundaries in the prototype unless they distort operations; continuous storm motion and detailed spatial smoothing are separate work.
@@ -129,8 +129,8 @@ The gameplay settings and runtime slice are now approved and implemented. Remain
 
 ## Current implementation handoff
 
-The user approved the starter package above. Prototype forecast bands are <=40, 41–60, 61–80, and >80%; forecast error spreads are 12, 20, and 28 percentage points for lead through 6h, through 24h, and beyond. These are low-cost tuning inputs, not calibrated probabilities.
+The user approved the starter package above and later chose 2004–2013 (10 years) for the prototype climatology. Prototype forecast bands are <=40, 41–60, 61–80, and >80%; forecast error spreads are 12, 20, and 28 percentage points for lead through 6h, through 24h, and beyond. These are low-cost tuning inputs, not calibrated probabilities.
 
 `src/simulation/weather.ts` now provides keyed integer cloud values, time-weighted collection exposure, and a separate deterministic forecast. `OperationalLoop` checks weather at the normal capture-completion boundary, and `cellScheduler` uses forecast-weighted priority. The model does not create an hourly world field.
 
-The remaining prerequisite for full completion is the ISCCP-H HGM-derived climatology asset and its source manifest. The runtime's flat 50% baseline is a temporary playtest stand-in only. Replace it with the verified 12 × 180 × 360 monthly table before marking CLOUD-01 complete. The workspace shell could not reach the public host because its configured network proxy refused the connection; the data itself is public and does not require an API key.
+The interim ISCCP-H HGM asset now supplies real spatial variation. Its January 2013 map is repeated across the monthly table, and 14 source-masked cells are filled from their nearest valid grid neighbor; both limitations are recorded in the manifest. Full completion still requires the 2004–2013 monthly climatology and its validation. Replace the interim table with the verified 12 × 180 × 360 monthly mean before marking CLOUD-01 complete.

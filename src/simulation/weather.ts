@@ -188,6 +188,15 @@ function baselineAtPercent(configuration: WeatherConfiguration, cellIndex: numbe
   if (!table) return configuration.baselinePercent ?? PROTOTYPE_CLOUD_BASELINE_PERCENT;
   const timestamp = (configuration.epochUtcMs ?? WEATHER_EPOCH_UTC_MS) + timeSeconds * 1000;
   const month = new Date(timestamp).getUTCMonth();
+  return monthlyCloudBaselineAtPercent(table, cellIndex, month);
+}
+
+/** Read the 1-degree monthly source value inherited by a quarter-degree market cell. */
+export function monthlyCloudBaselineAtPercent(table: Uint8Array, cellIndex: number, month: number): number {
+  if (table.length !== 12 * 180 * 360 || !Number.isInteger(month) || month < 0 || month > 11
+    || !Number.isInteger(cellIndex) || cellIndex < 0 || cellIndex >= 1440 * 720) {
+    throw new RangeError("Monthly cloud lookup needs a valid 12 × 180 × 360 table, month, and quarter-degree cell ID");
+  }
   const row = Math.floor(cellIndex / 1440 / 4);
   const column = Math.floor((cellIndex % 1440) / 4);
   return table[(month * 180 + row) * 360 + column]!;

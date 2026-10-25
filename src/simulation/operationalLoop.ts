@@ -581,8 +581,10 @@ export class OperationalLoop {
     });
     const timingMatches = Math.abs(feasibility.completesAtSeconds - event.timeSeconds) < 1;
     const market = this.getMarket();
+    const weatherGrid = this.automaticGrids.get(action.satelliteId);
     const cloudPercent = this.weather
-      ? averageCloudCoverPercent(this.weather, action.cellIndex,
+      && weatherGrid
+      ? averageCloudCoverPercent(this.weather, weatherGrid.ids[action.cellIndex]!,
         feasibility.collectionStartsAtSeconds, feasibility.completesAtSeconds)
       : null;
     let success = false;

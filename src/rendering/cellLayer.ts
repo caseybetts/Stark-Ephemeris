@@ -9,8 +9,10 @@ import type { CellGrid } from "../simulation/cells";
 import type { CellMarketState } from "../simulation/cellMarketState";
 import type { CellOperationalVisualization } from "../simulation/operationalLoop";
 import { rasterizeCellTile } from "../simulation/cellRaster";
+import { monthlyCloudBaselineAtPercent, WEATHER_EPOCH_UTC_MS } from "../simulation/weather";
 
-export type CellPlanningLayer = "none" | "scheduled" | "imaging" | "maximum-value";
+export type CellPlanningLayer = "none" | "scheduled" | "imaging" | "maximum-value" | "current-priority";
+type CellDotLayer = "maximum-value" | "current-priority";
 type Route = { name: string; url?: string; latitudeDeg: number; longitudeDeg: number };
 
 export function categoryPriorityDisplayMaximum(categoryId: string, market: CellMarketState): number {
@@ -29,11 +31,18 @@ function maximumCellValueScaleCeiling(market: CellMarketState): number {
     sum + market.exposures.maximum(definition.id) * (prices.get(definition.id) ?? 0), 0));
 }
 
+function maximumCellPriorityScaleCeiling(market: CellMarketState): number {
+  const rates = new Map(market.getPlayerPriorityRates().map(rate => [rate.categoryId, rate.pointsPerUnit]));
+  return Math.max(1, market.exposures.definitions.reduce((sum, definition) =>
+    sum + market.exposures.maximum(definition.id) * (rates.get(definition.id) ?? 0), 0));
+}
+
 function createProvider(
   grid: CellGrid,
   categoryId: string | null,
   getMarket: () => CellMarketState,
   nowSeconds: () => number,
+  getCloudBaselineTable: () => Uint8Array | undefined,
 ): ImageryProvider {
   const tilingScheme = new GeographicTilingScheme();
   return {
@@ -45,7 +54,10 @@ function createProvider(
       const values = new Float32Array(256 * 256).fill(-1);
       const market = getMarket();
       const now = nowSeconds();
-      const maximum = categoryId ? categoryPriorityDisplayMaximum(categoryId, market) : 1;
+      const cloudLayer = categoryId === "cloud-cover";
+      const cloudBaseline = cloudLayer ? getCloudBaselineTable() : undefined;
+      const cloudMonth = new Date(WEATHER_EPOCH_UTC_MS + now * 1000).getUTCMonth();
+      const maximum = categoryId && !cloudLayer ? categoryPriorityDisplayMaximum(categoryId, market) : 100;
       const scale = 2 ** level, span = 720 / scale;
       const rowStart = y * span, columnStart = x * span;
       const rowFrom = Math.max(0, Math.floor(rowStart)), rowTo = Math.min(720, Math.ceil(rowStart + span));
@@ -54,8 +66,14 @@ function createProvider(
         const index = grid.indexById[row * 1440 + col];
         if (index < 0) continue;
         let cellValue = 0;
-        if (categoryId) cellValue = market.calculateCell(index, now).categories
-          .find(category => category.categoryId === categoryId)?.availablePriorityPoints ?? 0;
+        if (cloudLayer) {
+          cellValue = cloudBaseline
+            ? monthlyCloudBaselineAtPercent(cloudBaseline, row * 1440 + col, cloudMonth)
+            : 50;
+        } else if (categoryId) {
+          cellValue = market.calculateCell(index, now).categories
+            .find(category => category.categoryId === categoryId)?.availablePriorityPoints ?? 0;
+        }
         const top = Math.max(0, Math.floor((row - rowStart) * 256 / span));
         const bottom = Math.min(256, Math.ceil((row + 1 - rowStart) * 256 / span));
         const left = Math.max(0, Math.floor((col - columnStart) * 256 / span));
@@ -73,7 +91,7 @@ function createProvider(
         for (let pixel = 0; pixel < values.length; pixel++) {
           const value = values[pixel]!;
           if (value < 0) continue;
-          const t = Math.log1p(value) / ceiling;
+          const t = cloudLayer ? value / 100 : Math.log1p(value) / ceiling;
           const [red, green, blue] = colorAt(t);
           const offset = pixel * 4;
           image.data[offset] = red; image.data[offset + 1] = green; image.data[offset + 2] = blue;
@@ -104,20 +122,27 @@ function maximumValueColorAt(value: number): [number, number, number] {
   return start.map((channel, index) => Math.round(channel + (end[index]! - channel) * segment)) as [number, number, number];
 }
 
-function createMaximumValueDotProvider(
+function createCellDotProvider(
   grid: CellGrid,
   getMarket: () => CellMarketState,
+  nowSeconds: () => number,
+  mode: CellDotLayer,
 ): ImageryProvider {
   const tilingScheme = new GeographicTilingScheme();
   return {
     tileWidth: 256, tileHeight: 256, minimumLevel: 0, maximumLevel: 9,
     tilingScheme, rectangle: tilingScheme.rectangle, hasAlphaChannel: true,
-    errorEvent: new Event(), credit: new Credit("Maximum potential cell payout: sample market rates and mapped geographic exposures"),
+    errorEvent: new Event(), credit: new Credit(mode === "maximum-value"
+      ? "Maximum potential cell payout: sample market rates and mapped geographic exposures"
+      : "Current available cell priority: player priority rates and cell recovery"),
     proxy: undefined!, tileDiscardPolicy: undefined!, getTileCredits: () => [], pickFeatures: () => undefined,
     requestImage(x, y, level) {
       const market = getMarket();
       const prices = new Map(market.getMarketReadout().map(category => [category.id, category.marketPriceUsdPerUnit]));
-      const scaleCeiling = Math.log1p(maximumCellValueScaleCeiling(market));
+      const scaleCeiling = Math.log1p(mode === "maximum-value"
+        ? maximumCellValueScaleCeiling(market)
+        : maximumCellPriorityScaleCeiling(market));
+      const now = nowSeconds();
       const scale = 2 ** level, span = 720 / scale;
       const rowStart = y * span, columnStart = x * span;
       const pixelsPerCell = 256 / span;
@@ -134,9 +159,11 @@ function createMaximumValueDotProvider(
       for (let row = rowFrom; row < rowTo; row++) for (let col = colFrom; col < colTo; col++) {
         const index = grid.indexById[row * 1440 + col];
         if (index < 0) continue;
-        const maximumValue = market.exposures.forCell(index).reduce((sum, exposure) =>
-          sum + exposure.quantity * (prices.get(exposure.categoryId) ?? 0), 0);
-        const normalized = Math.log1p(maximumValue) / scaleCeiling;
+        const cellValue = mode === "maximum-value"
+          ? market.exposures.forCell(index).reduce((sum, exposure) =>
+            sum + exposure.quantity * (prices.get(exposure.categoryId) ?? 0), 0)
+          : market.calculateCell(index, now).availablePriorityPoints;
+        const normalized = Math.log1p(cellValue) / scaleCeiling;
         const centerX = Math.floor((col + 0.5 - columnStart) * pixelsPerCell) + pixelRadius;
         const centerY = Math.floor((row + 0.5 - rowStart) * pixelsPerCell) + pixelRadius;
         if (centerX < 0 || centerX >= bufferWidth || centerY < 0 || centerY >= bufferWidth) continue;
@@ -184,9 +211,11 @@ export async function createCellLayer(
   onSelect: (index: number, route?: Route) => void,
   getMarket: () => CellMarketState,
   nowSeconds: () => number,
+  getCloudBaselineTable: () => Uint8Array | undefined,
 ) {
   let layer: ImageryLayer;
   let maximumValueLayer: ImageryLayer | null = null;
+  let currentPriorityLayer: ImageryLayer | null = null;
   let visible = true;
   let selectedCategoryId: string | null = null;
   let planningLayer: CellPlanningLayer = "none";
@@ -217,13 +246,14 @@ export async function createCellLayer(
   const setCategory = (categoryId: string | null) => {
     selectedCategoryId = categoryId;
     if (layer) viewer.imageryLayers.remove(layer, true);
-    layer = new ImageryLayer(createProvider(grid, categoryId, getMarket, nowSeconds), {
+    layer = new ImageryLayer(createProvider(grid, categoryId, getMarket, nowSeconds, getCloudBaselineTable), {
       magnificationFilter: TextureMagnificationFilter.NEAREST,
       minificationFilter: TextureMinificationFilter.NEAREST,
     });
     layer.show = visible;
     viewer.imageryLayers.add(layer);
     if (maximumValueLayer) viewer.imageryLayers.raiseToTop(maximumValueLayer);
+    if (currentPriorityLayer) viewer.imageryLayers.raiseToTop(currentPriorityLayer);
     viewer.scene.requestRender();
   };
   setCategory(null);
@@ -273,6 +303,7 @@ export async function createCellLayer(
       }
       for (const entity of scheduledEntities.values()) entity.show = visible && planningLayer === "scheduled";
       if (maximumValueLayer) maximumValueLayer.show = visible && planningLayer === "maximum-value";
+      if (currentPriorityLayer) currentPriorityLayer.show = visible && planningLayer === "current-priority";
       viewer.scene.requestRender();
   };
 
@@ -282,15 +313,35 @@ export async function createCellLayer(
     setPlanningLayer(mode: CellPlanningLayer) {
       planningLayer = mode;
       if (mode === "maximum-value" && !maximumValueLayer) {
-        maximumValueLayer = new ImageryLayer(createMaximumValueDotProvider(grid, getMarket), {
+        maximumValueLayer = new ImageryLayer(createCellDotProvider(grid, getMarket, nowSeconds, "maximum-value"), {
           magnificationFilter: TextureMagnificationFilter.NEAREST,
           minificationFilter: TextureMinificationFilter.NEAREST,
         });
         maximumValueLayer.show = visible;
         viewer.imageryLayers.add(maximumValueLayer);
       }
+      if (mode === "current-priority" && !currentPriorityLayer) {
+        currentPriorityLayer = new ImageryLayer(createCellDotProvider(grid, getMarket, nowSeconds, "current-priority"), {
+          magnificationFilter: TextureMagnificationFilter.NEAREST,
+          minificationFilter: TextureMinificationFilter.NEAREST,
+        });
+        currentPriorityLayer.show = visible;
+        viewer.imageryLayers.add(currentPriorityLayer);
+      }
       if (maximumValueLayer) maximumValueLayer.show = visible && mode === "maximum-value";
+      if (currentPriorityLayer) currentPriorityLayer.show = visible && mode === "current-priority";
       renderOperationalOverlay(lastOperationalState, lastSatelliteEarthFixedKm);
+    },
+    refreshCurrentPriority() {
+      if (!currentPriorityLayer || planningLayer !== "current-priority") return;
+      viewer.imageryLayers.remove(currentPriorityLayer, true);
+      currentPriorityLayer = new ImageryLayer(createCellDotProvider(grid, getMarket, nowSeconds, "current-priority"), {
+        magnificationFilter: TextureMagnificationFilter.NEAREST,
+        minificationFilter: TextureMinificationFilter.NEAREST,
+      });
+      currentPriorityLayer.show = visible;
+      viewer.imageryLayers.add(currentPriorityLayer);
+      viewer.scene.requestRender();
     },
     setOperationalOverlay(state: CellOperationalVisualization, satelliteEarthFixedKm: { x: number; y: number; z: number } | null) {
       lastOperationalState = state;
@@ -300,6 +351,7 @@ export async function createCellLayer(
     setVisible(show: boolean) {
       visible = show; layer.show = show;
       if (maximumValueLayer) maximumValueLayer.show = show && planningLayer === "maximum-value";
+      if (currentPriorityLayer) currentPriorityLayer.show = show && planningLayer === "current-priority";
       selection.show = show && selectedIndex !== -1;
       for (const entity of scheduledEntities.values()) entity.show = show && planningLayer === "scheduled";
       activeCellEntity.show = show && planningLayer === "imaging" && hasActiveCapture;
@@ -326,6 +378,7 @@ export async function createCellLayer(
       clickHandler.destroy(); viewer.entities.remove(selection); viewer.entities.remove(activeCellEntity); viewer.entities.remove(activeCellMarker); viewer.entities.remove(imagingRay);
       for (const entity of scheduledEntities.values()) viewer.entities.remove(entity);
       if (maximumValueLayer) viewer.imageryLayers.remove(maximumValueLayer, true);
+      if (currentPriorityLayer) viewer.imageryLayers.remove(currentPriorityLayer, true);
       viewer.imageryLayers.remove(layer, true);
     },
   };

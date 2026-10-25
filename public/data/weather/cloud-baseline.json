@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "product": "NOAA/NCEI ISCCP-H HGM Basic",
+  "productVersion": "v01r00 Basic",
+  "variable": "cldamt",
+  "units": "whole percentage points",
+  "sourceMonth": "2013-01",
+  "baselineMethod": "single-month spatial snapshot repeated across all 12 calendar months (temporary prototype baseline)",
+  "selectedClimatologyTarget": "2004-2013 monthly means; not yet built",
+  "sourceFile": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+  "sourceBytes": 4329947,
+  "sourceSha256": "38af6153b5951d0c03fa5ac3dc5d2377e48b361181588dce71851bc991592193",
+  "sourceUrl": "https://www.ncei.noaa.gov/products/international-satellite-cloud-climatology",
+  "doi": "10.7289/V5QZ281S",
+  "grid": {
+    "rows": 180,
+    "columns": 360,
+    "resolutionDegrees": 1,
+    "rowOrder": "north-to-south",
+    "longitude": "-180 to 180"
+  },
+  "missingSourceCells": 14,
+  "missingCellMethod": "nearest valid 1-degree neighbor; deterministic row-major tie break",
+  "baselineSha256": "bfcc4b736a4982f9ba30881758e9a4dd21009ab5bff5db17029547d4bdd18cc0",
+  "generatedAtUtc": "2026-10-25T16:41:08.359448+00:00",
+  "citation": "Hankins, B.; NOAA Climate Data Record Program (2016): International Satellite Cloud Climatology Project Climate Data Record, H-Series. NOAA National Centers for Environmental Information. https://doi.org/10.7289/V5QZ281S"
+}

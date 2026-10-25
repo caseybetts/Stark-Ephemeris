@@ -46,6 +46,7 @@ type Candidate = {
   weightedPriorityPoints: number;
   weatherWeight?: 1 | 2 | 3 | 4;
   forecastBand?: "clear" | "mixed" | "cloudy" | "overcast";
+  forecastCloudCoverPercent?: number;
   energyAfterWh: number;
   endPointing: PointingDirection;
 };
@@ -54,7 +55,11 @@ export type GreedyScheduleCommand = {
   id: string;
   label: string;
   durationSeconds: number;
-  cellCapture?: { cellIndex: number; target: GeographicLocation };
+  cellCapture?: {
+    cellIndex: number;
+    target: GeographicLocation;
+    forecastCloudCoverPercent?: number;
+  };
 };
 
 export type GreedyScheduleDecision = {
@@ -127,7 +132,12 @@ export function generateGreedyCellSchedule(input: ScheduleInput): GreedyCellSche
       id: `greedy-capture-${commandSequence++}`,
       label: `Capture cell ${selected.cellId}`,
       durationSeconds: selected.durationSeconds,
-      cellCapture: { cellIndex: selected.cellIndex, target: { ...selected.target } },
+      cellCapture: {
+        cellIndex: selected.cellIndex,
+        target: { ...selected.target },
+        ...(selected.forecastCloudCoverPercent !== undefined
+          ? { forecastCloudCoverPercent: selected.forecastCloudCoverPercent } : {}),
+      },
     });
     const alternatives = ranked.slice(1, 4).map(candidate => ({
       cellId: candidate.cellId,
@@ -258,7 +268,12 @@ export function generateBoundedCellSchedule(input: ScheduleInput): GreedyCellSch
         id: `beam-capture-${sequence++}`,
         label: `Capture cell ${selected.cellId}`,
         durationSeconds: selected.durationSeconds,
-        cellCapture: { cellIndex: selected.cellIndex, target: { ...selected.target } },
+        cellCapture: {
+          cellIndex: selected.cellIndex,
+          target: { ...selected.target },
+          ...(selected.forecastCloudCoverPercent !== undefined
+            ? { forecastCloudCoverPercent: selected.forecastCloudCoverPercent } : {}),
+        },
       });
       decisions.push({
         cellIndex: selected.cellIndex, cellId: selected.cellId,
@@ -340,7 +355,7 @@ function findRankedOptions(
       ).availablePriorityPoints;
       if (!(priorityPoints > 0)) continue;
       const forecast = input.weather
-        ? cloudForecastForInterval(input.weather, cellIndex, input.startsAtSeconds,
+        ? cloudForecastForInterval(input.weather, cellId, input.startsAtSeconds,
           feasibility.collectionStartsAtSeconds, feasibility.completesAtSeconds)
         : null;
       const weightedPriorityPoints = priorityPoints * (forecast?.weight ?? 4) / 4;
@@ -353,7 +368,11 @@ function findRankedOptions(
           completesAtSeconds: feasibility.completesAtSeconds,
           durationSeconds: feasibility.completesAtSeconds - sampleAtSeconds,
           priorityPoints, weightedPriorityPoints,
-          ...(forecast ? { weatherWeight: forecast.weight, forecastBand: forecast.band } : {}),
+          ...(forecast ? {
+            weatherWeight: forecast.weight,
+            forecastBand: forecast.band,
+            forecastCloudCoverPercent: forecast.forecastPercent,
+          } : {}),
           energyAfterWh: capturePower.energyWh,
           endPointing: feasibility.endPointingDirection,
         });

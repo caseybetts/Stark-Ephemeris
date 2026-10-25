@@ -135,7 +135,7 @@
             <div class="condition-grid">
               <article class="condition-card">
                 <span class="condition-icon sun-icon" aria-hidden="true">☼</span>
-                <div><small>SURFACE IN SUN</small><strong id="surface-sunlit">—</strong></div>
+                <div><small>GROUND STATIONS IN SUN</small><strong id="surface-sunlit">—</strong></div>
               </article>
               <article class="condition-card">
                 <span class="condition-icon eclipse-icon" aria-hidden="true">◐</span>
@@ -168,16 +168,6 @@
             <p class="approximation-note">FIXED <b id="contact-radius">—</b> KM CONTACT RADIUS · NOT A RADIO LINK MODEL.</p>
           </section>
 
-          <section class="section-block location-block" aria-labelledby="locations-title">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">SURFACE ASSETS</p>
-                <h2 id="locations-title">Locations</h2>
-              </div>
-              <span class="network-count" id="location-count">—</span>
-            </div>
-            <div class="location-list" id="location-list" aria-live="polite"></div>
-          </section>
           </section>
 
           <section class="management-tabpanel spacecraft-panel" id="panel-spacecraft" role="tabpanel" aria-labelledby="tab-spacecraft" tabindex="0" hidden>
@@ -260,7 +250,7 @@
                 <span class="network-count" id="station-table-count">—</span>
               </div>
               <p class="table-explainer">Available antennas serve one spacecraft at a time. The first pass holds the antenna until it ends, then the next spacecraft still in view is served; equal starts use spacecraft ID order.</p>
-              <div class="table-scroll" role="region" aria-label="Ground station status table" tabindex="0">
+              <div class="stations-table-scroll" role="region" aria-label="Ground station status table" tabindex="0">
                 <table class="operations-table stations-table">
                   <thead>
                     <tr>
