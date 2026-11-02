@@ -56,7 +56,7 @@ Use an hourly forecast value per ¼° market cell. A forecast issued at a simula
 
 Return a coarse forecast-risk band and map it to a small integer scheduling weight (for example 0–4). For a multi-hour collection, choose the band from time-weighted forecast cover first, then apply the same table; do not sample outcomes in candidate loops. The table should be monotone with forecast cover and lead time, with a small set of fixtures. It is a scheduling heuristic, not a calibrated probability estimate. Score an opportunity as projected available priority times risk weight divided by scale; keep raw displayed priority and image payout unchanged. If playtests show the coarse weight does not improve choices, remove forecast weighting rather than adding a costly model.
 
-The forecast may be shown to the player as a simple estimate or range, but a forecast UI is optional for the first implementation. If shown, label forecast separately from observed actual weather and explain forecast age/lead time. Do not reveal actual hourly values for locations without a completed capture.
+The Schedule table displays the forecasted mean cloud cover stored with each scheduled capture. Treat it as a forecast snapshot for the planned collection interval; keep it distinct from observed weather and from the monthly-average map fill. Do not reveal actual hourly values for locations without a completed capture.
 
 ## Integration and event ordering
 
@@ -80,27 +80,27 @@ Acceptance should cover: data-product reproducibility and attribution; monthly/U
 
 ### Approved lightweight starter package
 
-These are proposed playtest knobs, not realism targets:
+These are the approved prototype settings; values are playtest knobs, not realism targets:
 
 - Start the scenario at 2026-01-01 00:00 UTC and advance its calendar from simulation seconds.
-- Store cloud cover as whole percentage points. Use a shared 5° region disturbance that persists for six hours, then smaller keyed hourly 1° variation and keyed ¼° variation. Suggested standard deviations are 12, 8, and 12 percentage points respectively; clamp the combined result to 0–100.
-- Mark an image usable when time-weighted mean cloud over collection is at or below 60%.
+- Store cloud cover as whole percentage points. Use a shared 5° region disturbance that persists for six hours, then smaller keyed hourly 1° variation and keyed ¼° variation. Standard deviations are 12, 8, and 12 percentage points respectively; clamp the combined result to 0–100.
+- Mark an image usable when time-weighted mean cloud over collection is at or below 20%.
 - Use an imperfect forecast derived from the shared six-hour component with keyed lead-dependent noise. Map its result to four simple scheduling weights (4, 3, 2, 1 across clearer-to-cloudier bands); no probability integration or additional outcome branches.
 - On weather failure, consume the scheduled time and admitted energy, create no image, and do not reset VAM. Add no retry or cooldown mechanism; later ordinary scheduling may consider the cell again.
-- If the interface has a natural place, show a short risk band and forecast age beside the selected target; skip a weather map.
+- Show forecasted mean cloud cover in the Scheduled cells table; a forecast map remains out of scope.
 
 | Decision | Approved prototype setting | Status |
 | --- | --- | --- |
 | Simulation calendar | UTC epoch 2026-01-01 00:00 | Agreed |
 | Actual cloud variability | 5° region pattern for six hours (12 pp), 1° hourly variation (8 pp), and ¼° child variation (12 pp) | Agreed |
-| Usable image rule | Time-weighted collection cover <=60% | Agreed |
+| Usable image rule | Time-weighted collection cover <=20% | Agreed and implemented (2026-11-02) |
 | Capture failure costs | Keep elapsed slot and admitted capture energy; no image, revenue, or VAM reset | Agreed |
 | Forecast | Coarse shared six-hour signal with keyed lead-dependent error and four weights (4 to 1) | Agreed; bands/error spreads are tuning inputs |
 | Planner scoring | Scale projected available priority by forecast weight; raw market priority and payout remain unchanged | Agreed |
 | Retry | No automatic retry or cooldown; later ordinary planning may reconsider | Agreed |
 | Player forecast display | Show forecasted mean cloud cover beside each scheduled collection; no map required | Implemented in the Scheduled cells table |
 
-Before implementation, review the starter package and settle any changes to the calendar, spreads, threshold, failure behavior, and forecast weights. Keep validation at the level of deterministic replay, monotone weights, broad forecast direction, and responsive planning; high forecast accuracy is not a goal. The low-cost proposal avoids high-precision probability calculations.
+The deterministic calendar, actual-weather variation, <=20% usability threshold, failure costs, and retry behavior are implemented. Forecast scheduling weights use the provisional bands <=20, <=40, <=60, and >60%, with error spreads still tuning inputs. They guide target selection only; actual capture success uses observed cover and the <=20% rule. Keep validation at the level of deterministic replay, monotone weights, broad forecast direction, and responsive planning; high forecast accuracy is not a goal.
 
 ## Feasibility, efficiency, and strategy review — 2026-10-14
 
@@ -129,7 +129,7 @@ The gameplay settings and runtime slice are now approved and implemented. Remain
 
 ## Current implementation handoff
 
-The user approved the starter package above and later chose 2004–2013 (10 years) for the prototype climatology. Prototype forecast bands are <=40, 41–60, 61–80, and >80%; forecast error spreads are 12, 20, and 28 percentage points for lead through 6h, through 24h, and beyond. These are low-cost tuning inputs, not calibrated probabilities.
+The user approved the starter package above and later chose 2004–2013 (10 years) for the prototype climatology. The current forecast bands are <=20, <=40, <=60, and >60%; forecast error spreads are 12, 20, and 28 percentage points for lead through 6h, through 24h, and beyond. These are low-cost tuning inputs, not calibrated probabilities. The earlier wider bands (<=40, 41–60, 61–80, >80%) were superseded when the 20% usability threshold was implemented.
 
 `src/simulation/weather.ts` now provides keyed integer cloud values, time-weighted collection exposure, and a separate deterministic forecast. `OperationalLoop` checks weather at the normal capture-completion boundary, and `cellScheduler` uses forecast-weighted priority. The model does not create an hourly world field.
 

@@ -13,7 +13,7 @@ Read [`README.md`](README.md), [`VISION.md`](VISION.md), [`GAMEPLAY.md`](GAMEPLA
 ### Agreed product direction
 
 - The game is a single-player browser experience intended for static hosting on GitHub Pages.
-- The player operates an earth-imagery satellite startup. Operations, business state, and status panels are more important than high-end graphics.
+- The player configures and operates earth-imagery satellites in replayable, time-limited challenges. Operations, business state, and status panels are more important than high-end graphics. Mission setup, objectives, debriefs, and progression are not yet implemented; see the [challenge development plan](CHALLENGE_RUNS.md).
 - The world view should show a realistic-scale Earth and satellites. The globe remains stationary while satellites move relative to its surface.
 - Satellite altitude should not be exaggerated in the visualization. A glowing point can make a satellite visible; a 3D orbital path is optional.
 - Designers and content authors should specify locations with named latitude/longitude values. Conversion to renderer coordinates is an implementation detail.
@@ -199,15 +199,15 @@ Whole-cell collection is the gameplay abstraction. Collection duration, resource
 
 - Globe area: Earth globe, visible surface objects, satellite marker, optional orbit path.
 - Compact controls: pause/resume, orbit-track toggle, and 1×/60×/300× speed selector, starting at 60×.
-- The vertical management interface has five tabs: Summary (default), Spacecraft, Orders, Ground Stations, and Finance & Growth.
-- Summary presents current spacecraft status, company cash, world-state status, approximate station range, and daylight status of configured ground stations. Singapore and Amazon Basin imaging-market map locations are not part of the prototype. Finance & Growth reports the BIZ-01 ledger, -$50,000 opening balance, and standard spacecraft procurement.
+- The vertical management interface has six tabs: Summary (default), Spacecraft, Schedule, Orders, Ground Stations, and Finance & Growth.
+- Summary presents current spacecraft status, company cash, world-state status, approximate station range, and daylight status of configured ground stations. The globe models no standalone imaging-market sites (previously shown at Singapore and the Amazon Basin); commercial value remains represented by the cell market. Finance & Growth reports the BIZ-01 ledger, -$50,000 opening balance, and standard spacecraft procurement.
 - Spacecraft presents a data-driven table and detail view backed by a fleet collection. The initial fleet still contains only Asteria-1; each configured spacecraft receives its own world snapshot, marker, and orbit, and table selection highlights the chosen marker/orbit.
 - Ground Stations presents configured station names, cities/coordinates, facility availability, and uplink/downlink rates in a wide table. The current availability and rates are configurable prototype data; downlink rates constrain imagery transfer during contact. The intended model allows simultaneous uplink and downlink. Satellite-specific access remains in Summary until a fleet-wide contact model is designed.
-- Orders presents the land-intersecting ¼° grid with sourced attributes, search/filter/sort controls, paginated cell rows, cell details, a toggleable globe overlay, and mapped oil route geometry. Selection can outline and focus a cell or identify a pipeline route. Proposed normalized category exposure quantities are shown in cell details; sample dollar rates, payout/priority readouts, and collection/recovery previews are implemented. Final category approval, balance, and value/freshness map layers remain open. Data provenance and code boundaries are documented in [Cell grid data](CELL_DATA.md).
-- Finance & Growth reports whole-run cash, downlink revenue, recurring spacecraft/station costs, capital spending, net operating result, and ledger history. The player can choose a spacecraft orbit before purchasing and launching under [BIZ-02](BIZ_02_GROWTH_DESIGN.md).
+- Orders presents the land-intersecting ¼° grid with sourced attributes, search/filter/sort controls, paginated cell rows, cell details, a toggleable globe overlay, and mapped oil route geometry. Selection can outline and focus a cell or identify a pipeline route. Its Fill layer includes monthly baseline cloud cover; Planning includes scheduled/active work, maximum-value dots, and current-priority dots. The January 2013 NOAA map currently fills all months. Proposed normalized category exposure quantities are shown in cell details; sample dollar rates, payout/priority readouts, and collection/recovery previews are implemented. Final category approval, balance, and freshness encoding remain open. Data provenance and code boundaries are documented in [Cell grid data](CELL_DATA.md).
+- Finance & Growth reports whole-run cash, downlink revenue, owned-site maintenance, leased contact fees, capital spending, net operating result, and ledger history. The player can choose a spacecraft orbit before purchasing and launching under [BIZ-02](BIZ_02_GROWTH_DESIGN.md).
 - Changing tabs only changes visible interface content; it does not restart or pause the simulation.
 
-The prototype has a fixed initial camera, labeled sample markers, responsive CSS, and a simple map layer. Advanced camera interactions, selecting multiple satellites, image footprints, true day/night shading, and accessibility polish remain to be designed.
+The prototype has a fixed initial camera, labeled ground-station markers, responsive CSS, and globe overlays. Advanced camera interactions, selecting multiple satellites, image footprints, true day/night shading, and accessibility polish remain to be designed.
 
 ## 7. Suggested implementation sequence
 

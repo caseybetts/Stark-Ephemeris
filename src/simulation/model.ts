@@ -14,10 +14,16 @@ export type SurfaceObjectKind = "ground-station";
 
 export type GroundStationSiteDetails = {
   operationalStatus: "available" | "down";
+  /** Catalog sites may enter service through a one-time purchase or contact-time lease. */
+  accessMode?: "owned" | "leased";
   uplinkRateMbps: number;
   downlinkRateMbps: number;
-  /** Cost charged per minute while this station's antenna is assigned to a spacecraft. */
+  /** Owned-site maintenance charge, accrued per simulation day. */
+  maintenanceCostUsdPerDay?: number;
+  /** Leased-site cost charged per minute while its antenna serves a spacecraft. */
   contactCostUsdPerMinute: number;
+  /** Simulation time when this site entered the active network. */
+  accessStartedAtSeconds?: number;
 };
 
 export type SurfaceObject = {

@@ -38,11 +38,28 @@ export type GlobeView = {
   setTrackVisible(visible: boolean): void;
   setBasemapVisible(visible: boolean): void;
   setSurfaceObjectsVisible(visible: boolean): void;
+  setSurfaceObjects(surfaceObjects: readonly SurfaceObject[]): void;
+  setPreviewSurfaceObjects(surfaceObjects: readonly SurfaceObject[]): void;
   destroy(): void;
 };
 
 function inertialKilometersToCartesian(positionKm: { x: number; y: number; z: number }): Cartesian3 {
   return new Cartesian3(positionKm.x * 1_000, positionKm.y * 1_000, positionKm.z * 1_000);
+}
+
+function svgImage(svg: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+function satelliteOrbImage(accent: string): string {
+  return svgImage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><radialGradient id="orb"><stop offset="0" stop-color="#fff"/><stop offset=".12" stop-color="#f5fcff"/><stop offset=".26" stop-color="${accent}" stop-opacity=".96"/><stop offset=".52" stop-color="${accent}" stop-opacity=".42"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs><circle cx="32" cy="32" r="32" fill="url(#orb)"/></svg>`);
+}
+
+function groundStationImage(object: SurfaceObject, preview: boolean): string {
+  const leased = object.groundStationDetails?.accessMode === "leased";
+  const accent = preview || leased ? "#72d9df" : "#ffbd70";
+  const dash = preview ? ' stroke-dasharray="2 2"' : "";
+  return svgImage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><radialGradient id="a"><stop offset="0" stop-color="${accent}" stop-opacity=".42"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs><circle cx="24" cy="24" r="23" fill="url(#a)"/><circle cx="24" cy="24" r="13" fill="none" stroke="${accent}" stroke-opacity=".72" stroke-width="1"${dash}/><path d="M24 19v13m-6 4h12m-9 0 3-7 3 7M18 17a8 8 0 0 0 0 8m12-8a8 8 0 0 1 0 8M14 13a14 14 0 0 0 0 16m20-16a14 14 0 0 1 0 16" fill="none" stroke="#f3fbff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"/><circle cx="24" cy="18" r="2" fill="#fff"/></svg>`);
 }
 
 function orbitArcPositions(
@@ -138,29 +155,30 @@ function createOrbitVisual(satellite: SatelliteDefinition, selected: boolean, co
   return { ahead, behind };
 }
 
-function addSurfaceObject(viewer: Viewer, object: SurfaceObject) {
+function addSurfaceObject(viewer: Viewer, object: SurfaceObject, preview = false) {
   return viewer.entities.add({
-    id: object.id,
+    id: preview ? `preview-${object.id}` : object.id,
     name: object.name,
     description: object.description,
     position: locationToCartesian(object.location),
-    point: {
-      pixelSize: 9,
-      color: Color.fromCssColorString("#ffbd70"),
-      outlineColor: Color.fromCssColorString("#071016"),
-      outlineWidth: 2,
+    billboard: {
+      image: groundStationImage(object, preview),
+      width: preview ? 17 : 16,
+      height: preview ? 17 : 16,
+      horizontalOrigin: HorizontalOrigin.CENTER,
+      verticalOrigin: VerticalOrigin.CENTER,
       heightReference: HeightReference.NONE,
     },
     label: {
-      text: object.name.toUpperCase(),
+      text: preview ? `${object.name.toUpperCase()} · OFFER` : object.name.toUpperCase(),
       font: "600 10px Inter, sans-serif",
-      fillColor: Color.fromCssColorString("#e7f1f2"),
+      fillColor: Color.fromCssColorString(preview ? "#9be6e8" : "#e7f1f2"),
       outlineColor: Color.fromCssColorString("#071016"),
       outlineWidth: 3,
       style: LabelStyle.FILL_AND_OUTLINE,
       horizontalOrigin: HorizontalOrigin.LEFT,
       verticalOrigin: VerticalOrigin.CENTER,
-      pixelOffset: new Cartesian2(11, 0),
+      pixelOffset: new Cartesian2(9, 0),
     },
   });
 }
@@ -227,7 +245,7 @@ export async function createGlobeView(
     orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
   });
 
-  const satelliteColors = ["#f4f870", "#72d7ff", "#ff9b76", "#c4a7ff", "#7ce2a4"];
+  const satelliteColors = ["#effaff", "#76d9ff", "#75afff", "#c0e9ff", "#649bff"];
   let satelliteDefinitions = [...satellites];
   let selectedSatelliteId = satelliteDefinitions[0]?.id;
   const createSatelliteVisual = (satellite: SatelliteDefinition, index: number) => {
@@ -241,11 +259,12 @@ export async function createGlobeView(
           rotateInertialToEarthFixed(satellitePositionInertial(satellite.orbit, 0), 0),
         ),
       ),
-      point: {
-        pixelSize: selectedInitially ? 13 : 9,
-        color,
-        outlineColor: Color.fromCssColorString("#071016"),
-        outlineWidth: selectedInitially ? 3 : 2,
+      billboard: {
+        image: satelliteOrbImage(satelliteColors[index % satelliteColors.length]!),
+        width: selectedInitially ? 17 : 13.5,
+        height: selectedInitially ? 17 : 13.5,
+        horizontalOrigin: HorizontalOrigin.CENTER,
+        verticalOrigin: VerticalOrigin.CENTER,
         heightReference: HeightReference.NONE,
       },
       label: {
@@ -256,7 +275,7 @@ export async function createGlobeView(
         outlineColor: Color.fromCssColorString("#071016"),
         outlineWidth: 4,
         style: LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cartesian2(0, -22),
+        pixelOffset: new Cartesian2(0, -11),
         horizontalOrigin: HorizontalOrigin.CENTER,
         verticalOrigin: VerticalOrigin.BOTTOM,
       },
@@ -277,8 +296,8 @@ export async function createGlobeView(
       if (!visual) return;
       const selected = satellite.id === selectedSatelliteId;
       const color = Color.fromCssColorString(satelliteColors[index % satelliteColors.length]);
-      visual.entity.point!.pixelSize = new ConstantProperty(selected ? 13 : 9);
-      visual.entity.point!.outlineWidth = new ConstantProperty(selected ? 3 : 2);
+      visual.entity.billboard!.width = new ConstantProperty(selected ? 17 : 13.5);
+      visual.entity.billboard!.height = new ConstantProperty(selected ? 17 : 13.5);
       visual.entity.label!.show = new ConstantProperty(selected);
       visual.orbit.ahead.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.82 : 0.46);
       visual.orbit.behind.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.3 : 0.16);
@@ -286,10 +305,11 @@ export async function createGlobeView(
     viewer.scene.requestRender();
   };
 
-  const surfaceEntities = surfaceObjects.map((object) => ({
+  let surfaceEntities = surfaceObjects.map((object) => ({
     object,
     entity: addSurfaceObject(viewer, object),
   }));
+  let previewSurfaceEntities: { object: SurfaceObject; entity: ReturnType<typeof addSurfaceObject> }[] = [];
 
   return {
     viewer,
@@ -344,6 +364,18 @@ export async function createGlobeView(
     },
     setSurfaceObjectsVisible(visible) {
       for (const item of surfaceEntities) item.entity.show = visible;
+      viewer.scene.requestRender();
+    },
+    setSurfaceObjects(nextObjects) {
+      const visible = surfaceEntities.some(item => item.entity.show);
+      for (const item of surfaceEntities) viewer.entities.remove(item.entity);
+      surfaceEntities = nextObjects.map(object => ({ object, entity: addSurfaceObject(viewer, object) }));
+      if (!visible) for (const item of surfaceEntities) item.entity.show = false;
+      viewer.scene.requestRender();
+    },
+    setPreviewSurfaceObjects(nextObjects) {
+      for (const item of previewSurfaceEntities) viewer.entities.remove(item.entity);
+      previewSurfaceEntities = nextObjects.map(object => ({ object, entity: addSurfaceObject(viewer, object, true) }));
       viewer.scene.requestRender();
     },
     destroy() {

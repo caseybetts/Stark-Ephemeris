@@ -38,6 +38,9 @@ test("capture admission checks minimum charge over eclipse, not just final charg
   const rejected = lowPower.beginCapture(satellite.id, satellite, 2_000, 45, "capture-102");
   assert.equal(rejected.admitted, false);
   assert.match(rejected.reason, /reserve/);
+  assert.equal(lowPower.isPowerRejectedCaptureActive(satellite.id, 2_010), true);
+  assert.equal(lowPower.isPowerRejectedCaptureActive(satellite.id, 2_045), false);
+  lowPower.completeCapture("capture-102");
 });
 
 test("capture rejects an eclipse reserve dip even when later sunlight raises the ending charge", () => {

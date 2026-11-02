@@ -65,15 +65,16 @@
             </div>
             <div class="top-actions">
               <button class="icon-button" id="basemap-toggle" type="button" aria-pressed="true" aria-label="Toggle basemap imagery">
-                <span aria-hidden="true">◉</span>
+                <svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.25"/><path d="M3 10h14M10 2.75c2 2 3 4.4 3 7.25s-1 5.25-3 7.25C8 15.25 7 12.85 7 10s1-5.25 3-7.25Z"/></svg>
                 <span>BASEMAP</span>
               </button>
               <button class="icon-button" id="track-toggle" type="button" aria-pressed="true">
-                <span class="track-icon" aria-hidden="true">⌁</span>
+                <svg aria-hidden="true" viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="7.5" ry="3.5" transform="rotate(-35 10 10)"/><circle class="orbit-icon-point" cx="15.4" cy="5.4" r="1.5"/></svg>
                 <span>ORBIT TRACK</span>
               </button>
               <button class="icon-button" id="pause-toggle" type="button" aria-pressed="false">
-                <span id="pause-icon" aria-hidden="true">Ⅱ</span>
+                <svg class="pause-glyph" aria-hidden="true" viewBox="0 0 20 20"><path d="M6.5 4.5h2.5v11H6.5zM11 4.5h2.5v11H11z"/></svg>
+                <svg class="play-glyph" aria-hidden="true" viewBox="0 0 20 20"><path d="M6.5 4.25 15 10l-8.5 5.75z"/></svg>
                 <span id="pause-label">PAUSE</span>
               </button>
             </div>
@@ -87,7 +88,8 @@
 
           <div class="bottom-legend">
             <span class="legend-item"><i class="legend-satellite"></i> SATELLITE</span>
-            <span class="legend-item"><i class="legend-station"></i> GROUND STATION</span>
+            <span class="legend-item"><i class="legend-station"></i> OWNED STATION</span>
+            <span class="legend-item"><i class="legend-leased-station"></i> LEASED</span>
             <span class="legend-item"><i class="legend-target"></i> SAMPLE SITE</span>
             <span class="legend-note">Surface status updates with the simulation clock</span>
           </div>
@@ -259,7 +261,7 @@
                       <th scope="col">Site status</th>
                       <th scope="col">Uplink rate (Mbps)</th>
                       <th scope="col">Downlink rate (Mbps)</th>
-                      <th scope="col">Contact cost ($/min)</th>
+                      <th scope="col">Operating cost</th>
                       <th scope="col">Antenna assignment</th>
                     </tr>
                   </thead>
@@ -269,11 +271,6 @@
             </section>
           </section>
           <section class="management-tabpanel finance-panel" id="panel-finance-growth" role="tabpanel" aria-labelledby="tab-finance-growth" tabindex="0" hidden>
-            <div class="finance-heading">
-              <div><p class="eyebrow">COMPANY PERFORMANCE</p><h2>Finance &amp; Growth</h2></div>
-              <span class="cell-tag">PROTOTYPE ECONOMY · SAMPLE COSTS</span>
-            </div>
-            <p class="finance-warning" id="finance-warning" role="status" aria-live="polite" hidden></p>
             <div class="finance-metrics" aria-label="Whole-run financial totals">
               <div><span>COMPANY CASH</span><strong id="finance-cash">-$50,000.00</strong></div>
               <div><span>NET CASH MOVEMENT</span><strong id="finance-cash-movement">$0.00</strong></div>
@@ -282,7 +279,7 @@
               <div><span>CAPITAL SPENDING</span><strong id="finance-capital-spending">$0.00</strong></div>
               <div><span>NET OPERATING RESULT</span><strong id="finance-net">$0.00</strong></div>
             </div>
-            <p class="finance-explainer">Revenue is credited when imagery is fully downlinked. Opening cash is -$50,000; no loan interest is modeled. The <span id="finance-spacecraft-rate">$100.00</span> spacecraft-day charge represents general mission operations; ground stations cost <span id="finance-station-rate">$25.00</span> per station-day. A new launch joins charges at the next day boundary. Capital spending is separate; negative cash shows a warning while operations continue.</p>
+            <p class="finance-explainer">Revenue is credited when imagery is fully downlinked. Owned stations incur daily maintenance; leased stations charge per contact minute. Opening cash is -$50,000; no loan interest is modeled. Capital spending is separate, and negative cash does not stop routine operations.</p>
             <section class="growth-purchase" aria-labelledby="growth-purchase-title">
               <div class="section-heading">
                 <div><p class="eyebrow">AVAILABLE GROWTH</p><h2 id="growth-purchase-title">Standard imaging spacecraft</h2></div>
@@ -290,7 +287,7 @@
               </div>
               <p class="finance-explainer">Spacecraft <strong>$50,000,000</strong> · launch <strong>$0</strong>. Choose the orbit before launch. Fields start from Asteria-1's current orbit; edit them for each launch. The standard spacecraft keeps its current modeled hardware and operating behavior.</p>
               <div class="growth-purchase-controls">
-                <label>Altitude (km)<input id="purchase-orbit-altitude" type="number" min="1" step="10" value="550" required></label>
+                <label>Altitude (km)<input id="purchase-orbit-altitude" type="number" min="10" step="10" value="550" required></label>
                 <label>Inclination (°)<input id="purchase-orbit-inclination" type="number" min="0" max="180" step="1" value="53" required></label>
                 <label>Ascending node (°)<input id="purchase-orbit-node" type="number" min="0" max="359" step="1" value="12" required></label>
                 <label>Phase at launch (°)<input id="purchase-orbit-phase" type="number" min="0" max="359" step="1" value="8" required></label>
@@ -299,6 +296,15 @@
               </div>
               <p class="growth-purchase-status" id="purchase-package-summary" aria-live="polite"></p>
               <p class="growth-purchase-status" id="purchase-spacecraft-status" role="status" aria-live="polite">Edit the orbit above; launch is available when company cash covers the package.</p>
+            </section>
+            <section class="growth-purchase station-market" aria-labelledby="station-market-title">
+              <div class="section-heading">
+                <div><p class="eyebrow">INACTIVE · AVAILABLE TO BUY OR LEASE</p><h2 id="station-market-title">Additional ground stations</h2></div>
+                <span class="network-count">4 SITES</span>
+              </div>
+              <p class="finance-explainer">Sites are inactive until purchased or leased. Purchase has a one-time cost plus daily upkeep; leasing has no upfront cost and bills per contact minute. Access estimates use the current fleet orbit and next 24 simulated hours; overlapping access may compete for one antenna.</p>
+              <div class="station-offers" id="ground-station-offers" aria-live="polite"></div>
+              <p class="growth-purchase-status" id="ground-station-purchase-status" role="status" aria-live="polite">Purchase or lease a site to add it to the active ground network.</p>
             </section>
             <section class="section-block finance-ledger" aria-labelledby="finance-ledger-title">
               <div class="section-heading"><div><p class="eyebrow">AUDIT TRAIL</p><h2 id="finance-ledger-title">Company ledger</h2></div><span class="network-count">WHOLE RUN</span></div>

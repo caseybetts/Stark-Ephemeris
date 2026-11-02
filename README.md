@@ -2,6 +2,8 @@
 
 Browser-based earth-imagery satellite operations simulator prototype.
 
+The agreed gameplay direction is a sequence of replayable challenges: configure a fleet within a budget, operate it toward a financial target before a deadline, then learn from the result and retry or progress. The current app is the continuous simulation foundation; mission setup, scoring, debriefs, and progression are planned in the [challenge development plan](docs/CHALLENGE_RUNS.md).
+
 ## Run locally
 
 Requirements: Node.js and npm. Dependencies are installed into this project; no global package installation is required.

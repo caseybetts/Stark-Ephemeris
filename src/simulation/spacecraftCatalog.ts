@@ -80,8 +80,6 @@ export function purchaseSpacecraftWithEquipment(request: {
   ascendingNodeDeg: number;
   phaseAtLaunchDeg: number;
   referenceSatelliteId: string;
-  spacecraftIds: readonly string[];
-  groundStationIds: readonly string[];
   storageCapacityBytes: number;
   operationalLoop: OperationalLoop;
   finance: CompanyFinance;
@@ -111,7 +109,6 @@ export function purchaseSpacecraftWithEquipment(request: {
     power: request.powerOperations.getConfiguration(request.referenceSatelliteId),
   };
 
-  request.finance.advanceTo(request.timeSeconds, request.spacecraftIds, request.groundStationIds);
   const procurementId = `procurement:${request.eventId}`;
   const previousEntry = request.finance.getSnapshot().entries.find(entry => entry.id === procurementId);
   if (previousEntry) {

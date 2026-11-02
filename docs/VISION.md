@@ -2,7 +2,9 @@
 
 ## The game
 
-Build an earth-imagery satellite startup from its first spacecraft into a sustainable constellation. The player is both operator and founder: they configure satellites, keep the service running, earn customer revenue, and decide how the company should grow.
+Build and operate earth-imagery satellite fleets through replayable, time-limited challenges. The player chooses spacecraft and orbits within a mission budget, runs the operation, and adjusts ground-side priorities to meet a financial target by a deadline. Failed attempts provide information for a better setup and another try.
+
+**Agreed direction (2026-11-02):** Begin with standalone mission briefs and develop a sequence of levels with increasingly demanding operational constraints. The existing continuous startup simulation is the implementation foundation; level setup, objectives, debriefs, and progression are not implemented yet. A continuing company story and cross-level asset/cash carryover remain open, rather than prerequisites for the first challenge.
 
 The central appeal is watching a carefully configured operation produce useful imagery and income, then stepping in when capacity, equipment, or business priorities come into conflict.
 
@@ -10,7 +12,8 @@ The central appeal is watching a carefully configured operation produce useful i
 
 - **Operations first:** The player understands what each satellite can do and why it is succeeding or struggling.
 - **Set up, observe, intervene:** Routine activity can run with standing priorities. The player’s attention goes to exceptions and consequential choices.
-- **Growth changes the job:** Early play is close to individual spacecraft; larger fleets introduce policies, satellite classes, launch cadence, and customer selection.
+- **Learn through retries:** A clear brief, understandable outcome, and quick return to setup make experimentation rewarding.
+- **Challenges change the job:** Early levels focus on one spacecraft; later levels can introduce larger fleets, constrained ground capacity, and changing markets.
 - **Tradeoffs are visible:** Storage, energy, downlink capacity, reliability, money, and customer commitments constrain one another.
 - **A readable living system:** The interface makes fleet state, operations, and business health easy to scan. A visual orbital view gives context without needing to be a high-fidelity aerospace visualization.
 

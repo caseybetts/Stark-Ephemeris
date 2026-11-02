@@ -4,9 +4,11 @@ Reviewed 2026-10-15 after BIZ-02 launch integration; FLEET-02B prototype designe
 
 ## Sequence
 
+**Priority update (2026-11-02):** The [current starting order](PENDING_CHANGES.md#suggested-starting-order) supersedes this historical feature sequence. Finish the bounded procurement/reset review and gather baseline play evidence, then define and deliver one replayable challenge. OPS-02 follows demonstrated mission needs; its onset-only notice proposal must be reconciled with the agreed warning/response direction. Its repair prices and recovery/upload rules remain unapproved.
+
 | Step | Deliverable | Readiness |
 | --- | --- | --- |
-| BIZ-01 | Company accounting, downlink income, recurring costs | Implemented; retain its regression tests during growth work. |
+| BIZ-01 | Company accounting, downlink income, station maintenance and lease fees | Implemented; retain its regression tests during growth work. |
 | BIZ-02 | Signed opening cash, capital spending, pre-launch orbit selection, immediate purchase, live fleet registration, reset, antenna sharing | Implemented prototype; production build passes. Behavioral verification remains pending. Decisions are recorded in the [growth guide](BIZ_02_GROWTH_DESIGN.md). |
 | FLEET-02B | Paid slew capability for new spacecraft | Implemented prototype; production build passes. Focused behavioral verification remains pending. |
 | OPS-02 | One understandable outage and response loop | [Design drafted](OPS_02_STATION_OUTAGE_DESIGN.md); proposed repair terms and contact recovery rules await review. Not implemented. |
@@ -32,7 +34,6 @@ Finance & Growth offers a **Slew capability** choice in the new-spacecraft form:
 | Upgrade surcharge per spacecraft | $0 | $5,000,000 |
 | Launch price | $0 | $0 |
 | Total purchase price | $50,000,000 | $55,000,000 |
-| Daily mission operating charge | $100 | $100 |
 
 The catalog lives in `src/simulation/spacecraftCatalog.ts`. The enhanced values are configurable prototype inputs, not real spacecraft specifications or final economy balance. A 10% surcharge gives the first comparison a simple starting point; its value has not been measured against game revenue. Storage, power configuration, image size, collection duration, access limits, and other installed capabilities stay at standard package values for this slice. Further hardware options and their tradeoffs belong to later design work.
 
@@ -51,7 +52,7 @@ After launch, show the installed slew option and numeric capability in spacecraf
 ### Implementation boundary
 
 - `src/simulation/spacecraftCatalog.ts` owns stable package IDs, configurable cent prices, and slew capabilities for Standard and Enhanced slew. Quote and purchase functions resolve the package for both the UI and future behavioral checks.
-- The purchase command validates the orbit and spacecraft registration, applies due costs, rechecks affordability, records one capital transaction, and registers the spacecraft. Procurement exposes spacecraft, upgrade, and launch components, as well as the selected equipment ID, for reconciliation and duplicate-command checks.
+- The purchase command validates the orbit and spacecraft registration, rechecks affordability, records one capital transaction, and registers the spacecraft. Procurement exposes spacecraft, upgrade, and launch components, as well as the selected equipment ID, for reconciliation and duplicate-command checks.
 - Each spacecraft stores its own equipment option ID and copied slew configuration. The existing shared retarget function consumes that spacecraft's configuration for both planning and execution. The catalog can expand later without turning this slice into a general hardware builder.
 
 ### Behavioral acceptance handoff (pending)
@@ -60,11 +61,11 @@ After launch, show the installed slew option and numeric capability in spacecraf
 2. One purchase records the base, upgrade, and launch amounts once. Replaying the same command adds no cost or spacecraft; a new deliberate command may buy another if affordable. Changing option contents under a reused command ID is rejected.
 3. Launch Standard, Enhanced, then Standard again. Confirm each retains its chosen rate and settling time, and Asteria-1 keeps its original capability. Changing the form or catalog must not change launched hardware, active TELs, imagery, or battery state.
 4. Check the 30-degree retarget arithmetic through the shared helper and a bounded scenario where the shorter retarget admits a capture the Standard option misses. Planning and execution must agree on timing and use each spacecraft's own capability. Compare equivalent scenarios independently to avoid shared-cell recovery obscuring the hardware effect; separately check mixed-fleet integration.
-5. Exercise the purchase UI, cost breakdown, capability readout, first daily charge, and reset. Retain the BIZ-02 acceptance checks for stable registration, shared antenna handoff, existing operational state, and time-step consistency; its behavioral review is still pending.
+5. Exercise the purchase UI, cost breakdown, capability readout, station maintenance and lease fees, and reset. Retain the BIZ-02 acceptance checks for stable registration, shared antenna handoff, existing operational state, and time-step consistency; its behavioral review is still pending.
 
 ### Approved scope and later tuning
 
-**Approved 2026-10-16:** Charge **+$5M per Enhanced spacecraft**, use **2 degrees/second**, retain **2 seconds settling time**, and retain the standard package's other subsystem settings and daily operating cost. Keep price and capability values configurable for later adjustment. The broad upgrade catalog remains deferred; profitability and growth pacing remain TUNE-01 work, informed by playtesting.
+**Approved 2026-10-16:** Charge **+$5M per Enhanced spacecraft**, use **2 degrees/second**, retain **2 seconds settling time**, and retain the standard package's other subsystem settings. Keep price and capability values configurable for later adjustment. The broad upgrade catalog remains deferred; profitability and growth pacing remain TUNE-01 work, informed by playtesting.
 
 ## OPS-02 design brief
 
@@ -85,6 +86,6 @@ Continuous health decay, permanent spacecraft loss, hidden diagnosis, cascading 
 - BIZ-02's initial standard-package scope left upgrades for a later slice; the user has since approved the FLEET-02B Enhanced slew option recorded above.
 - Current finance supports the negative opening balance and separates capital spending from operating costs.
 - Dynamic spacecraft registration, reset, orbit selection, and live renderer updates are implemented under BIZ-02.
-- The $100 spacecraft operating charge, pre-launch orbit selection, and exclusive antenna queue are agreed and recorded in Gameplay and the growth guide.
+- Pre-launch orbit selection and the exclusive antenna queue are agreed and recorded in Gameplay and the growth guide.
 - The approved economy may produce a very long growth interval. Funded test fixtures make procurement verifiable without changing the player's chosen economy or claiming it is balanced.
 - Upgrade and anomaly tasks now have bounded proposed scope, decision lists, dependencies, and acceptance journeys rather than broad feature headings.

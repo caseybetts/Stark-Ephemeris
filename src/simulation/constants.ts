@@ -45,7 +45,7 @@ export const INITIAL_FLEET: FleetState = {
   satellites: [DEFAULT_SATELLITE],
 };
 
-// Prototype site data only. Each station's contact charge can be tuned independently.
+// Prototype site data only. Owned sites pay daily maintenance, not per-contact fees.
 export const SURFACE_OBJECTS = [
   {
     id: "colorado-relay",
@@ -55,9 +55,12 @@ export const SURFACE_OBJECTS = [
     description: "Ground station · Colorado Springs",
     groundStationDetails: {
       operationalStatus: "available",
+      accessMode: "owned",
       uplinkRateMbps: 10,
       downlinkRateMbps: 100,
-      contactCostUsdPerMinute: 100,
+      maintenanceCostUsdPerDay: 100,
+      contactCostUsdPerMinute: 0,
+      accessStartedAtSeconds: 0,
     },
   },
   {
@@ -68,9 +71,12 @@ export const SURFACE_OBJECTS = [
     description: "Ground station · Longyearbyen",
     groundStationDetails: {
       operationalStatus: "available",
+      accessMode: "owned",
       uplinkRateMbps: 10,
       downlinkRateMbps: 100,
-      contactCostUsdPerMinute: 100,
+      maintenanceCostUsdPerDay: 125,
+      contactCostUsdPerMinute: 0,
+      accessStartedAtSeconds: 0,
     },
   },
   {
@@ -81,9 +87,12 @@ export const SURFACE_OBJECTS = [
     description: "Ground station · Perth",
     groundStationDetails: {
       operationalStatus: "available",
+      accessMode: "owned",
       uplinkRateMbps: 10,
       downlinkRateMbps: 100,
-      contactCostUsdPerMinute: 100,
+      maintenanceCostUsdPerDay: 150,
+      contactCostUsdPerMinute: 0,
+      accessStartedAtSeconds: 0,
     },
   },
   {
@@ -94,9 +103,12 @@ export const SURFACE_OBJECTS = [
     description: "Ground station · Santiago",
     groundStationDetails: {
       operationalStatus: "available",
+      accessMode: "owned",
       uplinkRateMbps: 10,
       downlinkRateMbps: 100,
-      contactCostUsdPerMinute: 100,
+      maintenanceCostUsdPerDay: 175,
+      contactCostUsdPerMinute: 0,
+      accessStartedAtSeconds: 0,
     },
   },
 ] as const;

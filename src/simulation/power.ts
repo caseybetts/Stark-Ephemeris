@@ -253,6 +253,14 @@ export class PowerOperations {
     return this.captureDecisions.get(actionId)?.reason ?? null;
   }
 
+  isPowerRejectedCaptureActive(satelliteId: string, atSeconds: number): boolean {
+    for (const decision of this.captureDecisions.values()) {
+      if (decision.satelliteId === satelliteId && !decision.admitted
+        && decision.startsAtSeconds <= atSeconds && decision.endsAtSeconds > atSeconds) return true;
+    }
+    return false;
+  }
+
   completeCapture(actionId: string): void {
     this.captureDecisions.delete(actionId);
   }

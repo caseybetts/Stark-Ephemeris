@@ -1,6 +1,6 @@
 /** Lightweight deterministic cloud conditions for the prototype. */
 export const WEATHER_EPOCH_UTC_MS = Date.parse("2026-01-01T00:00:00Z");
-export const PROTOTYPE_CLOUD_THRESHOLD_PERCENT = 60;
+export const PROTOTYPE_CLOUD_THRESHOLD_PERCENT = 20;
 export const PROTOTYPE_CLOUD_BASELINE_PERCENT = 50;
 
 export type WeatherConfiguration = {
@@ -126,9 +126,9 @@ export function cloudForecastForInterval(
 }
 
 export function forecastWeight(cloudPercent: number): Pick<CloudForecast, "weight" | "band"> {
-  if (cloudPercent <= 40) return { weight: 4, band: "clear" };
-  if (cloudPercent <= 60) return { weight: 3, band: "mixed" };
-  if (cloudPercent <= 80) return { weight: 2, band: "cloudy" };
+  if (cloudPercent <= 20) return { weight: 4, band: "clear" };
+  if (cloudPercent <= 40) return { weight: 3, band: "mixed" };
+  if (cloudPercent <= 60) return { weight: 2, band: "cloudy" };
   return { weight: 1, band: "overcast" };
 }
 

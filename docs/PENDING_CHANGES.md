@@ -2,6 +2,8 @@
 
 This is the project's on-deck menu of implementation work. It turns discussed features into bounded work items an agent can pick up after the user selects them.
 
+**Direction update (2026-11-02):** Replayable, time-limited challenges are now the primary gameplay direction. The [challenge development plan](CHALLENGE_RUNS.md) distinguishes approved experience from proposed mechanics. The [starting order](#suggested-starting-order) below supersedes earlier dated handoffs; this documentation update does not select implementation work or mark pending checks complete.
+
 **Design update (2026-10-15):** BIZ-02's standard purchase flow, pre-launch orbit selection, and shared antenna handoff are implemented; the production build passes. The user also approved prototype policies for capture completion, contact episodes, image retention/transfer, capture-time value quotes, and OPS-01B power behavior. Capacity and image-size values, physical capture limits, final power balance, and planner forecasts of antenna contention remain open.
 
 ## How to use this list
@@ -20,7 +22,7 @@ This is the project's on-deck menu of implementation work. It turns discussed fe
 - **Split:** An umbrella item retained for existing references; select its bounded child tasks in dependency order.
 - **Completed:** The described slice is implemented; this does not approve its provisional gameplay values or imply all later extensions are complete.
 
-## Roadmap alignment and tonight's handoff (2026-10-13)
+## Historical roadmap alignment and handoff (2026-10-13)
 
 The [roadmap](ROADMAP.md) owns the high-level sequence. This menu maps that sequence to existing task IDs without treating every layer as finished or every open rule as approved. “Global Order Deck” maps to the existing Orders cell market; it does not introduce individual customer contracts.
 
@@ -320,7 +322,7 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 **Done when:** Procurement validates affordability, the selected new spacecraft receives the purchased capability, and all existing spacecraft specifications remain unchanged.
 
-**Later tuning:** The surcharge, slew rate, and settling time are approved starter inputs, with standard subsystem settings/daily cost retained. Final balance can be adjusted after playtesting. BIZ-02's behavioral review remains pending and is carried into the implementation handoff; broader upgrade variety is deferred.
+**Later tuning:** The surcharge, slew rate, and settling time are approved starter inputs, with standard subsystem settings retained. Final balance can be adjusted after playtesting. BIZ-02's behavioral review remains pending and is carried into the implementation handoff; broader upgrade variety is deferred.
 
 **Dependencies:** FLEET-02A, BIZ-01 financial accounting, and BIZ-02 procurement.
 
@@ -370,15 +372,15 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 **Agreed:** Actual cloud conditions can cause capture failure. Forecasts may help scheduling but do not reveal perfect weather knowledge. Failed captures create no saleable imagery and do not reset VAM. Use NOAA/NCEI's public ISCCP-H HGM Basic monthly mean cloud amount, averaged by calendar month for 2004–2013 (10 complete years). This is the final decade of the originally selected 1984–2013 window. Its 1° equal-angle source grid matches the weather grid, so no spatial regridding is needed. See the [public NCEI data page](https://www.ncei.noaa.gov/products/international-satellite-cloud-climatology) and [direct HGM download directory](https://www.ncei.noaa.gov/data/international-satellite-cloud-climate-project-isccp-h-series-data/access/isccp-basic/hgm/); registration is optional. For each hourly time bucket, generate deterministic keyed 1° cover around its seasonal baseline, plus the agreed ¼° child variation. Store whole percentage points; clamp to 0–100.
 
-**Agreed behavior:** Use an explicit UTC epoch (2026-01-01), integer percentage cover, a 5° shared six-hour disturbance plus 1° hourly and ¼° child variation, collection-weighted usability at <=60%, and a separate coarse lead-dependent forecast. Weather failure consumes command time and admitted power without creating an image or resetting VAM. The planner scales projected priority by four coarse forecast weights. See [Gameplay](GAMEPLAY.md#agreed-scheduling-behavior) and the [CLOUD-01 design guide](CLOUD_01_DESIGN.md).
+**Agreed behavior:** Use an explicit UTC epoch (2026-01-01), integer percentage cover, a 5° shared six-hour disturbance plus 1° hourly and ¼° child variation, collection-weighted usability at <=20%, and a separate coarse lead-dependent forecast. Exactly 20% is accepted; values above 20% fail. Weather failure consumes command time and admitted power without creating an image or resetting VAM. The planner scales projected priority by four coarse forecast weights. See [Gameplay](GAMEPLAY.md#agreed-scheduling-behavior) and the [CLOUD-01 design guide](CLOUD_01_DESIGN.md).
 
-**Implemented:** `src/simulation/weather.ts` supplies keyed actual cover, collection interval averages, and a separate hourly forecast; `OperationalLoop` evaluates weather at capture completion; `cellScheduler` uses forecast-weighted priority. `tests/weather.test.mjs` and operations coverage exercise replay, hour boundaries, forecasts, and failed-capture costs.
+**Implemented:** `src/simulation/weather.ts` supplies keyed actual cover, collection interval averages, a <=20% capture threshold, and a separate hourly forecast with <=20, <=40, <=60, and >60% scheduling bands. `OperationalLoop` evaluates observed weather at capture completion; `cellScheduler` uses forecast-weighted priority. Weather, operations, and Summary performance tests cover replay, hour boundaries, forecast bands, the inclusive 20% boundary, and failed-capture costs.
 
 **Remaining:** Retrieve the 120 monthly HGM Basic NetCDF files for 2004–2013 (preferably by subsetting `cldamt` through THREDDS), average `cldamt` by calendar month, reorder the source's latitude/longitude axes for the runtime table, and replace the interim January 2013 map with the full 777,600-byte Uint8 baseline. Verify known cells and month indexing. No API key is required.
 
-**Done when:** The same scenario and simulation time produce consistent conditions across playback speeds and replanning; forecasts can be wrong; an unsuccessful capture creates no image or revenue and leaves recovery unchanged. Scheduling can use forecasts without accessing hidden actual conditions.
+**Done when:** The same scenario and simulation time produce consistent conditions across playback speeds and replanning; forecasts can be wrong; captures at <=20% are accepted while captures above 20% fail without creating an image or revenue and leave recovery unchanged. Scheduling can use forecasts without accessing hidden actual conditions. Prototype behavior is implemented.
 
-**Open choices:** None for the approved prototype behavior. Forecast display remains optional. Record the NOAA/NCEI dataset citation and source metadata with the derived baseline; the source page says registration is optional and provides direct download/THREDDS access.
+**Open choices:** None for the acceptance rule. Forecast mean cover is displayed per scheduled collection in the Schedule table; the implemented bands are provisional, and forecast error tuning remains open. Record the NOAA/NCEI dataset citation and source metadata with the derived baseline; the source page says registration is optional and provides direct download/THREDDS access.
 
 **Dependencies:** SIM-01, CELL-04A/B, and CELL-02A. Integrate resource costs with OPS-01A/B. A live weather service and cloud graphics are not prerequisites.
 
@@ -397,29 +399,41 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 ### BIZ-01 — Connect imagery collection to company finances
 
-**Status:** Completed 2026-10-15 — shared company ledger, downlink revenue, recurring spacecraft/station charges, negative-cash warning, and Finance & Growth readout implemented. See the [BIZ-01 finance design](BIZ_01_FINANCE_DESIGN.md).
-**Agreed:** Revenue is realized only when imagery is downlinked. CELL-02A and OPS-01A own image identity, delivery, and settlement; BIZ-01 reports those events and must not credit them again. Capture alone and deletion of undelivered imagery produce no cash. Charge both spacecraft and ground stations recurring operating costs. Cash may go negative; warn the player but do not stop routine operations or settlement. A separate archive resale market is outside the current model. Contracts and satisfaction remain optional later layers.
+**Status:** Updated 2026-11-02 — owned stations accrue daily maintenance; leased stations pay only per assigned contact minute. See the [BIZ-01 finance design](BIZ_01_FINANCE_DESIGN.md).
+**Agreed:** Revenue is realized only when imagery is downlinked. CELL-02A and OPS-01A own image identity, delivery, and settlement; BIZ-01 reports those events and must not credit them again. Capture alone and deletion of undelivered imagery produce no cash. Do not charge recurring daily spacecraft costs. Owned stations incur maintenance per simulated day, even while idle; leased stations pay their configured contact rate while an antenna is assigned. Cash may go negative; do not stop routine operations or settlement. A separate archive resale market is outside the current model. Contracts and satisfaction remain optional later layers.
 
-**Implemented:** `CompanyFinance` owns cash and an append-only ledger in integer cents. It receives the existing exactly-once downlink settlement, and posts $100 per spacecraft-day and $25 per ground-station-day at simulation-day boundaries. The spacecraft charge represents general mission operations. Finance & Growth shows whole-run cash, realized revenue, costs, net operating result, and ledger history. Negative cash displays a warning while operations and settlement continue. BIZ-02 now sets the app's opening cash to -$50,000.
+**Implemented:** `CompanyFinance` owns cash and an append-only ledger in integer cents. It receives the existing exactly-once downlink settlement, posts owned-site maintenance at simulation-day boundaries, and charges leased sites for assigned contact time with cumulative sub-cent rounding. Finance & Growth shows whole-run cash, realized revenue, operating costs, capital spending, net operating result, and ledger history without a negative-balance warning bar; the Summary cash metric still marks a negative balance. Operations and settlement continue. BIZ-02 sets the app's opening cash to -$50,000.
 
-**Verified:** Settlement idempotency, cost boundaries, negative balance, reset, and large/irregular time-step consistency are covered in `tests/companyFinance.test.mjs`; imagery settlement integration is covered in `tests/operationalLoop.test.mjs` and `tests/cellMarketState.test.mjs`.
+**Verified:** Settlement idempotency, generic contact-time accounting, negative balance, reset, and large/irregular time-step consistency have existing focused coverage; imagery settlement integration is covered in `tests/operationalLoop.test.mjs` and `tests/cellMarketState.test.mjs`. The new lease-rate integration, owned-site daily maintenance boundary, and first-day proration still need focused runtime verification.
 
 **Later extensions:** Contracts, deadlines, penalties, customer retention, and satisfaction remain optional future systems; starting funds and spacecraft procurement are implemented under BIZ-02.
 
 ### BIZ-02 — Add Finance & Growth view and satellite procurement
 
-**Status:** Implemented prototype — signed -$50,000 opening cash, affordability-checked procurement accounting, capital reporting, editable pre-launch orbit selection, immediate launch, live fleet/globe updates, shared antenna allocation, and reset are implemented. The production build passes; behavioral verification remains pending. See the [BIZ-02 guide](BIZ_02_GROWTH_DESIGN.md).
+**Status:** Implemented prototype — signed -$50,000 opening cash, affordability-checked procurement accounting, owned-station daily maintenance, leased contact-time charges, capital reporting, editable pre-launch orbit selection, immediate launch, live fleet/globe updates, shared antenna allocation, and reset are implemented. The production build passes; behavioral verification remains pending. See the [BIZ-02 guide](BIZ_02_GROWTH_DESIGN.md).
 **Agreed:** Money constrains hardware, launches, operations, and business growth. Finance & Growth is a management tab.
 
-**Implemented work:** Finance & Growth shows company cash, income, costs, affordability, and Standard/Enhanced slew spacecraft purchases from explicit company/fleet state. Each spacecraft snapshots its purchased slew capability; see FLEET-02B.
+**Implemented work:** Finance & Growth shows company cash, income, costs, affordability, and Standard/Enhanced slew spacecraft purchases from explicit company/fleet state. Each spacecraft snapshots its purchased slew capability; see FLEET-02B. Four additional station offers support purchase or no-upfront-cost contact-time lease; each has configurable link rates, daily upkeep, lease rates, and a 24-hour aggregate access estimate with existing-network overlap.
 
 **Done when:** Every displayed financial figure is derived from company state and ledger entries; purchases validate affordability atomically and change fleet capacity; income reconciles from downlink settlement and spending reconciles to purchase/launch entries.
 
-**Agreed integration behavior:** The $100 spacecraft-day cost is a general mission operations charge; new spacecraft join at the first day boundary after launch with no proration. The player chooses orbit altitude, inclination, ascending node, and phase before launch. Each station antenna serves one spacecraft at a time; earliest pass start holds it until pass end, then it hands off to the earliest waiting spacecraft still in view, with spacecraft-ID ties. These are recorded in the [BIZ-02 guide](BIZ_02_GROWTH_DESIGN.md) and [Gameplay](GAMEPLAY.md).
+**Agreed integration behavior:** The player chooses orbit altitude, inclination, ascending node, and phase before launch. Each station antenna serves one spacecraft at a time; earliest pass start holds it until pass end, then it hands off to the earliest waiting spacecraft still in view, with spacecraft-ID ties. These are recorded in the [BIZ-02 guide](BIZ_02_GROWTH_DESIGN.md) and [Gameplay](GAMEPLAY.md).
 
 **Original BIZ-02 first slice:** Offer the standard spacecraft package for immediate launch after player-selected altitude, inclination, ascending node, and phase. FLEET-02B now extends procurement with the approved slew choice for new spacecraft. Use -$50,000 starting cash, $50,000,000 base spacecraft cost, and $0 launch cost as configurable prototype values. Require sufficient cash for a purchase; the initial fleet must earn revenue to reach the purchase price. Show costs and remaining cash, then add a stable-ID spacecraft. Defer production queues, financing, ground-station construction, and unmodeled hardware.
 
 **Dependencies:** BIZ-01 company ledger and FLEET-02A per-spacecraft capability. FLEET-02B extends the implemented procurement flow; neither additional orbit classes nor FLEET-03 maneuvers are prerequisites. See the [reviewed Layer 3 sequence](LAYER_3_PLAN.md).
+
+### BIZ-03 — Differentiate ground-station service profiles
+
+**Status:** Backlog — purchase, lease, daily upkeep, and access-time previews are implemented; richer station roles need evidence and a bounded design.
+
+**Agreed direction:** Site location and orbit-driven access are primary. Pre-purchase stats estimate aggregate fleet access over the next 24 simulation hours and access beyond the existing network. The estimate sums satellite passes, so simultaneous access can compete for one antenna.
+
+**Work:** Use RUN-01 and challenge evidence to decide whether stations should have one clear service profile such as regional coverage, high throughput, low lease cost, or resilience. Base geographic value on predicted contact-window overlap and additional network access rather than city-to-city distance alone. A resilient profile depends on OPS-02; an event-resistant profile depends on authored geopolitical challenges.
+
+**Done when:** Each profile has a noticeable advantage and a meaningful tradeoff through contact opportunities, throughput, cost, or reliability, and Finance & Growth explains its predicted contribution for the current fleet.
+
+**Open choices:** Number and names of profiles, how profiles map to fixed locations versus procurement choices, and whether resilience is modeled through outages, geopolitical restrictions, or both.
 
 ## Layer 4 — Tuning and refinement
 
@@ -444,6 +458,26 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 **Done when:** The selected issues have verified fixes, and players can distinguish ground plans from onboard commands and potential imagery value from realized revenue in the affected views.
 
 **Dependencies:** Implemented systems and a review of their actual interface. Prioritize operational understanding over decorative graphics.
+
+## Satellite performance
+
+### YIELD-01 — Per-satellite collection yield on Summary
+
+**Status:** Implemented prototype — per-satellite outcomes, ledger-linked delivered yield, deletion counts, and accessible charts are present.
+
+**Work:** Record structured per-attempt outcomes and observed cloud cover; connect them to image deletion/delivery and the existing revenue ledger. Add collection-attempt count, paid clear yield (<=20% observed cloud and positive settled revenue), delivered dollars, and deleted-image count to each Summary spacecraft card. Show pending delivery and other failures alongside successful, cloudy, and deleted outcomes so chart counts reconcile.
+
+**Done when:** Per-satellite metrics reconcile with lifecycle events and ledger amounts, duplicate notifications do not inflate totals, reset clears history, and empty/pending/unknown results are explicit. Follow the plan's acceptance scenarios. This supplies RUN-01's missing capture-failure counts.
+
+**Remaining:** The RUN-01 baseline now includes repeated measurements under the implemented <=20% rule; see [CHALLENGE_RUNS.md](CHALLENGE_RUNS.md#run-01--establish-a-trustworthy-baseline). Exact replay remains unverified because the manual runs stopped at different simulation times. Unknown-weather detail remains follow-up per the yield design.
+
+### YIELD-02 — Per-satellite operational-time breakdown
+
+**Status:** Implemented prototype slice — nominal and power-limited intervals are measured; anomaly and scheduled downtime remain not modeled.
+
+**Work:** Accumulate nominal and power-limited simulated time since registration and show a second chart. Add anomaly and explicit scheduled-downtime intervals when their gameplay systems exist; until then identify them as not modeled. See the [time-chart definitions](SATELLITE_YIELD_DESIGN.md#satellite-time-chart) for overlap precedence and idle-time treatment.
+
+**Done when:** Disjoint intervals sum to satellite elapsed time, survive different time-step sizes, and reset correctly. Idle time is not mislabeled as scheduled downtime; unimplemented causes are not presented as measured zeroes. The current prototype slice meets these criteria; extend when anomaly and downtime systems are implemented.
 
 ## Persistence and deployment
 
@@ -471,9 +505,27 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 ## Suggested starting order
 
+**Current recommendation (2026-11-02):** The prototype foundation and first baseline samples are recorded. Define and deliver one complete challenge before adding more simulation systems. A request to take the next step selects the first incomplete entry in this table; design tasks resolve their open rules before implementation.
+
+| Order | Task and status | Next deliverable |
+| --- | --- | --- |
+| Complete slice | **RUN-01 — Baseline measured under the <=20% rule** | Use the recorded single- and two-spacecraft observations to inform RUN-02. Exact replay remains unverified because manual stop times differed. |
+| Complete | **YIELD-01 — Implemented prototype: per-satellite Summary yield** | Revisit only if playtesting shows the metrics or outcome chart need refinement. |
+| Complete slice | **YIELD-02 — Nominal/power time implemented** | Add anomaly and scheduled downtime intervals when their gameplay systems exist. |
+| 1 | **RUN-02 — M01 draft ready for review; not approved for implementation** | Review the proposed $55.12M allowance, $5,000 setup fee per station, one-spacecraft package choice, $2,000 delivered-revenue target, 24-hour deadline, and retry/control rules in [CHALLENGE_RUNS.md](CHALLENGE_RUNS.md#run-02--define-the-first-mission); resolve the listed open decisions. |
+| 3 | **RUN-03 — Needs design: complete challenge flow** | After RUN-02 decisions, build setup → run → debrief → retry with domain-owned lifecycle, deadline enforcement, and existing ledger settlement. |
+| 4 | **RUN-04 / TUNE-01 / UI-04 — Needs playtest evidence** | Tune the first mission's pacing and feedback; add one contrasting challenge with a clear operational constraint. |
+| Later | **OPS-02 — Proposal requires review** | Add an authored outage when needed by a mission; resolve warning, repair economics, and contact restoration semantics first. |
+| Independent/later | **CLOUD-01, FLEET-03, PLATFORM-01/02** | Full climatology, maneuvers, persistence, and publishing remain valid work, selected when their benefit justifies interrupting the playable loop. |
+| Backlog | **BIZ-03 — Station service profiles** | Use RUN-01 access estimates to design geographic, throughput, budget, and resilience roles. |
+
+The RUN tasks' scope, dependencies, open decisions, and completion criteria are defined in the [challenge development plan](CHALLENGE_RUNS.md#recommended-development-sequence). TUNE-01 now starts with mission budget/target/pacing evidence rather than assuming perpetual fleet growth. UI-04 should prioritize understanding outcomes and retrying. The existing prototype's economic defaults remain unchanged until a selected tuning or mission implementation changes them.
+
+### Historical starting order (2026-10-16, superseded)
+
 **Playtesting priority (2026-10-16):** The user wants to begin trying the game soon and accepts configurable prototype values for additional spacecraft. The existing one-spacecraft capture/downlink/revenue loop is available now; see the [playtest steps](../README.md#try-the-single-spacecraft-revenue-loop). FLEET-02B and OPS-02 are feature work, not prerequisites for that first session. Use play observations to identify immediate usability and pacing fixes.
 
-OPS-04 and the approved CELL-04B automatic-continuation slice completed on 2026-10-14. The approved CELL-04A, OPS-03, OPS-01A, and CELL-02A prototype policies are recorded in [Gameplay](GAMEPLAY.md#agreed-operational-closure-policies-approved-2026-10-14). A request to take the next step selects the first incomplete item below.
+OPS-04 and the approved CELL-04B automatic-continuation slice completed on 2026-10-14. The approved CELL-04A, OPS-03, OPS-01A, and CELL-02A prototype policies are recorded in [Gameplay](GAMEPLAY.md#agreed-operational-closure-policies-approved-2026-10-14). The older table below is retained as context and does not select the next task.
 
 | Order | Tasks | Next deliverable | Model suggestion |
 | --- | --- | --- | --- |

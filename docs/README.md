@@ -8,6 +8,8 @@ This folder contains the shared brief for product, gameplay, and implementation 
 | --- | --- |
 | [Vision](VISION.md) | The game’s premise, intended experience, priorities, and scope boundaries |
 | [Gameplay](GAMEPLAY.md) | Player loop, simulation systems, interface needs, and unresolved design questions |
+| [Replayable challenge development](CHALLENGE_RUNS.md) | Current implementation foundation, recommended next steps, first-mission decisions, and acceptance handoff |
+| [Satellite yield design](SATELLITE_YIELD_DESIGN.md) | Implemented per-satellite Summary metrics, collection outcomes, operational-time charts, and remaining follow-up |
 | [Technical strategy](TECHNICAL_STRATEGY.md) | Browser/deployment constraints, architecture direction, data and persistence approach |
 | [Cell grid data](CELL_DATA.md) | Implemented geographic layers, provenance, limitations, data format, and rebuilding the cell grid |
 | [Cell visualization design](CELL_VISUALIZATION_DESIGN.md) | Orders-map color scales, schedule overlays, active imaging visualization, and interpretation limits |
@@ -15,7 +17,7 @@ This folder contains the shared brief for product, gameplay, and implementation 
 | [OPS-04 verification guide](OPS_04_VERIFICATION.md) | Starting baseline, shared operational orchestration, deterministic fixtures, acceptance scenarios, and implementation checks |
 | [OPS-01B power design and verification](OPS_01B_POWER_DESIGN.md) | Agreed prototype rules, implementation boundaries, starter fixtures, and completed acceptance results |
 | [OPS-02 station outage design](OPS_02_STATION_OUTAGE_DESIGN.md) | Proposed outage/repair journey, recovery and TEL rules, implementation boundaries, and acceptance handoff |
-| [CLOUD-01 design framework](CLOUD_01_DESIGN.md) | Approved cloud behavior, implemented deterministic model, and deferred NOAA ISCCP-H data handoff |
+| [CLOUD-01 design framework](CLOUD_01_DESIGN.md) | Approved cloud behavior, implemented deterministic model, interim NOAA baseline, and remaining climatology work |
 | [CELL-04C bounded scheduler design](CELL_04C_DESIGN.md) | Implemented bounded search, fallback behavior, and verification slice |
 | [FLEET-03 orbit maneuver design](FLEET_03_ORBIT_MANEUVER_DESIGN.md) | Player orbit changes, automated safety/maintenance burns, fuel, timing, and implementation slices |
 | [BIZ-01 finance design](BIZ_01_FINANCE_DESIGN.md) | Implemented company ledger, approved opening funds, settlement revenue, operating costs, and Finance & Growth reporting |

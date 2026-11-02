@@ -10,13 +10,16 @@ import { cellLookDirectionAt, evaluateCellCaptureOpportunity, nadirPointingAt, t
 import { cellLabel } from "./simulation/cells";
 import type { CellMarketState } from "./simulation/cellMarketState";
 import { OperationalLoop } from "./simulation/operationalLoop";
-import { CompanyFinance } from "./simulation/companyFinance";
+import { CompanyFinance, SIMULATION_DAY_SECONDS } from "./simulation/companyFinance";
 import { getSpacecraftEquipmentOption, quoteSpacecraftPurchase, purchaseSpacecraftWithEquipment } from "./simulation/spacecraftCatalog";
+import { GROUND_STATION_CATALOG, quoteGroundStationLease, quoteGroundStationPurchase } from "./simulation/groundStationCatalog";
 import type { GeographicLocation, SatelliteDefinition, SurfaceObject, WorldSnapshot } from "./simulation/model";
 import { setupFinanceView } from "./ui/finance";
 import { setupScheduleView } from "./ui/schedule";
 import { loadCloudBaseline } from "./data/weather";
 import { cloudForecastForInterval } from "./simulation/weather";
+import { mountSatellitePerformanceView } from "./ui/satellitePerformance";
+import type { SatelliteOperationalTimeSnapshot, SatelliteYieldSnapshot } from "./simulation/satellitePerformance";
 
 declare global {
   interface Window {
@@ -32,7 +35,6 @@ const elements = {
   simClock: document.querySelector<HTMLElement>("#sim-clock")!,
   pauseToggle: document.querySelector<HTMLButtonElement>("#pause-toggle")!,
   pauseLabel: document.querySelector<HTMLElement>("#pause-label")!,
-  pauseIcon: document.querySelector<HTMLElement>("#pause-icon")!,
   trackToggle: document.querySelector<HTMLButtonElement>("#track-toggle")!,
   basemapToggle: document.querySelector<HTMLButtonElement>("#basemap-toggle")!,
   timeSpeed: document.querySelector<HTMLSelectElement>("#time-speed")!,
@@ -49,6 +51,7 @@ const elements = {
   spacecraftPlanStatus: document.querySelector<HTMLElement>("#spacecraft-plan-status")!,
   stationTableCount: document.querySelector<HTMLElement>("#station-table-count")!,
   stationTableBody: document.querySelector<HTMLTableSectionElement>("#station-table-body")!,
+  stationOffers: document.querySelector<HTMLElement>("#ground-station-offers")!,
   spacecraftCount: document.querySelector<HTMLElement>("#spacecraft-count")!,
   spacecraftTableBody: document.querySelector<HTMLTableSectionElement>("#spacecraft-table-body")!,
   purchaseOrbitAltitude: document.querySelector<HTMLInputElement>("#purchase-orbit-altitude")!,
@@ -76,7 +79,7 @@ const elements = {
 };
 
 let fleet: readonly SatelliteDefinition[] = [...INITIAL_FLEET.satellites];
-const surfaceObjects = SURFACE_OBJECTS as readonly SurfaceObject[];
+let surfaceObjects: readonly SurfaceObject[] = [...SURFACE_OBJECTS] as readonly SurfaceObject[];
 const CONTACT_FORECAST_HORIZON_SECONDS = 24 * 60 * 60;
 const CONTACT_FORECAST_SAMPLE_SECONDS = 120;
 // Proposed demonstration values only; capture geometry and timing remain open gameplay choices.
@@ -91,7 +94,9 @@ const PROTOTYPE_STORAGE_CAPACITY_BYTES = 100 * 1024 * 1024;
 let selectedSatelliteId = fleet[0]!.id;
 const simulationRuntime = new SimulationRuntime(fleet.map(({ id }) => id));
 const groundOperations = new GroundOperations(fleet.map(({ id }) => id), simulationRuntime);
-const companyFinance = new CompanyFinance({ startingCashUsd: -50_000 });
+const fundedProcurementTest = import.meta.env.DEV
+  && new URLSearchParams(window.location.search).get("scenario") === "funded-procurement-test";
+const companyFinance = new CompanyFinance({ startingCashUsd: fundedProcurementTest ? 70_000_000 : -50_000 });
 const contactForecasts = new Map<string, { computedAt: number; window?: GroundContactWindow }>();
 const simulation = {
   timeMultiplier: DEFAULT_TIME_MULTIPLIER,
@@ -99,6 +104,13 @@ const simulation = {
   showTrack: true,
   lastFrameMilliseconds: performance.now(),
 };
+const formatRunState = (running: boolean): string => fundedProcurementTest
+  ? `TEST FUNDS · ${running ? "RUNNING" : "PAUSED"}`
+  : `SIMULATION ${running ? "RUNNING" : "PAUSED"}`;
+elements.runState.textContent = formatRunState(simulation.running);
+if (fundedProcurementTest) {
+  elements.runState.title = "Development-only procurement test funds: $70,000,000. The normal economy is unchanged.";
+}
 
 type SpacecraftTableRow = {
   row: HTMLTableRowElement;
@@ -114,6 +126,7 @@ type SummarySatelliteCard = {
   payload: HTMLElement;
   power: HTMLElement;
   contact: HTMLElement;
+  renderPerformance: (yieldSnapshot: SatelliteYieldSnapshot, timeSnapshot: SatelliteOperationalTimeSnapshot) => void;
 };
 
 const spacecraftTableRows = new Map<string, SpacecraftTableRow>();
@@ -166,7 +179,7 @@ function renderStations(
         contact.station.id,
         snapshot.elapsedSeconds,
       );
-      detail.textContent = `3-DAY AVG EXPENSE · ${formatCurrencyCents(averageDailyExpense)} / DAY`;
+      detail.textContent = `3-DAY AVG STATION COST · ${formatCurrencyCents(averageDailyExpense)} / DAY`;
       copy.append(name, detail);
       const state = document.createElement("span");
       state.className = `row-state ${isOperational ? "row-state-active" : "state-warning"}`;
@@ -214,7 +227,9 @@ function renderGroundStationTable(): void {
       const isOperational = station.groundStationDetails?.operationalStatus === "available";
       state.className = `table-status ${isOperational ? "table-status-active" : ""}`;
       state.textContent = station.groundStationDetails
-        ? isOperational ? "AVAILABLE" : "DOWN"
+        ? isOperational
+          ? station.groundStationDetails.accessMode === "leased" ? "AVAILABLE · LEASED" : "AVAILABLE"
+          : "DOWN"
         : "UNCONFIGURED";
       contactCell.append(state);
 
@@ -230,10 +245,13 @@ function renderGroundStationTable(): void {
         ? station.groundStationDetails.downlinkRateMbps.toLocaleString()
         : "UNCONFIGURED";
 
-      const contactCostCell = document.createElement("td");
-      contactCostCell.className = "table-rate";
-      contactCostCell.textContent = station.groundStationDetails
-        ? station.groundStationDetails.contactCostUsdPerMinute.toLocaleString(undefined, { style: "currency", currency: "USD" })
+      const costCell = document.createElement("td");
+      costCell.className = "table-rate";
+      const stationDetails = station.groundStationDetails;
+      costCell.textContent = stationDetails
+        ? stationDetails.accessMode === "leased"
+          ? `${stationDetails.contactCostUsdPerMinute.toLocaleString(undefined, { style: "currency", currency: "USD" })}/contact min`
+          : `${(stationDetails.maintenanceCostUsdPerDay ?? 0).toLocaleString(undefined, { style: "currency", currency: "USD" })}/day`
         : "UNCONFIGURED";
 
       const antennaCell = document.createElement("td");
@@ -241,7 +259,7 @@ function renderGroundStationTable(): void {
       antennaCell.textContent = "NO ACTIVE LINK";
       stationAntennaCells.set(station.id, antennaCell);
 
-      row.append(stationCell, locationCell, contactCell, uplinkCell, downlinkCell, contactCostCell, antennaCell);
+      row.append(stationCell, locationCell, contactCell, uplinkCell, downlinkCell, costCell, antennaCell);
       return row;
     }),
   );
@@ -342,7 +360,8 @@ function renderSummarySatelliteCards(
 ): void {
   const activeIds = new Set(snapshots.map(({ satelliteId }) => satelliteId));
   const onboardImageCounts = new Map<string, number>();
-  for (const image of market?.getImages() ?? []) {
+  const images = market?.getImages() ?? [];
+  for (const image of images) {
     if (image.status === "onboard") {
       onboardImageCounts.set(image.satelliteId, (onboardImageCounts.get(image.satelliteId) ?? 0) + 1);
     }
@@ -380,8 +399,10 @@ function renderSummarySatelliteCards(
         payload: createMetric("PAYLOAD STATUS"),
         power: createMetric("POWER STATUS"),
         contact: createMetric("NEXT CONTACT"),
+        renderPerformance: () => {},
       };
       article.append(heading, metrics);
+      card.renderPerformance = mountSatellitePerformanceView(article);
       elements.summarySatelliteCards.append(article);
       summarySatelliteCards.set(satellite.id, card);
     }
@@ -425,6 +446,10 @@ function renderSummarySatelliteCards(
         : nextWindow
           ? `${nextWindow.stationName} · IN ${timeUntil(nextWindow.startsAtSeconds - snapshot.elapsedSeconds)}`
           : "NO CONTACT PREDICTED IN 24H";
+    card.renderPerformance(
+      operationalLoop.performance.getYieldSnapshot(satellite.id, images, market?.imageryRevision ?? 0),
+      operationalLoop.performance.getOperationalTimeSnapshot(satellite.id, snapshot.elapsedSeconds),
+    );
   }
 }
 
@@ -680,7 +705,7 @@ function setupWorkspaceLayout(resizeGlobe: () => void): void {
 function updateMiniGlobe(snapshots: readonly WorldSnapshot[]): void {
   const layer = document.querySelector<SVGGElement>("#mini-globe-satellites");
   if (!layer) return;
-  const colors = ["#f4f870", "#72d7ff", "#ff9b76", "#c4a7ff", "#7ce2a4"];
+  const colors = ["#effaff", "#76d9ff", "#75afff", "#c0e9ff", "#649bff"];
   layer.replaceChildren(...snapshots.map((snapshot, index) => {
     const point = snapshot.satelliteEarthFixedKm;
     const scale = 54 / 7_000;
@@ -690,7 +715,7 @@ function updateMiniGlobe(snapshots: readonly WorldSnapshot[]): void {
     marker.setAttribute("class", "mini-globe-satellite");
     marker.setAttribute("cx", String(x));
     marker.setAttribute("cy", String(y));
-    marker.setAttribute("r", "3.5");
+    marker.setAttribute("r", "2");
     marker.setAttribute("fill", colors[index % colors.length]!);
     return marker;
   }));
@@ -731,6 +756,7 @@ async function start(): Promise<void> {
   };
   const refreshFinance = setupFinanceView(companyFinance, () => simulationRuntime.elapsedSeconds);
   refreshFinance();
+  let refreshStationOffers = (): void => {};
   let purchaseNotice: string | null = null;
   let purchaseNoticeWarning = false;
   let purchaseNoticeRevision = -1;
@@ -740,6 +766,7 @@ async function start(): Promise<void> {
   };
   const refreshGrowth = (): void => {
     refreshFinance();
+    refreshStationOffers();
     const validOrbit = [
       elements.purchaseOrbitAltitude,
       elements.purchaseOrbitInclination,
@@ -801,6 +828,156 @@ async function start(): Promise<void> {
     groundOperations,
     finance: companyFinance,
   });
+  surfaceObjects = operationalLoop.getStations();
+  globe.setSurfaceObjects(surfaceObjects);
+  const groundStationPurchaseStatus = document.querySelector<HTMLElement>("#ground-station-purchase-status")!;
+  const previewedStationIds = new Set<string>();
+  let stationOfferSignature = "";
+  const refreshStationPreviews = (): void => {
+    const activeStationIds = new Set(surfaceObjects.map(({ id }) => id));
+    globe.setPreviewSurfaceObjects(GROUND_STATION_CATALOG
+      .filter(({ station }) => previewedStationIds.has(station.id) && !activeStationIds.has(station.id))
+      .map(({ station }) => station));
+  };
+  const estimateStationAccess = (candidate: SurfaceObject, startSeconds: number) => {
+    const endSeconds = startSeconds + SIMULATION_DAY_SECONDS;
+    const predictionOptions = { sampleStepSeconds: CONTACT_FORECAST_SAMPLE_SECONDS, boundaryToleranceSeconds: 10 };
+    let fleetAccessSeconds = 0;
+    let additionalAccessSeconds = 0;
+    for (const satellite of fleet) {
+      const candidateWindows = predictGroundContactWindows(satellite, [candidate], startSeconds, endSeconds, predictionOptions);
+      const existingWindows = predictGroundContactWindows(satellite, surfaceObjects, startSeconds, endSeconds, predictionOptions);
+      fleetAccessSeconds += candidateWindows.reduce((sum, window) => sum + window.endsAtSeconds - window.startsAtSeconds, 0);
+      for (const window of candidateWindows) {
+        const overlaps = existingWindows
+          .map(existing => ({
+            start: Math.max(window.startsAtSeconds, existing.startsAtSeconds),
+            end: Math.min(window.endsAtSeconds, existing.endsAtSeconds),
+          }))
+          .filter(overlap => overlap.end > overlap.start)
+          .sort((left, right) => left.start - right.start);
+        let coveredSeconds = 0;
+        let coveredStart: number | null = null;
+        let coveredEnd: number | null = null;
+        for (const overlap of overlaps) {
+          if (coveredEnd === null || overlap.start > coveredEnd) {
+            if (coveredStart !== null && coveredEnd !== null) coveredSeconds += coveredEnd - coveredStart;
+            coveredStart = overlap.start;
+            coveredEnd = overlap.end;
+          } else {
+            coveredEnd = Math.max(coveredEnd, overlap.end);
+          }
+        }
+        if (coveredStart !== null && coveredEnd !== null) coveredSeconds += coveredEnd - coveredStart;
+        additionalAccessSeconds += Math.max(0, window.endsAtSeconds - window.startsAtSeconds - coveredSeconds);
+      }
+    }
+    return { fleetAccessSeconds, additionalAccessSeconds };
+  };
+  refreshStationOffers = (): void => {
+    const cashCents = companyFinance.getSnapshot().cashCents;
+    const forecastStartSeconds = simulationRuntime.elapsedSeconds;
+    const activeStationIds = new Set(surfaceObjects.map(({ id }) => id));
+    const signature = GROUND_STATION_CATALOG
+      .map(({ station, purchaseCostCents }) => `${station.id}:${activeStationIds.has(station.id)}:${cashCents >= purchaseCostCents}`)
+      .join("|");
+    const fleetSignature = fleet.map(({ id, orbit }) => `${id}:${orbit.altitudeKm}:${orbit.inclinationDeg}:${orbit.ascendingNodeDeg}:${orbit.initialPhaseDeg}`).join("|");
+    const dayIndex = Math.floor(forecastStartSeconds / SIMULATION_DAY_SECONDS);
+    const offerViewSignature = `${signature}::${dayIndex}::${fleetSignature}`;
+    if (stationOfferSignature === offerViewSignature) return;
+    const offers = GROUND_STATION_CATALOG.map(option => {
+      const quote = quoteGroundStationPurchase(option.station.id, cashCents);
+      const card = document.createElement("article");
+      card.className = "station-offer";
+      const title = document.createElement("h3");
+      title.textContent = option.station.name;
+      const place = document.createElement("p");
+      place.textContent = option.station.description.replace(/^Ground station · /, "");
+      const details = option.station.groundStationDetails!;
+      const specs = document.createElement("p");
+      specs.textContent = `Link: ${details.uplinkRateMbps} Mbps up · ${details.downlinkRateMbps} Mbps down`;
+      const accessEstimate = estimateStationAccess(option.station, forecastStartSeconds);
+      const accessStats = document.createElement("p");
+      accessStats.className = "station-offer-access";
+      accessStats.textContent = `Access/day: ${(accessEstimate.fleetAccessSeconds / 60).toFixed(1)} min fleet total · ${(accessEstimate.additionalAccessSeconds / 60).toFixed(1)} min beyond current sites`;
+      const active = activeStationIds.has(option.station.id);
+      const activeStation = surfaceObjects.find(({ id }) => id === option.station.id);
+      const showLabel = document.createElement("label");
+      showLabel.className = "station-show-control";
+      const showCheckbox = document.createElement("input");
+      showCheckbox.type = "checkbox";
+      showCheckbox.checked = previewedStationIds.has(option.station.id);
+      showCheckbox.setAttribute("aria-label", `Show ${option.station.name} location on globe`);
+      showCheckbox.addEventListener("change", () => {
+        if (showCheckbox.checked) previewedStationIds.add(option.station.id);
+        else previewedStationIds.delete(option.station.id);
+        refreshStationPreviews();
+      });
+      showLabel.append(showCheckbox, document.createTextNode(" Show location"));
+      const purchasePrice = document.createElement("p");
+      purchasePrice.textContent = `Purchase: ${formatCurrencyCents(option.purchaseCostCents)} · operations ${formatCurrencyCents(Math.round(option.maintenanceCostUsdPerDay * 100))}/day`;
+      const leasePrice = document.createElement("p");
+      leasePrice.textContent = `Lease: ${formatCurrencyCents(Math.round(option.leaseRateUsdPerMinute * 100))}/contact minute · no upfront cost`;
+      const purchaseButton = document.createElement("button");
+      purchaseButton.type = "button";
+      purchaseButton.className = "preview-button";
+      purchaseButton.textContent = active ? `ACTIVE · ${activeStation?.groundStationDetails?.accessMode === "leased" ? "LEASED" : "OWNED"}` : "PURCHASE STATION";
+      purchaseButton.disabled = active || !quote.affordable;
+      purchaseButton.setAttribute("aria-label", `${active ? "Active" : "Purchase"} ${option.station.name}`);
+      purchaseButton.addEventListener("click", () => {
+        try {
+          const purchase = quoteGroundStationPurchase(option.station.id, companyFinance.getSnapshot().cashCents);
+          operationalLoop.validateGroundStationRegistration(purchase.station);
+          if (!purchase.affordable) throw new Error("Insufficient company cash for ground station purchase");
+          companyFinance.recordGroundStationProcurement(
+            `purchase:${option.station.id}`, option.station.id, simulationRuntime.elapsedSeconds, purchase.purchaseCostCents,
+          );
+          operationalLoop.registerGroundStation(purchase.station);
+          surfaceObjects = operationalLoop.getStations();
+          contactForecasts.clear();
+          globe.setSurfaceObjects(surfaceObjects);
+          renderGroundStationTable();
+          refreshStationPreviews();
+          groundStationPurchaseStatus.textContent = `${option.station.name} is now active in the ground network.`;
+          groundStationPurchaseStatus.dataset.state = "ready";
+          stationOfferSignature = "";
+          refreshGrowth();
+        } catch (error) {
+          groundStationPurchaseStatus.textContent = error instanceof Error ? error.message : "Ground station purchase failed.";
+          groundStationPurchaseStatus.dataset.state = "warning";
+        }
+      });
+      const leaseButton = document.createElement("button");
+      leaseButton.type = "button";
+      leaseButton.className = "preview-button";
+      leaseButton.textContent = active ? "LEASE UNAVAILABLE" : "LEASE ACCESS";
+      leaseButton.disabled = active;
+      leaseButton.setAttribute("aria-label", `Lease ${option.station.name}`);
+      leaseButton.addEventListener("click", () => {
+        try {
+          const lease = quoteGroundStationLease(option.station.id);
+          operationalLoop.validateGroundStationRegistration(lease.station);
+          operationalLoop.registerGroundStation(lease.station);
+          surfaceObjects = operationalLoop.getStations();
+          contactForecasts.clear();
+          globe.setSurfaceObjects(surfaceObjects);
+          renderGroundStationTable();
+          refreshStationPreviews();
+          groundStationPurchaseStatus.textContent = `${option.station.name} is now active under a contact-time lease.`;
+          groundStationPurchaseStatus.dataset.state = "ready";
+          stationOfferSignature = "";
+          refreshGrowth();
+        } catch (error) {
+          groundStationPurchaseStatus.textContent = error instanceof Error ? error.message : "Ground station lease failed.";
+          groundStationPurchaseStatus.dataset.state = "warning";
+        }
+      });
+      card.append(title, place, specs, accessStats, purchasePrice, leasePrice, showLabel, purchaseButton, leaseButton);
+      return card;
+    });
+    elements.stationOffers.replaceChildren(...offers);
+    stationOfferSignature = offerViewSignature;
+  };
   let refreshCellMarket: (() => void) | null = null;
   let focusCellOnMap: (index: number) => void = () => {};
   const refreshSchedule = setupScheduleView({
@@ -885,8 +1062,7 @@ async function start(): Promise<void> {
     simulation.running = running;
     elements.pauseToggle.setAttribute("aria-pressed", String(!running));
     elements.pauseLabel.textContent = running ? "PAUSE" : "RESUME";
-    elements.pauseIcon.textContent = running ? "Ⅱ" : "▶";
-    elements.runState.textContent = running ? "SIMULATION RUNNING" : "SIMULATION PAUSED";
+    elements.runState.textContent = formatRunState(running);
     document.querySelector(".live-dot")?.classList.toggle("paused-dot", !running);
   };
   const advanceSimulationBySeconds = (seconds: number) => {
@@ -900,6 +1076,13 @@ async function start(): Promise<void> {
   const resetPreview = () => {
     setSimulationRunning(false);
     operationalLoop.reset();
+    surfaceObjects = operationalLoop.getStations();
+    globe.setSurfaceObjects(surfaceObjects);
+    refreshStationPreviews();
+    renderGroundStationTable();
+    stationOfferSignature = "";
+    groundStationPurchaseStatus.textContent = "Added stations are inactive until purchased or leased again.";
+    groundStationPurchaseStatus.dataset.state = "ready";
     automaticallyPlannedSatellites.clear();
     fleet = operationalLoop.getFleet();
     if (cellGrid) enableAutomaticPlanningForFleet(cellGrid);
@@ -1041,8 +1224,6 @@ async function start(): Promise<void> {
         ascendingNodeDeg: selectedNodeDeg,
         phaseAtLaunchDeg: selectedPhaseAtLaunchDeg,
         referenceSatelliteId: firstSatellite.id,
-        spacecraftIds: fleet.map(({ id }) => id),
-        groundStationIds: surfaceObjects.filter(station => station.kind === "ground-station").map(({ id }) => id),
         storageCapacityBytes: PROTOTYPE_STORAGE_CAPACITY_BYTES,
         operationalLoop,
         finance: companyFinance,

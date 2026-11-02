@@ -2,7 +2,7 @@
 
 **Status: Design drafted 2026-10-17; proposed rules, not implemented or approved.**
 
-This is the next bounded design step in [Layer 3](LAYER_3_PLAN.md). It gives the player one understandable operational exception while preserving the existing single-spacecraft revenue loop. Playtesting that loop can begin before this feature is implemented.
+This is a candidate later challenge mechanic; the [current starting order](PENDING_CHANGES.md#suggested-starting-order) prioritizes baseline review and one replayable mission first. The 2026-11-02 gameplay direction calls for warning and a meaningful response window for authored events. The onset-only notification below remains an older proposal to revise, not an approved exception to that direction. Repair terms and recovery/upload policies also remain open.
 
 ## Existing agreements
 
@@ -10,7 +10,7 @@ This is the next bounded design step in [Layer 3](LAYER_3_PLAN.md). It gives the
 - Ground contact is required for TEL uploads and imagery delivery. Captures alone earn no revenue; partially delivered imagery retains its bytes and pays only at full delivery.
 - Spacecraft execute their onboard TEL between contacts and enter Standby when it is exhausted. Ground revisions preserve current/next commitments and do not silently change onboard work.
 - Each station serves one spacecraft at a time, ordered by pass start and then spacecraft ID. Installed spacecraft hardware remains fixed after launch.
-- Opening cash is -$50,000. Routine operations continue with negative cash; procurement requires affordability. Repair affordability has not yet been agreed.
+- Opening cash is -$50,000. Routine operations continue with negative cash; procurement requires affordability. Owned sites accrue daily maintenance; leases charge only while an antenna is assigned. Repair affordability has not yet been agreed.
 
 ## Proposed player experience
 
@@ -34,7 +34,7 @@ At recovery, show “Station service restored” and explain whether service res
 
 These values are configurable playtest inputs, not balance conclusions. The negative opening balance means the initial company cannot buy expedited repair. Free recovery prevents that from blocking play; a separate funded fixture exercises the paid choice without changing the agreed opening economy. Assess price and outage length during TUNE-01.
 
-Disable expediting once purchased, after recovery, or when two minutes from now would be no earlier than normal recovery. Explain the reason inline. Reject a stale action atomically if its terms or affordability have changed. No cancellation, refund, stacked repair, or recurring fee in this slice. Ordinary station operating charges continue during the outage.
+Disable expediting once purchased, after recovery, or when two minutes from now would be no earlier than normal recovery. Explain the reason inline. Reject a stale action atomically if its terms or affordability have changed. No cancellation, refund, stacked repair, or recurring fee in this slice. No lease contact fee accrues while the station is unavailable; owned-site maintenance continues during an outage.
 
 ## Proposed contact and execution rules
 
@@ -68,14 +68,14 @@ Before announcement, ground forecasts use nominal station availability. After on
 - **Summary:** One exception card with station/location, cause (“Station communications outage”), time remaining, current impact, and the two response choices. Waiting is the default. Show the paid option's fee, recovery time, projected cash, and disabled reason when applicable.
 - **Ground Stations:** Outage/recovering status, restoration time, and the same response controls beside the station. Ownership and waiting lists remain visible with service loss explained.
 - **Spacecraft:** Distinguish out of view, antenna occupied, station offline, power-limited transfer, and awaiting TEL. Show actual effects, not an outage warning on every spacecraft regardless of contact.
-- **Finance & Growth:** Add an identified station-repair expense to the existing ledger and operating-cost total. Do not classify it as spacecraft capital spending or reduce realized revenue.
+- **Finance & Growth:** Add an identified station-repair expense to the existing ledger and operating-cost total. Do not classify it as spacecraft capital spending or reduce realized revenue. This would be a one-time response cost, separate from owned-site maintenance and leased contact fees.
 - **Recovery history:** Retain onset, accepted intervention, and recovery events for inspection until reset. Acknowledge/dismiss only affects presentation.
 
 ## Implementation handoff
 
 1. Add a simulation-owned station availability timeline and an outage state record: stable event/station IDs, onset, normal/current recovery times, announcement state, and optional accepted repair command. Keep configurable scenario data separate from renderer code. Reject invalid intervals and overlapping events for one station in this first slice.
 2. Integrate availability boundaries with `GroundOperations` and `OperationalLoop`: preserve geometry, release/reassign antennas, add the episode upload latch, and interrupt/resume transfer without changing settlement identities. Planning and execution consume the same availability rules, with planning restricted to announced knowledge.
-3. Extend `CompanyFinance` with a station-repair expense. An accepted response atomically posts the fee and updates recovery. Replaying its command ID returns the original result; a second ID cannot buy the same repair twice. Check due recurring costs first. Reject reused IDs with conflicting contents.
+3. Extend `CompanyFinance` with a station-repair expense. An accepted response atomically posts the fee and updates recovery. Replaying its command ID returns the original result; a second ID cannot buy the same repair twice. Reject reused IDs with conflicting contents.
 4. Connect Summary, station details, spacecraft explanations, and finance reporting to domain snapshots. Reset clears outages, repair transactions, notification history, and upload latches along with the existing run state, then restores the selected scenario.
 5. Exercise the acceptance journeys below before enabling random failures or expanding anomaly types.
 
@@ -85,9 +85,9 @@ Before announcement, ground forecasts use nominal station availability. After on
 - **Contact edges:** Outage at entry and during transfer; restoration within a pass, at pass end, and before a later pass; back-to-back and overlapping station windows; no duplicate upload after restoration. Also exercise restoration before the first usable link and the power-depleted first-opportunity case.
 - **Alternate service and fleet:** Another station can serve unaffected traffic. Two spacecraft lose the same station, queue by original pass start, and recover without duplicate owners. Check simultaneous starts by ID.
 - **Onboard continuity:** Captures continue under ordinary access/weather/power rules, partial bytes remain, storage eviction still works, and an exhausted TEL enters explained Standby. Ground changes remain pending until an eligible upload.
-- **Repair accounting:** Exactly $100 permits repair; one cent less and negative cash reject without changing the event or ledger. Repeated clicks/IDs, conflicting IDs, already recovered events, and requests too late to save time produce no duplicate fee or state change. Due daily costs affect affordability.
+- **Repair accounting:** Exactly $100 permits repair; one cent less and negative cash reject without changing the event or ledger. Repeated clicks/IDs, conflicting IDs, already recovered events, and requests too late to save time produce no duplicate fee or state change. Include any accrued owned-site maintenance when validating affordability.
 - **Forecast knowledge:** No pre-onset planner knowledge of the authored outage; announced recovery and paid revision change ground forecasts without changing onboard commitments or assuming future antenna ownership.
-- **Replay and reset:** Equivalent large and irregular time steps produce the same links, uploads, bytes, imagery, cash, power, and event state. Include outage/recovery coincident with capture completion, image delivery, and daily operating charges. Reset restores a clean scenario.
+- **Replay and reset:** Equivalent large and irregular time steps produce the same links, uploads, bytes, imagery, cash, power, and event state. Include outage/recovery coincident with capture completion and image delivery. Reset restores a clean scenario.
 
 ## Review boundary and later work
 

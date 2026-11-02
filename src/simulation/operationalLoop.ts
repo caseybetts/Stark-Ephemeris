@@ -12,6 +12,7 @@ import { isEclipsedAt, PowerOperations, projectSatellitePower, PROTOTYPE_POWER_C
 import { SimulationRuntime, type RuntimeEvent } from "./runtime.ts";
 import type { PointingDirection } from "./slew.ts";
 import { averageCloudCoverPercent, PROTOTYPE_CLOUD_THRESHOLD_PERCENT, type WeatherConfiguration } from "./weather.ts";
+import { SatellitePerformance, type CaptureFailureKind } from "./satellitePerformance.ts";
 
 export type OperationalLoopConfiguration = {
   fleet: readonly SatelliteDefinition[];
@@ -57,11 +58,13 @@ export class OperationalLoop {
   readonly imageryOperations: ImageryOperations;
   readonly powerOperations: PowerOperations;
   readonly finance: CompanyFinance;
+  readonly performance: SatellitePerformance;
   private readonly captureActions = new Map<string, CaptureAction>();
   private readonly lastCommandedPointing = new Map<string, PointingDirection>();
   private readonly fleetById = new Map<string, SatelliteDefinition>();
   private readonly initialFleet: SatelliteDefinition[];
-  private readonly stations: readonly SurfaceObject[];
+  private readonly stations: SurfaceObject[];
+  private readonly initialStations: SurfaceObject[];
   private readonly weather?: WeatherConfiguration;
   private readonly scenario: CellCaptureScenario;
   private readonly getMarket: () => CellMarketState | null;
@@ -75,14 +78,27 @@ export class OperationalLoop {
   constructor(configuration: OperationalLoopConfiguration) {
     this.initialFleet = configuration.fleet.map(cloneSatellite);
     for (const satellite of this.initialFleet) this.fleetById.set(satellite.id, satellite);
-    this.stations = configuration.stations;
+    this.stations = configuration.stations.map(station => ({
+      ...station,
+      location: { ...station.location },
+      ...(station.groundStationDetails ? { groundStationDetails: { ...station.groundStationDetails } } : {}),
+    }));
+    this.initialStations = this.stations.map(station => ({
+      ...station,
+      location: { ...station.location },
+      ...(station.groundStationDetails ? { groundStationDetails: { ...station.groundStationDetails } } : {}),
+    }));
     this.weather = configuration.weather ? { ...configuration.weather } : undefined;
     this.finance = configuration.finance ?? new CompanyFinance();
+    this.runtime = configuration.runtime ?? new SimulationRuntime(configuration.fleet.map(({ id }) => id));
+    this.performance = new SatellitePerformance(
+      configuration.fleet.map(({ id }) => id),
+      this.runtime.elapsedSeconds,
+    );
     this.scenario = { ...configuration.scenario };
     this.getMarket = configuration.getMarket;
     this.predictContacts = configuration.contactPredictor ?? predictGroundContactWindows;
     this.imageSizeBytes = configuration.imageSizeBytes ?? PROTOTYPE_CELL_IMAGE_SIZE_BYTES;
-    this.runtime = configuration.runtime ?? new SimulationRuntime(configuration.fleet.map(({ id }) => id));
     this.groundOperations = configuration.groundOperations ?? new GroundOperations(
       configuration.fleet.map(({ id }) => id),
       this.runtime,
@@ -110,6 +126,47 @@ export class OperationalLoop {
 
   getFleet(): readonly SatelliteDefinition[] {
     return [...this.fleetById.values()].map(cloneSatellite);
+  }
+
+  getStations(): readonly SurfaceObject[] {
+    return this.stations;
+  }
+
+  validateGroundStationRegistration(station: SurfaceObject): void {
+    if (!station.id.trim() || !station.name.trim() || station.kind !== "ground-station") {
+      throw new Error("Ground station identity is invalid");
+    }
+    if (this.stations.some(({ id }) => id === station.id)) throw new Error(`Ground station is already registered: ${station.id}`);
+    const details = station.groundStationDetails;
+    if (!details || details.operationalStatus !== "available"
+      || ![details.uplinkRateMbps, details.downlinkRateMbps, details.contactCostUsdPerMinute,
+        details.maintenanceCostUsdPerDay ?? 0].every(Number.isFinite)
+      || details.uplinkRateMbps <= 0 || details.downlinkRateMbps <= 0
+      || details.contactCostUsdPerMinute < 0 || (details.maintenanceCostUsdPerDay ?? 0) < 0) {
+      throw new RangeError("Ground station configuration is invalid");
+    }
+    const { latitudeDeg, longitudeDeg } = station.location;
+    if (!Number.isFinite(latitudeDeg) || latitudeDeg < -90 || latitudeDeg > 90
+      || !Number.isFinite(longitudeDeg) || longitudeDeg < -180 || longitudeDeg > 180) {
+      throw new RangeError("Ground station location is invalid");
+    }
+  }
+
+  registerGroundStation(station: SurfaceObject, accessStartedAtSeconds = this.runtime.elapsedSeconds): SurfaceObject {
+    this.validateGroundStationRegistration(station);
+    if (!Number.isFinite(accessStartedAtSeconds) || accessStartedAtSeconds < 0) {
+      throw new RangeError("Ground station activation time must be finite and non-negative");
+    }
+    const registered = {
+      ...station,
+      location: { ...station.location },
+      groundStationDetails: {
+        ...station.groundStationDetails!,
+        accessStartedAtSeconds,
+      },
+    };
+    this.stations.push(registered);
+    return registered;
   }
 
   getCellOperationalVisualization(satelliteId: string): CellOperationalVisualization {
@@ -142,6 +199,7 @@ export class OperationalLoop {
     this.groundOperations.registerSatellite(id);
     this.imageryOperations.registerSatellite(id, configuration.storageCapacityBytes);
     this.powerOperations.registerSatellite(id, configuration.power);
+    this.performance.registerSatellite(id, this.runtime.elapsedSeconds);
     this.fleetById.set(id, satellite);
     return cloneSatellite(satellite);
   }
@@ -223,8 +281,7 @@ export class OperationalLoop {
       const now = this.runtime.elapsedSeconds;
       const nextRefreshBoundary = (Math.floor(now / PROTOTYPE_OPTIMIZATION_SEGMENT_SECONDS) + 1)
         * PROTOTYPE_OPTIMIZATION_SEGMENT_SECONDS;
-      const nextFinanceBoundary = (Math.floor(now / SIMULATION_DAY_SECONDS) + 1) * SIMULATION_DAY_SECONDS;
-      const end = Math.min(targetSeconds, nextRefreshBoundary, nextFinanceBoundary);
+      const end = Math.min(targetSeconds, nextRefreshBoundary);
       this.groundOperations.advanceBy(end - now, [...this.fleetById.values()], this.stations,
         (startsAtSeconds, endsAtSeconds, contacts) => {
           const market = this.getMarket();
@@ -240,6 +297,19 @@ export class OperationalLoop {
             }
           }
           const radioContacts = contacts.filter(contact => this.powerOperations.radioIsRunning(contact.satelliteId));
+          const imagesAtIntervalStart = market?.getImages() ?? [];
+          for (const satellite of this.fleetById.values()) {
+            const hasAvailableImageContact = imagesAtIntervalStart.some(image => image.satelliteId === satellite.id
+              && image.status === "onboard")
+              && contacts.some(contact => contact.satelliteId === satellite.id
+                && contact.station.groundStationDetails?.operationalStatus === "available");
+            const power = this.powerOperations.getSnapshot(satellite.id, satellite, startsAtSeconds);
+            const midpointSeconds = (startsAtSeconds + endsAtSeconds) / 2;
+            const limited = power.depleted
+              || this.powerOperations.isPowerRejectedCaptureActive(satellite.id, midpointSeconds)
+              || (power.radioPaused && hasAvailableImageContact);
+            this.performance.recordOperationalInterval(satellite.id, startsAtSeconds, endsAtSeconds, limited);
+          }
           const deliveryBoundary = market
             ? this.imageryOperations.nextDeliveryBoundary(market, startsAtSeconds, radioContacts)
             : null;
@@ -267,12 +337,36 @@ export class OperationalLoop {
           this.runtime.elapsedSeconds,
         ).depleted,
       );
-      this.finance.advanceTo(end, [...this.fleetById.keys()], this.stations
-        .filter(station => station.kind === "ground-station").map(station => station.id));
+      this.accrueGroundStationMaintenance(now, end);
       processedRuntimeEvents = this.processRuntimeEvents(processedRuntimeEvents);
       if (this.runtime.elapsedSeconds === nextRefreshBoundary) this.refreshAutomaticPlans();
     }
     return this.runtime.elapsedSeconds;
+  }
+
+  private accrueGroundStationMaintenance(startSeconds: number, endSeconds: number): void {
+    let boundarySeconds = (Math.floor(startSeconds / SIMULATION_DAY_SECONDS) + 1) * SIMULATION_DAY_SECONDS;
+    while (boundarySeconds <= endSeconds) {
+      const dayIndex = Math.floor(boundarySeconds / SIMULATION_DAY_SECONDS) - 1;
+      const dayStartSeconds = dayIndex * SIMULATION_DAY_SECONDS;
+      for (const station of this.stations) {
+        const details = station.groundStationDetails;
+        if (station.kind !== "ground-station" || details?.accessMode === "leased") continue;
+        const dailyRate = details?.maintenanceCostUsdPerDay ?? 0;
+        if (dailyRate <= 0) continue;
+        const activeFromSeconds = Math.max(dayStartSeconds, details?.accessStartedAtSeconds ?? 0);
+        const activeSeconds = Math.min(SIMULATION_DAY_SECONDS, Math.max(0, boundarySeconds - activeFromSeconds));
+        if (activeSeconds <= 0) continue;
+        this.finance.recordGroundStationMaintenance(
+          station.id,
+          dayIndex,
+          boundarySeconds,
+          dailyRate,
+          activeSeconds,
+        );
+      }
+      boundarySeconds += SIMULATION_DAY_SECONDS;
+    }
   }
 
   enforceStorageCapacity(satelliteId: string, timeSeconds: number): number {
@@ -290,9 +384,15 @@ export class OperationalLoop {
   reset(): void {
     this.finance.reset();
     this.runtime.reset();
+    this.performance.reset(this.initialFleet.map(({ id }) => id), this.runtime.elapsedSeconds);
     this.groundOperations.reset();
     this.imageryOperations.reset();
     this.powerOperations.reset();
+    this.stations.splice(0, this.stations.length, ...this.initialStations.map(station => ({
+      ...station,
+      location: { ...station.location },
+      ...(station.groundStationDetails ? { groundStationDetails: { ...station.groundStationDetails } } : {}),
+    })));
     this.fleetById.clear();
     for (const satellite of this.initialFleet) this.fleetById.set(satellite.id, cloneSatellite(satellite));
     this.captureActions.clear();
@@ -581,26 +681,36 @@ export class OperationalLoop {
     });
     const timingMatches = Math.abs(feasibility.completesAtSeconds - event.timeSeconds) < 1;
     const market = this.getMarket();
-    const weatherGrid = this.automaticGrids.get(action.satelliteId);
-    const cloudPercent = this.weather
-      && weatherGrid
-      ? averageCloudCoverPercent(this.weather, weatherGrid.ids[action.cellIndex]!,
+    const cellId = market?.calculateCell(action.cellIndex, feasibility.collectionStartsAtSeconds).cellId;
+    const measuredCloudPercent = this.weather && cellId !== undefined
+      ? averageCloudCoverPercent(this.weather, cellId,
         feasibility.collectionStartsAtSeconds, feasibility.completesAtSeconds)
       : null;
+    const acceptedThresholdPercent = this.weather?.usableThresholdPercent ?? PROTOTYPE_CLOUD_THRESHOLD_PERCENT;
+    let observedCloudCoverPercent: number | null = null;
+    let imageId: string | null = null;
+    let failureKind: CaptureFailureKind | null = null;
     let success = false;
     let detail: string;
     const powerReason = this.powerOperations.captureRejectionReason(event.actionId);
     if (powerReason) {
+      failureKind = "power";
       detail = `Cell capture failed: ${powerReason} No image was created and cell recovery did not reset.`;
     } else if (!feasibility.feasible) {
+      failureKind = "geometry";
       detail = `Cell capture failed: ${feasibility.reason.replaceAll("-", " ")}. No image was created and cell recovery did not reset.`;
     } else if (!timingMatches) {
+      failureKind = "timing";
       detail = "Cell capture failed: the executed command timing no longer matches the feasible slew and collection window. No image was created and cell recovery did not reset.";
     } else if (!market) {
+      failureKind = "market";
       detail = "Cell capture failed: market imagery state is not available. No image was created and cell recovery did not reset.";
-    } else if (cloudPercent !== null && cloudPercent > (this.weather?.usableThresholdPercent ?? PROTOTYPE_CLOUD_THRESHOLD_PERCENT)) {
-      detail = `Cell capture failed: cloud cover averaged ${cloudPercent}% during collection (usable at or below ${this.weather?.usableThresholdPercent ?? PROTOTYPE_CLOUD_THRESHOLD_PERCENT}%). No image was created and cell recovery did not reset.`;
+    } else if (measuredCloudPercent !== null && measuredCloudPercent > acceptedThresholdPercent) {
+      failureKind = "weather";
+      observedCloudCoverPercent = measuredCloudPercent;
+      detail = `Cell capture failed: cloud cover averaged ${measuredCloudPercent}% during collection (usable at or below ${acceptedThresholdPercent}%). No image was created and cell recovery did not reset.`;
     } else {
+      observedCloudCoverPercent = measuredCloudPercent;
       try {
         const image = market.completeCellCapture(
           action.cellIndex,
@@ -609,6 +719,7 @@ export class OperationalLoop {
           event.timeSeconds,
           this.imageSizeBytes,
         );
+        imageId = image.imageId;
         const deletions = this.imageryOperations.enforceStorageCapacity(market, action.satelliteId, event.timeSeconds);
         const deletionNote = deletions.length > 0
           ? ` Storage pressure deleted ${deletions.length} lowest-retention image(s); no revenue was realized for them.`
@@ -616,10 +727,25 @@ export class OperationalLoop {
         detail = `Cell capture succeeded for C${image.cellId.toString().padStart(7, "0")}; image stored onboard with ${image.valuePotentialUsd.toFixed(2)} USD value potential. No cash credited.${deletionNote}`;
         success = true;
       } catch (error) {
+        failureKind = "image-creation";
+        observedCloudCoverPercent = null;
         detail = `Cell capture failed: ${error instanceof Error ? error.message : "image creation failed"}. No image was committed.`;
       }
     }
     if (!powerReason) this.lastCommandedPointing.set(action.satelliteId, cellLookDirectionAt(satellite, action.target, event.timeSeconds));
+    this.performance.recordCaptureAttempt({
+      id: event.actionId,
+      satelliteId: action.satelliteId,
+      commandId: action.commandId,
+      startedAtSeconds: actionStartSeconds,
+      collectionStartedAtSeconds: feasibility.collectionStartsAtSeconds,
+      collectionEndedAtSeconds: feasibility.completesAtSeconds,
+      completedAtSeconds: event.timeSeconds,
+      observedCloudCoverPercent,
+      acceptedThresholdPercent,
+      imageId,
+      failureKind,
+    });
     this.groundOperations.recordCellCaptureOutcome(action.satelliteId, action.commandId, event.timeSeconds, success, detail);
   }
 }

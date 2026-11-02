@@ -79,6 +79,7 @@ export class CellMarketState {
   private readonly lifecycleEventIds = new Set<string>();
   private readonly images = new Map<string, CellImageRecord>();
   private readonly lifecycleEvents: ImageLifecycleEvent[] = [];
+  private imageryRevisionValue = 0;
   private readonly initialMarketReadout: MarketReadoutCategory[];
   private readonly initialPriorityRates: PlayerCategoryPriorityRate[];
   private readonly grid: CellGrid;
@@ -107,9 +108,11 @@ export class CellMarketState {
 
   get companyCashUsd(): number { return this.finance.cashUsd; }
   get realizedRevenueUsd(): number { return this.finance.realizedRevenueUsd; }
+  get imageryRevision(): number { return this.imageryRevisionValue; }
 
   /** Restore the in-memory preview to its supplied scenario defaults. */
   resetPreview(): void {
+    this.imageryRevisionValue += 1;
     this.lastCollectedAt.fill(Number.NaN);
     this.collectionEvents.length = 0;
     this.captureEventIds.clear();
@@ -249,6 +252,7 @@ export class CellMarketState {
     this.captureEventIds.add(eventId);
     this.images.set(image.imageId, image);
     this.lastCollectedAt[cellIndex] = capture.nextRecoveryState.lastCollectedAtSeconds!;
+    this.imageryRevisionValue += 1;
     return { ...event, categoryPayoutsUsd: { ...event.categoryPayoutsUsd } };
   }
 
@@ -268,6 +272,7 @@ export class CellMarketState {
     image.transferredBytes = transferredBytes;
     this.lifecycleEventIds.add(eventId);
     this.lifecycleEvents.push(event);
+    this.imageryRevisionValue += 1;
     return { ...event };
   }
 
@@ -285,6 +290,7 @@ export class CellMarketState {
     image.settledRevenueUsd = settledRevenueUsd;
     this.lifecycleEventIds.add(eventId);
     this.lifecycleEvents.push(event);
+    this.imageryRevisionValue += 1;
     return { ...event };
   }
 
@@ -303,6 +309,7 @@ export class CellMarketState {
     image.deletedAtSeconds = timeSeconds;
     this.lifecycleEventIds.add(eventId);
     this.lifecycleEvents.push(event);
+    this.imageryRevisionValue += 1;
     return { ...event };
   }
 

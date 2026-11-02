@@ -10,6 +10,7 @@ import { cellLookDirectionAt, evaluateCellCaptureOpportunity, nadirPointingAt } 
 import { predictGroundContactWindows } from "../src/simulation/contacts.ts";
 import { createWorldSnapshot } from "../src/simulation/world.ts";
 import { nextIlluminationBoundary, PROTOTYPE_POWER_CONFIGURATION } from "../src/simulation/power.ts";
+import { averageCloudCoverPercent } from "../src/simulation/weather.ts";
 
 const CELL_A_ID = 519_840;
 const CELL_B_ID = CELL_A_ID + 1;
@@ -154,7 +155,7 @@ test("runtime completion boundaries drive capture, storage, and transfer identic
 test("cloud failure consumes the command and capture power without creating an image or resetting recovery", () => {
   const { satellite, loop, market } = makeLoop({
     windows: [[10, 80]],
-    weather: { seed: 2, baselinePercent: 100, usableThresholdPercent: 60 },
+    weather: { seed: 2, baselinePercent: 100, usableThresholdPercent: 20 },
   });
   const [command] = captureCommands(satellite, [{ index: 0, target: targetA }]);
   loop.reviseGroundPlan(satellite.id, [command], 0);
@@ -162,12 +163,79 @@ test("cloud failure consumes the command and capture power without creating an i
 
   const failure = loop.groundOperations.events.find(({ kind }) => kind === "cell-capture-failed");
   assert.match(failure.detail, /cloud cover averaged \d+%/);
-  assert.ok(Number(failure.detail.match(/averaged (\d+)%/)[1]) > 60);
+  assert.ok(Number(failure.detail.match(/averaged (\d+)%/)[1]) > 20);
   assert.equal(failure.timeSeconds, command.durationSeconds + 10);
   assert.equal(market.getImages().length, 0);
   assert.equal(market.getCaptureEvents().length, 0);
   assert.equal(market.lastCollectedAtSeconds(0), null);
   assert.ok(loop.powerOperations.getSnapshot(satellite.id, satellite, loop.runtime.elapsedSeconds).consumedWh > 0);
+  const yieldSnapshot = loop.performance.getYieldSnapshot(satellite.id, market.getImages());
+  assert.equal(yieldSnapshot.attemptCount, 1);
+  assert.equal(yieldSnapshot.cloudRejectedCount, 1);
+  assert.equal(yieldSnapshot.paidClearPercent, 0);
+  const timeSnapshot = loop.performance.getOperationalTimeSnapshot(satellite.id, loop.runtime.elapsedSeconds);
+  assert.equal(timeSnapshot.elapsedSeconds, loop.runtime.elapsedSeconds);
+  assert.equal(timeSnapshot.nominalSeconds + timeSnapshot.powerLimitedSeconds, timeSnapshot.elapsedSeconds);
+});
+
+test("the default inclusive 20% cloud cutoff accepts and pays a capture at exactly 20%", () => {
+  const weatherForBoundary = (targetPercent) => {
+    const { satellite } = makeWorld();
+    const [command] = captureCommands(satellite, [{ index: 0, target: targetA }]);
+    const opportunity = evaluateCellCaptureOpportunity({
+      satellite,
+      target: targetA,
+      previousPointing: nadirPointingAt(satellite, 10),
+      startsAtSeconds: 10,
+      scenario: SCENARIO,
+    });
+    for (let baselinePercent = 0; baselinePercent <= 100; baselinePercent += 1) {
+      const weather = { seed: 2, baselinePercent };
+      if (averageCloudCoverPercent(weather, CELL_A_ID, opportunity.collectionStartsAtSeconds,
+        opportunity.completesAtSeconds) === targetPercent) return { weather, command };
+    }
+    assert.fail(`Could not create deterministic ${targetPercent}% cloud fixture`);
+  };
+  const { weather, command } = weatherForBoundary(20);
+  const { satellite, loop, market } = makeLoop({ weather });
+  loop.reviseGroundPlan(satellite.id, [command], 0);
+  loop.advanceBy(40);
+
+  assert.equal(market.getImages().length, 1);
+  assert.equal(market.getImages()[0].status, "delivered");
+  const performance = loop.performance.getYieldSnapshot(satellite.id, market.getImages());
+  assert.equal(performance.attemptCount, 1);
+  assert.equal(performance.paidClearCount, 1);
+  assert.equal(performance.deliveredRevenueCents, 2_000);
+
+  const aboveFixture = weatherForBoundary(21);
+  const above = makeLoop({ weather: aboveFixture.weather });
+  above.loop.reviseGroundPlan(above.satellite.id, [aboveFixture.command], 0);
+  above.loop.advanceBy(40);
+  assert.equal(above.market.getImages().length, 0);
+  const aboveYield = above.loop.performance.getYieldSnapshot(above.satellite.id, above.market.getImages());
+  assert.equal(aboveYield.cloudRejectedCount, 1);
+  assert.equal(aboveYield.paidClearCount, 0);
+});
+
+test("power-limited duration is independent of how simulation time is divided", () => {
+  const depletedConfiguration = {
+    ...PROTOTYPE_POWER_CONFIGURATION,
+    initialEnergyWh: 0,
+    solarGenerationW: 0,
+  };
+  const large = makeLoop({ windows: [], powerConfiguration: depletedConfiguration });
+  const irregular = makeLoop({ windows: [], powerConfiguration: depletedConfiguration });
+  large.loop.advanceBy(75);
+  irregular.loop.advanceBy(15);
+  irregular.loop.advanceBy(10);
+  irregular.loop.advanceBy(50);
+
+  const largeTime = large.loop.performance.getOperationalTimeSnapshot(large.satellite.id, 75);
+  const irregularTime = irregular.loop.performance.getOperationalTimeSnapshot(irregular.satellite.id, 75);
+  assert.deepEqual(largeTime, irregularTime);
+  assert.equal(largeTime.powerLimitedSeconds, 75);
+  assert.equal(largeTime.nominalSeconds, 0);
 });
 
 test("partial downlink waits between contacts and settles exactly once on full delivery", () => {
@@ -351,6 +419,9 @@ test("contact downlink pauses at reserve and resumes after charging while bytes 
   assert.ok(pausedImage.transferredBytes > 0 && pausedImage.transferredBytes < pausedImage.sizeBytes);
   assert.equal(pausedSnapshot.radioPaused, true);
   assert.ok(pausedSnapshot.energyWh >= powerConfiguration.reserveWh - 1e-6);
+  const operationalTime = loop.performance.getOperationalTimeSnapshot(satellite.id, 500);
+  assert.ok(operationalTime.powerLimitedSeconds > 0);
+  assert.equal(operationalTime.nominalSeconds + operationalTime.powerLimitedSeconds, 500);
 
   loop.advanceBy(700);
   const resumedImage = market.getImages()[0];
