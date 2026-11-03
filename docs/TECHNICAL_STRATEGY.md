@@ -13,7 +13,7 @@ This document records implementation constraints and architecture direction. The
 
 ## Architecture direction
 
-**Challenge direction (2026-11-02):** Replayable mission setup, deadlines, objectives, debriefs, and progression are agreed product direction but are not implemented. Reuse the simulation/domain boundary and existing ledger rather than creating separate mission physics or income accounting. The [challenge development plan](CHALLENGE_RUNS.md) proposes a mission definition and domain run controller; its lifecycle details and scoring policy require RUN-02 decisions. Current initial-fleet and procurement defaults below describe the continuous prototype, not future mission budgets.
+**Challenge direction (2026-11-03):** Replayable mission setup, deadlines, objectives, debriefs, and progression are agreed product direction but are not implemented. Reuse the simulation/domain boundary and existing ledger rather than creating separate mission physics or income accounting. RUN-02 has selected delivered-revenue scoring, one spacecraft fixed at launch, category priorities as the only live policy control, and same-seed retry. RUN-03's proposed mission definition, fresh-attempt factory, and lifecycle/deadline controller are specified in the [challenge development plan](CHALLENGE_RUNS.md); numeric inputs remain provisional. Current initial-fleet and procurement defaults below describe the continuous prototype, not future mission budgets.
 
 - Keep simulation state and rules separate from UI rendering. The simulation should be advanceable and inspectable without depending on a screen component.
 - Let the Cesium-independent simulation runtime own elapsed time and per-spacecraft timed actions. Advance directly between known action boundaries; process each start/completion event once, then set the requested final simulation time. Pause and speed controls choose whether and how far to advance the same runtime.
@@ -38,6 +38,8 @@ This document records implementation constraints and architecture direction. The
 - The Schedule view groups each spacecraft's current onboard TEL in a collapsible table. List every scheduled cell capture with current total available priority points, current total available payout, forecasted mean cloud cover for that collection as the fourth column, and available priority by category. Store the cloud estimate with the planned command; it is a forecast snapshot, not observed weather. The table uses current market, player priority rates, recovery state, and simulation time for value columns and does not edit the TEL.
 
 **Implemented information density:** Management tabs use compact spacing and dense tables to keep more information visible. The tab content is the primary vertical scroll area. Configured ground stations fit without an inner table scrollbar and switch to labeled station cards on narrow screens. Schedule tables retain a bounded scroll area with sticky headings.
+
+**Mobile direction (planned):** Existing narrow-screen CSS is a starting point, not mobile acceptance. After RUN-03, review the complete setup → operate → debrief → retry flow at phone and tablet sizes. Keep one management surface readable at a time, preserve quick access to simulation controls and globe context, and ensure key actions and explanations do not depend on hover. See UX-05 in [Pending Changes](PENDING_CHANGES.md#ux-05--make-the-core-experience-mobile-friendly).
 
 ### Open interface decisions
 

@@ -128,6 +128,19 @@ export class OperationalLoop {
     return [...this.fleetById.values()].map(cloneSatellite);
   }
 
+  /** Replace the single mission spacecraft definition before a clean run begins. */
+  configureInitialSatellite(definition: SatelliteDefinition): void {
+    if (this.runtime.elapsedSeconds !== 0 || this.runtime.events.length !== 0 || this.initialFleet.length !== 1) {
+      throw new Error("Mission spacecraft can only be configured at clean time zero");
+    }
+    this.validateSatelliteDefinition(definition);
+    const initial = this.initialFleet[0]!;
+    if (definition.id !== initial.id) throw new Error("Mission spacecraft identity cannot change");
+    const configured = cloneSatellite(definition);
+    this.initialFleet[0] = configured;
+    this.fleetById.set(configured.id, configured);
+  }
+
   getStations(): readonly SurfaceObject[] {
     return this.stations;
   }

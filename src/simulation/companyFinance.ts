@@ -5,7 +5,8 @@ export type FinanceEntryKind =
   | "ground-station-contact-cost"
   | "ground-station-maintenance-cost"
   | "spacecraft-procurement"
-  | "ground-station-procurement";
+  | "ground-station-procurement"
+  | "mission-setup-fee";
 
 export type FinanceEntry = {
   id: string;
@@ -262,6 +263,28 @@ export class CompanyFinance {
     return this.append(entry);
   }
 
+  recordMissionSetupFee(eventId: string, sourceId: string, timeSeconds: number, feeCents: number): FinanceEntry {
+    if (!eventId.trim() || !sourceId.trim()) throw new Error("Mission setup fee identity is required");
+    if (!Number.isFinite(timeSeconds) || timeSeconds < 0) throw new RangeError("Mission setup time must be finite and non-negative");
+    if (!Number.isSafeInteger(feeCents) || feeCents < 0) throw new RangeError("Mission setup fee must be whole non-negative cents");
+    const entry: FinanceEntry = {
+      id: `mission-setup:${eventId}`,
+      timeSeconds,
+      kind: "mission-setup-fee",
+      sourceId,
+      amountCents: -feeCents,
+    };
+    const previous = this.entryById.get(entry.id);
+    if (previous) {
+      if (previous.timeSeconds !== entry.timeSeconds || previous.sourceId !== entry.sourceId || previous.amountCents !== entry.amountCents) {
+        throw new Error(`Financial event ID reused with different contents: ${entry.id}`);
+      }
+      return { ...previous };
+    }
+    if (this.cashCentsValue < feeCents) throw new Error("Insufficient company cash for mission setup fees");
+    return this.append(entry);
+  }
+
   getSnapshot(): CompanyFinanceSnapshot {
     return {
       startingCashCents: this.startingCashCents,
@@ -316,6 +339,7 @@ export class CompanyFinance {
         break;
       case "ground-station-contact-cost":
       case "ground-station-maintenance-cost":
+      case "mission-setup-fee":
         if (entry.amountCents > 0) throw new RangeError("Operating cost cannot be positive");
         this.operatingCostsCentsValue -= entry.amountCents;
         break;

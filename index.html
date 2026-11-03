@@ -8,7 +8,28 @@
     <title>Stark Ephemeris — Mission Control</title>
   </head>
   <body>
-    <div id="app">
+    <section class="mission-gate" id="mission-gate" aria-labelledby="mission-gate-title">
+      <div class="mission-gate-card">
+        <p class="eyebrow" id="mission-gate-kicker">MISSION SETUP · PROVISIONAL INPUTS</p>
+        <h1 id="mission-gate-title" tabindex="-1">First Delivery</h1>
+        <p id="mission-gate-copy">Deliver $2,000 in imagery within 24 simulation hours. Select one spacecraft package and starting orbit before launch.</p>
+        <div class="mission-setup-fields">
+          <label>Package<select id="mission-equipment"><option value="standard">Standard · $50M</option><option value="enhanced-slew">Enhanced slew · $55M</option></select></label>
+          <label>Altitude (km)<input id="mission-altitude" type="number" min="10" step="10" value="550" required></label>
+          <label>Inclination (°)<input id="mission-inclination" type="number" min="0" max="180" step="1" value="53" required></label>
+          <label>Ascending node (°)<input id="mission-node" type="number" min="0" max="359" step="1" value="12" required></label>
+          <label>Phase (°)<input id="mission-phase" type="number" min="0" max="359" step="1" value="8" required></label>
+        </div>
+        <p id="mission-setup-quote" class="mission-gate-summary"></p>
+        <p class="mission-gate-summary mission-gate-brief">$55,120,000 allowance · four starter stations · same market and weather seed on retry.</p>
+        <p id="mission-ready-status" role="status">Preparing cell market data…</p>
+        <button id="mission-market-retry" class="primary-button" type="button" hidden>RETRY MARKET DATA</button>
+        <p id="mission-debrief-findings" class="mission-debrief-findings" hidden></p>
+        <div id="mission-debrief" class="mission-debrief" hidden></div>
+        <button id="mission-gate-action" class="primary-button" type="button" disabled>START MISSION</button>
+      </div>
+    </section>
+    <div id="app" class="mission-mode">
       <main class="sim-shell" data-layout="split">
         <div class="mini-globe" aria-label="Compact globe and satellite orbit overview" aria-hidden="true">
           <svg class="mini-globe-graphic" viewBox="0 0 180 180" role="presentation">
@@ -72,10 +93,10 @@
                 <svg aria-hidden="true" viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="7.5" ry="3.5" transform="rotate(-35 10 10)"/><circle class="orbit-icon-point" cx="15.4" cy="5.4" r="1.5"/></svg>
                 <span>ORBIT TRACK</span>
               </button>
-              <button class="icon-button" id="pause-toggle" type="button" aria-pressed="false">
+              <button class="icon-button" id="pause-toggle" type="button" aria-pressed="true" aria-label="Resume simulation">
                 <svg class="pause-glyph" aria-hidden="true" viewBox="0 0 20 20"><path d="M6.5 4.5h2.5v11H6.5zM11 4.5h2.5v11H11z"/></svg>
                 <svg class="play-glyph" aria-hidden="true" viewBox="0 0 20 20"><path d="M6.5 4.25 15 10l-8.5 5.75z"/></svg>
-                <span id="pause-label">PAUSE</span>
+                <span id="pause-label">RESUME</span>
               </button>
             </div>
           </div>

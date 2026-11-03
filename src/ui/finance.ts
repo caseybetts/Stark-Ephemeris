@@ -21,6 +21,7 @@ const entryLabel = (kind: string): string => {
     case "ground-station-maintenance-cost": return "Ground station daily maintenance";
     case "spacecraft-procurement": return "Spacecraft purchase & launch";
     case "ground-station-procurement": return "Ground station purchase";
+    case "mission-setup-fee": return "Mission ground-network setup";
     default: return kind;
   }
 };

@@ -43,6 +43,7 @@ type CellMarketActions = {
   notifySchedulingInputsChanged: () => void;
   getCellOperationalVisualization: () => CellOperationalVisualization;
   getSatelliteEarthFixedKm: () => { x: number; y: number; z: number } | null;
+  onLoadError?: (retry: () => void) => void;
 };
 
 export async function setupCellMarket(
@@ -68,7 +69,9 @@ export async function setupCellMarket(
     detail.textContent = error instanceof Error ? error.message : String(error);
     const retry = document.createElement("button");
     retry.type = "button"; retry.className = "cell-button"; retry.textContent = "Retry cell data";
-    retry.addEventListener("click", () => void setupCellMarket(viewer, actions, onMounted));
+    const retryLoading = () => { void setupCellMarket(viewer, actions, onMounted); };
+    retry.addEventListener("click", retryLoading);
+    actions.onLoadError?.(retryLoading);
     panel.append(message, detail, retry);
   }
 }

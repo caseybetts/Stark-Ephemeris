@@ -2,7 +2,7 @@
 
 This is the project's on-deck menu of implementation work. It turns discussed features into bounded work items an agent can pick up after the user selects them.
 
-**Direction update (2026-11-02):** Replayable, time-limited challenges are now the primary gameplay direction. The [challenge development plan](CHALLENGE_RUNS.md) distinguishes approved experience from proposed mechanics. The [starting order](#suggested-starting-order) below supersedes earlier dated handoffs; this documentation update does not select implementation work or mark pending checks complete.
+**Direction update (2026-11-03):** Replayable, time-limited challenges are the primary gameplay direction. RUN-03 technical acceptance and the UX-05/UI-04 responsive pass are complete; the next step is the human-led RUN-04 M01 playtest. The [challenge development plan](CHALLENGE_RUNS.md) distinguishes approved experience from proposed mechanics. The [starting order](#suggested-starting-order) below supersedes earlier dated handoffs.
 
 **Design update (2026-10-15):** BIZ-02's standard purchase flow, pre-launch orbit selection, and shared antenna handoff are implemented; the production build passes. The user also approved prototype policies for capture completion, contact episodes, image retention/transfer, capture-time value quotes, and OPS-01B power behavior. Capacity and image-size values, physical capture limits, final power balance, and planner forecasts of antenna contention remain open.
 
@@ -459,6 +459,16 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 **Dependencies:** Implemented systems and a review of their actual interface. Prioritize operational understanding over decorative graphics.
 
+### UX-05 — Make the core experience mobile-friendly
+
+**Status:** Technical responsive pass complete 2026-11-03; human comfort and real-device usability remain for RUN-04. Phone/tablet widths default to a full-width operations view with a touch-sized map toggle and reachable run controls. At a 360px phone width, checks covered setup scrolling and Start, pause/resume, all main management tabs, map switching, the full debrief, and retry; the 768px tablet check confirmed the single-pane layout and map switch. No page-wide horizontal overflow appeared. Narrow fleet/schedule headings and finance metrics were adjusted; data tables retain their own horizontal scroll regions.
+
+**Work:** Adapt mission setup, playback/pause and status, exception handling, priority controls, debrief/retry, navigation, and the most-used management views for narrow touch screens. Keep the globe available as a useful overview while allowing management information to take the available screen. Preserve readable type, reachable controls, clear selected state, and usable tables or card alternatives. Avoid rebuilding the full interface solely to fit every desktop panel at once.
+
+**Done when:** At a narrow phone viewport and a tablet viewport, a player can complete setup, start/pause/resume a run, reach the important operating controls, understand an exception and debrief, and retry without clipped text, inaccessible controls, accidental horizontal page scrolling, or hover-only information. The human evaluates comfort and real-device usability; agents verify layout, touch-target reachability, and state/overflow behavior.
+
+**Dependencies:** RUN-03's setup, operations, debrief, and retry flow. Coordinate with UI-04 so mobile behavior is handled as part of interface refinement rather than a separate visual redesign.
+
 ## Satellite performance
 
 ### YIELD-01 — Per-satellite collection yield on Summary
@@ -505,21 +515,22 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 ## Suggested starting order
 
-**Current recommendation (2026-11-02):** The prototype foundation and first baseline samples are recorded. Define and deliver one complete challenge before adding more simulation systems. A request to take the next step selects the first incomplete entry in this table; design tasks resolve their open rules before implementation.
+**Current recommendation (2026-11-03):** RUN-01 baseline work, RUN-02's core M01 decisions, RUN-03 technical acceptance, and the UX-05/UI-04 technical responsive pass are complete. The core flow has been checked at phone and tablet widths; real-device comfort and player experience belong to the human-led RUN-04 playtest. Keep tuning and extra simulation systems behind observed need. A request to take the next step selects the first incomplete entry in this table; design tasks resolve their open rules before implementation.
 
 | Order | Task and status | Next deliverable |
 | --- | --- | --- |
-| Complete slice | **RUN-01 — Baseline measured under the <=20% rule** | Use the recorded single- and two-spacecraft observations to inform RUN-02. Exact replay remains unverified because manual stop times differed. |
-| Complete | **YIELD-01 — Implemented prototype: per-satellite Summary yield** | Revisit only if playtesting shows the metrics or outcome chart need refinement. |
-| Complete slice | **YIELD-02 — Nominal/power time implemented** | Add anomaly and scheduled downtime intervals when their gameplay systems exist. |
-| 1 | **RUN-02 — M01 draft ready for review; not approved for implementation** | Review the proposed $55.12M allowance, $5,000 setup fee per station, one-spacecraft package choice, $2,000 delivered-revenue target, 24-hour deadline, and retry/control rules in [CHALLENGE_RUNS.md](CHALLENGE_RUNS.md#run-02--define-the-first-mission); resolve the listed open decisions. |
-| 3 | **RUN-03 — Needs design: complete challenge flow** | After RUN-02 decisions, build setup → run → debrief → retry with domain-owned lifecycle, deadline enforcement, and existing ledger settlement. |
-| 4 | **RUN-04 / TUNE-01 / UI-04 — Needs playtest evidence** | Tune the first mission's pacing and feedback; add one contrasting challenge with a clear operational constraint. |
-| Later | **OPS-02 — Proposal requires review** | Add an authored outage when needed by a mission; resolve warning, repair economics, and contact restoration semantics first. |
-| Independent/later | **CLOUD-01, FLEET-03, PLATFORM-01/02** | Full climatology, maneuvers, persistence, and publishing remain valid work, selected when their benefit justifies interrupting the playable loop. |
-| Backlog | **BIZ-03 — Station service profiles** | Use RUN-01 access estimates to design geographic, throughput, budget, and resilience roles. |
+| Complete | **RUN-01 — Baseline measured under the <=20% rule** | Measurements inform M01; exact continuous-run replay is still unverified, but this does not block the challenge controller. |
+| Complete | **RUN-02 — M01 core rules agreed; numeric inputs provisional** | Delivered-revenue scoring, one spacecraft fixed at launch, category-priority live control, and same-seed retry are recorded in [CHALLENGE_RUNS.md](CHALLENGE_RUNS.md#run-02--define-the-first-mission). |
+| Complete slice | **YIELD-01/02 — Yield and nominal/power time reporting** | Anomaly and scheduled-downtime intervals remain future extensions owned by their gameplay systems. |
+| Complete | **RUN-03 — M01 technical acceptance** | Controller and exact-cutoff checks pass; browser review confirmed the debrief and full retry reset. The single technical run is not a balance recommendation or player-experience test. |
+| Complete slice | **UX-05 / UI-04 — Technical mobile usability pass** | Setup, run controls, main management tabs, map toggle, debrief, and retry were checked at narrow phone/tablet widths. Human comfort and real-device usability are reserved for RUN-04. |
+| 1 | **RUN-04 — Human-led M01 playtest** | You judge pacing, clarity, comfort, and whether the run is enjoyable. Agents limit their checks to technical behavior, hidden state, boundary cases, and reproducible defects. Record feedback without broad parameter changes. |
+| After RUN-04, if evidence warrants | **TUNE-01 — Targeted tuning and second mission** | Adjust only values or explanations tied to observed issues. Then choose one clear constraint for a contrasting mission; do not make outages or anomalies prerequisites for the first loop. |
+| Later, when a mission needs it | **OPS-02 — Authored station outage** | Review the proposal's warning window, repair economics, and restoration/upload semantics before implementing an outage challenge. |
+| Independent/later | **CLOUD-01, FLEET-03, PLATFORM-01/02** | Full climatology, maneuvers, save/load, and publishing can wait unless M01 use reveals a concrete need. |
+| Backlog | **BIZ-03 — Station service profiles** | Revisit station roles after the mission demonstrates a need for differentiated geography, throughput, cost, or resilience. |
 
-The RUN tasks' scope, dependencies, open decisions, and completion criteria are defined in the [challenge development plan](CHALLENGE_RUNS.md#recommended-development-sequence). TUNE-01 now starts with mission budget/target/pacing evidence rather than assuming perpetual fleet growth. UI-04 should prioritize understanding outcomes and retrying. The existing prototype's economic defaults remain unchanged until a selected tuning or mission implementation changes them.
+The RUN tasks' scope, dependencies, open decisions, and completion criteria are defined in the [challenge development plan](CHALLENGE_RUNS.md#recommended-development-sequence). UX-05 and UI-04 are grouped to avoid two separate interface passes. TUNE-01 follows human M01 feedback and stays targeted; mission framework work may use clearly labeled provisional inputs. Do not change balance values merely to polish the unfinished framework.
 
 ### Historical starting order (2026-10-16, superseded)
 

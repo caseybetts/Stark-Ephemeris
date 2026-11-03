@@ -11,6 +11,7 @@ import { predictGroundContactWindows } from "../src/simulation/contacts.ts";
 import { createWorldSnapshot } from "../src/simulation/world.ts";
 import { nextIlluminationBoundary, PROTOTYPE_POWER_CONFIGURATION } from "../src/simulation/power.ts";
 import { averageCloudCoverPercent } from "../src/simulation/weather.ts";
+import { M01_MISSION, MissionRunController, validateM01Setup } from "../src/simulation/missionRun.ts";
 
 const CELL_A_ID = 519_840;
 const CELL_B_ID = CELL_A_ID + 1;
@@ -258,6 +259,38 @@ test("partial downlink waits between contacts and settles exactly once on full d
   loop.advanceBy(10);
   assert.equal(market.companyCashUsd, 120);
   assert.equal(market.getImageLifecycleEvents().filter(({ kind }) => kind === "image-downlinked").length, 1);
+});
+
+test("a full downlink that completes exactly at the mission deadline is credited once", () => {
+  const scenario = { ...SCENARIO, collectionDurationSeconds: 1 };
+  const fixtureSatellite = makeWorld().satellite;
+  const [captureCommand] = captureCommands(fixtureSatellite, [{ index: 0, target: targetA }], scenario);
+  const deadlineSeconds = 10 + captureCommand.durationSeconds + 10;
+  const { satellite, loop, market } = makeLoop({
+    windows: [[10, deadlineSeconds]],
+    downlinkRateMbps: 8,
+    scenario,
+  });
+  loop.reviseGroundPlan(satellite.id, [captureCommand], 0);
+  const setup = validateM01Setup({
+    equipmentOptionId: "standard",
+    altitudeKm: 550,
+    inclinationDeg: 53,
+    ascendingNodeDeg: 12,
+    phaseAtLaunchDeg: 8,
+  }, M01_MISSION.startingBudgetUsd * 100);
+  const run = new MissionRunController(deadlineSeconds);
+  run.begin(0, setup);
+
+  const elapsed = run.advanceBy(1_000, loop.runtime.elapsedSeconds, seconds => loop.advanceBy(seconds));
+  const delivered = market.getImages().filter(image => image.status === "delivered");
+
+  assert.equal(elapsed, deadlineSeconds);
+  assert.equal(loop.runtime.elapsedSeconds, deadlineSeconds);
+  assert.equal(run.phase, "completed");
+  assert.equal(delivered.length, 1);
+  assert.equal(delivered[0].deliveredAtSeconds, deadlineSeconds);
+  assert.equal(market.getImageLifecycleEvents().filter(event => event.kind === "image-downlinked").length, 1);
 });
 
 test("an earlier image delivers before a later capture applies storage pressure", () => {

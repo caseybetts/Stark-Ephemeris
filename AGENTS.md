@@ -20,3 +20,4 @@ Before making a change, read [`docs/README.md`](docs/README.md) and the document
 - Keep the simulation rules in a form that can be reasoned about independently of the interface.
 - Update the relevant documentation when implementation changes an agreed behavior, architecture boundary, or product scope.
 - Prefer small, reviewable changes. Do not add services, accounts, or other infrastructure without a product need documented first.
+- **Playtesting and tuning:** Leave most player-experience playtesting to the human. Agents should verify technical behavior, hidden state transitions, boundary cases, and clear, reproducible defects. Do not spend time tuning gameplay parameters or balance while the framework and core loop are still being built; keep prototype values configurable and label them provisional. Recommend tuning only when a concrete issue is supported by implementation evidence or the human's playtest feedback.
