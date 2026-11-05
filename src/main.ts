@@ -1,5 +1,6 @@
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import "./styles.css";
+import { formatPercent } from "./format";
 import { AVAILABLE_TIME_MULTIPLIERS, DEFAULT_TIME_MULTIPLIER, EFFECTIVE_CONTACT_RADIUS_KM, INITIAL_FLEET, SURFACE_OBJECTS } from "./simulation/constants";
 import { createWorldSnapshot } from "./simulation/world";
 import { SimulationRuntime } from "./simulation/runtime";
@@ -150,6 +151,12 @@ type SummarySatelliteCard = {
 const spacecraftTableRows = new Map<string, SpacecraftTableRow>();
 const summarySatelliteCards = new Map<string, SummarySatelliteCard>();
 const stationAntennaCells = new Map<string, HTMLElement>();
+const stationDeliveredDataCells = new Map<string, HTMLElement>();
+let getStationDeliveredBytes: (stationId: string) => number = () => 0;
+
+const formatDataVolume = (bytes: number): string => bytes >= 1_073_741_824
+  ? `${(bytes / 1_073_741_824).toLocaleString(undefined, { maximumFractionDigits: 2 })} GiB`
+  : `${(bytes / 1_048_576).toLocaleString(undefined, { maximumFractionDigits: 1 })} MiB`;
 
 const formatCoordinate = (latitude: number, longitude: number): string => {
   const latDirection = latitude >= 0 ? "N" : "S";
@@ -217,21 +224,37 @@ function renderStations(
 
 function renderGroundStationTable(): void {
   const groundStations = surfaceObjects.filter((object) => object.kind === "ground-station");
+  const cityByStationId = new Map(groundStations.map(station => [
+    station.id,
+    station.description.replace(/^Ground station · /, "").trim() || station.name,
+  ]));
+  const stationsByCity = new Map<string, typeof groundStations[number][]>();
+  for (const station of groundStations) {
+    const city = cityByStationId.get(station.id)!;
+    const key = city.normalize("NFKC").toLocaleLowerCase();
+    stationsByCity.set(key, [...(stationsByCity.get(key) ?? []), station]);
+  }
+  const locationLabelByStationId = new Map<string, string>();
+  for (const group of stationsByCity.values()) {
+    const sorted = [...group].sort((left, right) => left.id.localeCompare(right.id));
+    sorted.forEach((station, index) => {
+      const city = cityByStationId.get(station.id)!;
+      locationLabelByStationId.set(station.id, sorted.length > 1 ? `${city} · Site ${index + 1}` : city);
+    });
+  }
   const operationalCount = groundStations.filter(
     (station) => station.groundStationDetails?.operationalStatus === "available",
   ).length;
   elements.stationTableCount.textContent = `${operationalCount} / ${groundStations.length} OPERATIONAL`;
+  stationAntennaCells.clear();
+  stationDeliveredDataCells.clear();
   elements.stationTableBody.replaceChildren(
     ...groundStations.map((station) => {
       const row = document.createElement("tr");
-      const stationCell = document.createElement("th");
-      stationCell.scope = "row";
-      stationCell.textContent = station.name;
-
       const locationCell = document.createElement("td");
       const locationName = document.createElement("strong");
       locationName.className = "table-location-name";
-      locationName.textContent = station.description.replace(/^Ground station · /, "");
+      locationName.textContent = locationLabelByStationId.get(station.id) ?? station.name;
       const coordinates = document.createElement("small");
       coordinates.className = "table-coordinate";
       coordinates.textContent = formatCoordinate(
@@ -258,10 +281,17 @@ function renderGroundStationTable(): void {
         : "UNCONFIGURED";
 
       const downlinkCell = document.createElement("td");
-      downlinkCell.className = "table-rate";
-      downlinkCell.textContent = station.groundStationDetails
-        ? station.groundStationDetails.downlinkRateMbps.toLocaleString()
+      downlinkCell.className = "table-rate station-downlink-cell";
+      downlinkCell.dataset.label = "DOWNLINK RATE / DATA DELIVERED";
+      const downlinkRate = document.createElement("strong");
+      downlinkRate.textContent = station.groundStationDetails
+        ? `${station.groundStationDetails.downlinkRateMbps.toLocaleString()} Mbps`
         : "UNCONFIGURED";
+      const deliveredTotal = document.createElement("small");
+      deliveredTotal.className = "station-delivered-total";
+      deliveredTotal.textContent = `Delivered: ${formatDataVolume(getStationDeliveredBytes(station.id))}`;
+      stationDeliveredDataCells.set(station.id, deliveredTotal);
+      downlinkCell.append(downlinkRate, deliveredTotal);
 
       const costCell = document.createElement("td");
       costCell.className = "table-rate";
@@ -277,10 +307,16 @@ function renderGroundStationTable(): void {
       antennaCell.textContent = "NO ACTIVE LINK";
       stationAntennaCells.set(station.id, antennaCell);
 
-      row.append(stationCell, locationCell, contactCell, uplinkCell, downlinkCell, costCell, antennaCell);
+      row.append(locationCell, contactCell, uplinkCell, downlinkCell, costCell, antennaCell);
       return row;
     }),
   );
+}
+
+function renderGroundStationDeliveryTotals(): void {
+  for (const [stationId, element] of stationDeliveredDataCells) {
+    element.textContent = `Delivered: ${formatDataVolume(getStationDeliveredBytes(stationId))}`;
+  }
 }
 
 function renderAntennaOccupancy(groundOperations: GroundOperations): void {
@@ -442,7 +478,7 @@ function renderSummarySatelliteCards(
       : power.energyWh <= power.reserveWh
         ? "AT RESERVE"
         : "NOMINAL";
-    card.power.textContent = `${powerLabel} · ${Math.round(power.chargePercent)}%`;
+    card.power.textContent = `${powerLabel} · ${formatPercent(power.chargePercent)}%`;
 
     const groundState = groundOperations.getSatelliteState(satellite.id);
     const activeStationId = groundState.activeStationIds[0];
@@ -512,7 +548,7 @@ function renderSelectedSpacecraft(
       : nearestStation
         ? `${nearestStation.station.name} · ${formatDistance(nearestStation.distanceKm)}`
         : "NONE CONFIGURED";
-  elements.spacecraftDetailBattery.textContent = `${power.energyWh.toFixed(1)} / ${power.capacityWh} Wh (${power.chargePercent.toFixed(0)}%) · ${power.reserveWh} Wh reserve`;
+  elements.spacecraftDetailBattery.textContent = `${power.energyWh.toFixed(1)} / ${power.capacityWh} Wh (${formatPercent(power.chargePercent)}%) · ${power.reserveWh} Wh reserve`;
   elements.spacecraftDetailPowerState.textContent = power.depleted ? "DEPLETED · RECHARGING" : power.radioPaused ? "DOWNLINK PAUSED" : "NOMINAL";
   elements.spacecraftDetailPowerFlow.textContent = `${power.generationW} W generation · ${power.loadW.toFixed(0)} W load · ${power.netW.toFixed(0)} W net`;
   elements.spacecraftDetailPowerReason.textContent = power.reason ?? "No active power restriction.";
@@ -650,7 +686,7 @@ function renderSnapshot(
   renderStations(snapshot, nextWindow, groundOperations, simulationRuntime);
 }
 
-function setupManagementTabs(): void {
+function setupManagementTabs(onSelectTab: (tabId: string) => void): void {
   const tabs = [...document.querySelectorAll<HTMLButtonElement>("[role='tab']")];
   const panels = [...document.querySelectorAll<HTMLElement>("[role='tabpanel']")];
   const activeViewTitle = document.querySelector<HTMLElement>("#active-view-title");
@@ -664,6 +700,7 @@ function setupManagementTabs(): void {
       if (panel) panel.hidden = !selected;
     });
     if (activeViewTitle) activeViewTitle.textContent = selectedTab.textContent?.trim() ?? "Summary";
+    onSelectTab(selectedTab.id);
     if (moveFocus) selectedTab.focus();
   };
 
@@ -749,14 +786,33 @@ function updateMiniGlobe(snapshots: readonly WorldSnapshot[]): void {
 }
 
 async function start(): Promise<void> {
-  setupManagementTabs();
   renderGroundStationTable();
   renderAntennaOccupancy(groundOperations);
   elements.contactRadius.textContent = EFFECTIVE_CONTACT_RADIUS_KM.toLocaleString();
   elements.stationList.innerHTML = '<div class="loading-row">CALCULATING ACCESS WINDOWS…</div>';
+  let selectedManagementTabId = document.querySelector<HTMLButtonElement>("[role='tab'][aria-selected='true']")?.id ?? "tab-summary";
+  let applyMapTabDefaults: (tabId: string) => void = () => {};
+  setupManagementTabs(tabId => {
+    selectedManagementTabId = tabId;
+    applyMapTabDefaults(tabId);
+  });
 
   const { createGlobeView } = await import("./rendering/globe");
   const globe = await createGlobeView(fleet, surfaceObjects);
+  const setBasemap = (visible: boolean) => {
+    elements.basemapToggle.setAttribute("aria-pressed", String(visible));
+    elements.basemapToggle.setAttribute("aria-label", visible ? "Hide basemap imagery" : "Show basemap imagery");
+    globe.setBasemapVisible(visible);
+  };
+  let selectCurrentPriorityLayer = () => {};
+  applyMapTabDefaults = tabId => {
+    if (tabId === "tab-summary") setBasemap(true);
+    if (tabId === "tab-orders") {
+      setBasemap(false);
+      selectCurrentPriorityLayer();
+    }
+  };
+  applyMapTabDefaults(selectedManagementTabId);
   setupWorkspaceLayout(() => {
     globe.viewer.resize();
     globe.viewer.scene.requestRender();
@@ -767,7 +823,7 @@ async function start(): Promise<void> {
   });
   globe.setSelectedSatellite(selectedSatelliteId);
   globe.setTrackVisible(simulation.showTrack);
-  globe.setBasemapVisible(true);
+  setBasemap(true);
 
   // Geography loads independently so a data failure does not stop the world clock.
   let cellMarket: CellMarketState | null = null;
@@ -859,8 +915,10 @@ async function start(): Promise<void> {
     groundOperations,
     finance: companyFinance,
   });
+  getStationDeliveredBytes = stationId => operationalLoop.imageryOperations.getDeliveredBytesThroughStation(stationId);
   surfaceObjects = operationalLoop.getStations();
   globe.setSurfaceObjects(surfaceObjects);
+  renderGroundStationTable();
   const groundStationPurchaseStatus = document.querySelector<HTMLElement>("#ground-station-purchase-status")!;
   const previewedStationIds = new Set<string>();
   let stationOfferSignature = "";
@@ -1136,7 +1194,7 @@ async function start(): Promise<void> {
       ["Capital spending", money(finance.capitalSpendingCents)],
       ["Ending cash", money(finance.cashCents)],
       ["Collection attempts", String(spacecraftYield.attemptCount)],
-      ["Paid-clear yield", spacecraftYield.paidClearPercent === null ? "—" : `${spacecraftYield.paidClearPercent}%`],
+      ["Paid-clear yield", spacecraftYield.paidClearPercent === null ? "—" : `${formatPercent(spacecraftYield.paidClearPercent)}%`],
       ["Cloud rejected", String(spacecraftYield.cloudRejectedCount)],
       ["Other failures", String(spacecraftYield.otherFailureCount)],
       ["Nominal operating time", formatDuration(operationalTime.nominalSeconds)],
@@ -1157,6 +1215,7 @@ async function start(): Promise<void> {
   };
   const advanceGroundOperations = (seconds: number) => {
     const elapsed = missionRun.advanceBy(seconds, simulationRuntime.elapsedSeconds, boundedSeconds => operationalLoop.advanceBy(boundedSeconds));
+    renderGroundStationDeliveryTotals();
     if (missionRun.phase === "completed") showMissionDebrief();
     return elapsed;
   };
@@ -1265,6 +1324,7 @@ async function start(): Promise<void> {
       notifySchedulingInputsChanged: () => operationalLoop.notifySchedulingInputsChanged(),
       getCellOperationalVisualization: () => operationalLoop.getCellOperationalVisualization(selectedSatelliteId),
       getSatelliteEarthFixedKm: () => selectedSatelliteEarthFixedKm,
+      setStationRingsVisible: visible => globe.setStationRingsVisible(visible),
       onLoadError: retry => {
         elements.missionReadyStatus.textContent = "Cell-market data failed to load; M01 cannot start without it.";
         elements.missionMarketRetry.disabled = false;
@@ -1272,9 +1332,13 @@ async function start(): Promise<void> {
         elements.missionMarketRetry.onclick = retry;
       },
     },
-    (refresh, focusCell) => {
+    (refresh, focusCell, selectCurrentPriority) => {
       refreshCellMarket = refresh;
       focusCellOnMap = focusCell;
+      selectCurrentPriorityLayer = selectCurrentPriority;
+      if (document.querySelector<HTMLButtonElement>("[role='tab'][aria-selected='true']")?.id === "tab-orders") {
+        selectCurrentPriorityLayer();
+      }
     },
   ));
 
@@ -1422,9 +1486,7 @@ async function start(): Promise<void> {
 
   elements.basemapToggle.addEventListener("click", () => {
     const visible = elements.basemapToggle.getAttribute("aria-pressed") !== "true";
-    elements.basemapToggle.setAttribute("aria-pressed", String(visible));
-    elements.basemapToggle.setAttribute("aria-label", visible ? "Hide basemap imagery" : "Show basemap imagery");
-    globe.setBasemapVisible(visible);
+    setBasemap(visible);
   });
 
   elements.pauseToggle.addEventListener("click", () => setSimulationRunning(!simulation.running));

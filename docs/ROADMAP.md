@@ -1,8 +1,8 @@
 # Development roadmap
 
-This roadmap captures the current high-level planning sequence for project development. It is design context, not a detailed task list or a commitment that every item is fully specified. The [Pending Changes](PENDING_CHANGES.md) document remains the on-deck menu for selectable implementation work.
+This roadmap captures the current high-level planning sequence for project development. It is design context, not a detailed task list or a commitment that every item is fully specified. [Your work list](PENDING_CHANGES.md) holds selectable experiences and decisions; the [AI implementation plan](AI_IMPLEMENTATION_PLAN.md) holds technical work.
 
-**Direction update (2026-11-03):** The next playable target is one complete replayable challenge. RUN-01 is complete, RUN-02's core rules are agreed, and RUN-03 technical acceptance is complete. The sequence now adapts the real flow for mobile, then reserves player-experience judgment and balance feedback for the human. The feature layers below remain an inventory of the simulation foundation, not a requirement to finish every subsystem before playable levels. The [challenge development plan](CHALLENGE_RUNS.md) records evidence, dependencies, and open decisions; [Suggested starting order](PENDING_CHANGES.md#suggested-starting-order) is the current selectable queue.
+**Direction update (2026-11-03):** The next playable target is one complete replayable challenge. RUN-01 is complete, RUN-02's core rules are agreed, and RUN-03 technical acceptance is complete. The technical mobile pass is complete; player-experience judgment and balance feedback belong to the human. The feature layers below remain an inventory of the simulation foundation, not a requirement to finish every subsystem before playable levels. The [challenge development plan](CHALLENGE_RUNS.md) records evidence, dependencies, and open decisions; the [technical sequence](AI_IMPLEMENTATION_PLAN.md#suggested-starting-order) guides agents within a selected outcome.
 
 ## Next playable milestones
 

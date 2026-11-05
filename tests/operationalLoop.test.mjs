@@ -179,7 +179,7 @@ test("cloud failure consumes the command and capture power without creating an i
   assert.equal(timeSnapshot.nominalSeconds + timeSnapshot.powerLimitedSeconds, timeSnapshot.elapsedSeconds);
 });
 
-test("the default inclusive 20% cloud cutoff accepts and pays a capture at exactly 20%", () => {
+test("the default inclusive 30% cloud cutoff accepts and pays a capture at exactly 30%", () => {
   const weatherForBoundary = (targetPercent) => {
     const { satellite } = makeWorld();
     const [command] = captureCommands(satellite, [{ index: 0, target: targetA }]);
@@ -197,7 +197,7 @@ test("the default inclusive 20% cloud cutoff accepts and pays a capture at exact
     }
     assert.fail(`Could not create deterministic ${targetPercent}% cloud fixture`);
   };
-  const { weather, command } = weatherForBoundary(20);
+  const { weather, command } = weatherForBoundary(30);
   const { satellite, loop, market } = makeLoop({ weather });
   loop.reviseGroundPlan(satellite.id, [command], 0);
   loop.advanceBy(40);
@@ -209,7 +209,7 @@ test("the default inclusive 20% cloud cutoff accepts and pays a capture at exact
   assert.equal(performance.paidClearCount, 1);
   assert.equal(performance.deliveredRevenueCents, 2_000);
 
-  const aboveFixture = weatherForBoundary(21);
+  const aboveFixture = weatherForBoundary(31);
   const above = makeLoop({ weather: aboveFixture.weather });
   above.loop.reviseGroundPlan(above.satellite.id, [aboveFixture.command], 0);
   above.loop.advanceBy(40);

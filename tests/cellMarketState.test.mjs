@@ -72,6 +72,38 @@ test("invalid capture attempts change neither cash nor recovery state", () => {
   assert.equal(market.getCaptureEvents().length, 0);
 });
 
+test("collection metrics count repeated successful captures and use the trailing three-day window", () => {
+  const market = createMarket();
+  const quantity = market.exposures.quantity(newYorkIndex, "urban");
+  const day = 86_400;
+
+  assert.equal(market.getCollectionMetrics(0)[0].trailingAveragePerDay, null);
+  market.completeCellCapture(newYorkIndex, "Asteria-1", "metric-0", 0);
+  market.completeCellCapture(newYorkIndex, "Asteria-1", "metric-1", day);
+  market.completeCellCapture(newYorkIndex, "Asteria-1", "metric-2", 2 * day);
+  market.completeCellCapture(newYorkIndex, "Asteria-1", "metric-3", 4 * day);
+
+  const metrics = market.getCollectionMetrics(4 * day)[0];
+  assert.equal(metrics.totalCollected, quantity * 4);
+  assert.equal(metrics.trailingAveragePerDay, quantity);
+});
+
+test("collection age is quantity-weighted and reset returns exposure to run start", () => {
+  const market = createMarket();
+  const quantity = market.exposures.quantity(newYorkIndex, "urban");
+  const total = grid.urbanAreaDeciKm2.reduce((sum, value) => sum + value / 10, 0);
+  const day = 86_400;
+
+  market.completeCellCapture(newYorkIndex, "Asteria-1", "age-1", day);
+  market.completeCellCapture(newYorkIndex, "Asteria-1", "age-2", 3 * day);
+  const age = market.getCollectionMetrics(4 * day)[0].averageDaysSinceCollection;
+  assert.equal(age, 4 - (quantity * 3) / total);
+
+  market.resetPreview();
+  assert.equal(market.getCollectionMetrics(4 * day)[0].totalCollected, 0);
+  assert.equal(market.getCollectionMetrics(4 * day)[0].averageDaysSinceCollection, 4);
+});
+
 test("reset restores the preview's original cash, rates, events and cell availability", () => {
   const market = createMarket();
   market.updatePlayerPriorityRates([{ categoryId: "urban", unit: "km2", pointsPerUnit: 9 }]);

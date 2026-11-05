@@ -1,6 +1,6 @@
 /** Lightweight deterministic cloud conditions for the prototype. */
 export const WEATHER_EPOCH_UTC_MS = Date.parse("2026-01-01T00:00:00Z");
-export const PROTOTYPE_CLOUD_THRESHOLD_PERCENT = 20;
+export const PROTOTYPE_CLOUD_THRESHOLD_PERCENT = 30;
 export const PROTOTYPE_CLOUD_BASELINE_PERCENT = 50;
 
 export type WeatherConfiguration = {

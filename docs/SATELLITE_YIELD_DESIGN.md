@@ -8,7 +8,7 @@ Keep each satellite's current payload, battery, and next-contact readouts. Add a
 
 | Metric | Definition |
 | --- | --- |
-| Paid clear yield | Collections with observed mean cloud cover **<=20%**, fully delivered, and positive credited revenue / all resolved collection attempts × 100. Display the fraction beside the percentage. |
+| Paid clear yield | Collections with observed mean cloud cover **<=30%**, fully delivered, and positive credited revenue / all resolved collection attempts × 100. Display the fraction beside the percentage. |
 | Total collections | Resolved collection attempts, including cloudy and other failed commands. Label the tile **Collection attempts** to avoid implying every attempt produced an image. |
 | Total dollar yield | Actual downlink revenue credited to this satellite, in dollars. Label **Delivered revenue**; do not subtract shared station costs or include onboard potential value. |
 | Deleted images | Unique images deleted before delivery, including storage-pressure deletion of a newly captured image. Partial transfers subsequently deleted still count once and earn nothing. |
@@ -23,7 +23,7 @@ Use **— · no collections yet** for an empty denominator; use zero only after 
 
 | Exclusive slice | Meaning |
 | --- | --- |
-| Successful · paid clear | An image with observed cover <=20%, fully delivered, with positive posted revenue. |
+| Successful · paid clear | An image with observed cover <=30%, fully delivered, with positive posted revenue. |
 | Awaiting downlink | A usable image still onboard, including partial transfers. |
 | Deleted | A usable image deleted before full delivery. |
 | Cloud rejected | An executed collection rejected by the scenario's actual weather acceptance rule; no image is created. |
@@ -36,11 +36,11 @@ Illustrative card values: **60% paid clear (60/100)**, **100 collection attempts
 
 ### Cloud acceptance rule
 
-The agreed acceptance rule and clear-quality metric use observed mean cover **<=20%**; exactly 20% qualifies and values above it fail. Use the observed time-weighted mean over collection, excluding slew, not the forecast displayed in Schedule or the monthly cloud map.
+The current acceptance rule and clear-quality metric use observed mean cover **<=30%**; exactly 30% qualifies and values above it fail. Use the observed time-weighted mean over collection, excluding slew, not the forecast displayed in Schedule or the monthly cloud map. Revenue remains credited only when the image is fully delivered.
 
-**Implemented:** `weather.ts` defaults to **<=20%** usable cover, and `OperationalLoop.executeCapture` records observed cloud, threshold, outcome reason, interval, and image identity. Forecast scheduling bands are <=20, <=40, <=60, and >60%; they guide scheduling but do not decide actual capture success.
+**Implemented:** `weather.ts` defaults to **<=30%** usable cover, and `OperationalLoop.executeCapture` records observed cloud, threshold, outcome reason, interval, and image identity. Forecast scheduling bands are <=20, <=40, <=60, and >60%; they guide scheduling but do not decide actual capture success.
 
-This changes capture outcomes, cell recovery, planner expectations, and revenue balance. Record observed cover and the rule applied at capture so later configuration changes cannot rewrite past outcomes. Missing observations are never assumed clear: the prototype currently classifies a delivered image without observed weather under **Other delivered**. A dedicated unknown-weather count and provisional-yield indicator remain follow-up work. Retune forecast scheduling weights against the 20% acceptance rule, but the forecast must never decide actual capture success.
+This changes capture outcomes, cell recovery, planner expectations, and revenue balance. Record observed cover and the rule applied at capture so later configuration changes cannot rewrite past outcomes. Missing observations are never assumed clear: the prototype currently classifies a delivered image without observed weather under **Other delivered**. A dedicated unknown-weather count and provisional-yield indicator remain follow-up work. Review forecast scheduling weights against the 30% acceptance rule when evidence warrants it, but the forecast must never decide actual capture success.
 
 ## Satellite-time chart
 
@@ -77,8 +77,8 @@ The prototype integrates disjoint simulation intervals in the operational loop. 
 
 ### Acceptance scenarios for implementation
 
-- A <=20% capture awaiting downlink increments attempts and pending, earns no revenue, and does not increase paid yield. Full positive-value settlement moves it once into paid clear.
-- Cloud values just below, exactly at, and above 20% classify correctly: 19% and 20% are accepted; 21% fails. Unknown weather stays explicit.
+- A <=30% capture awaiting downlink increments attempts and pending, earns no revenue, and does not increase paid yield. Full positive-value settlement moves it once into paid clear.
+- Cloud values just below, exactly at, and above 30% classify correctly: 29% and 30% are accepted; 31% fails. Unknown weather stays explicit.
 - Cloud rejection, power rejection, geometry failure, and future planned commands remain distinguishable. Slice counts equal resolved attempts; repeated notifications cannot double-count them.
 - Immediate storage eviction and deletion after partial downlink count one deleted image and zero revenue. A delivered zero-value image is delivered but not revenue-producing.
 - Satellite revenue sums reconcile with the existing company ledger, with any preview/unattributed entries separately explained. Two satellites' counts and image lifecycles never leak into each other.

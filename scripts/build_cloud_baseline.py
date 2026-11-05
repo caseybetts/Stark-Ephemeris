@@ -1,12 +1,13 @@
-"""Build the prototype cloud baseline from a single ISCCP HGM Basic month.
+"""Build the 2004-2013 monthly ISCCP HGM Basic cloud climatology.
 
-Install the build-only reader with ``python -m pip install netCDF4``, then run:
+Install the build-only readers with ``python -m pip install netCDF4 numpy``.
+Put the 120 source files in a directory and run:
 
-    python scripts/build_cloud_baseline.py ISCCP-Basic.HGM.v01r00.GLOBAL.2013.01.99.9999.GPC.10KM.CS00.EA1.00.nc
+    python scripts/build_cloud_baseline.py path/to/hgm-files
 
-This interim asset repeats that month's spatial cloud map across all 12 calendar
-months. Replace it with the selected 2004-2013 monthly climatology when source
-retrieval is reliable.
+Each month is averaged across all ten years, ignoring source-masked values at
+each grid cell. A single source file remains supported for a clearly marked
+interim 12-month repeat, useful for validating orientation and output format.
 """
 
 from __future__ import annotations
@@ -71,12 +72,10 @@ def fill_nearest(masked: np.ma.MaskedArray) -> tuple[np.ndarray, int]:
     return values, missing_count
 
 
-def load_month(source: Path) -> tuple[np.ndarray, str, int]:
+def read_month(source: Path) -> np.ma.MaskedArray:
     match = re.search(r"\.GLOBAL\.(\d{4})\.(\d{2})\.", source.name)
     if not match:
         raise ValueError("Source filename must include .GLOBAL.YYYY.MM.")
-    source_month = f"{match.group(1)}-{match.group(2)}"
-
     with Dataset(source, "r") as dataset:
         if "cldamt" not in dataset.variables or "lat" not in dataset.variables or "lon" not in dataset.variables:
             raise ValueError("Source must contain cldamt, lat, and lon variables")
@@ -93,28 +92,80 @@ def load_month(source: Path) -> tuple[np.ndarray, str, int]:
         if not np.allclose(longitude, np.arange(0.5, 360, 1)):
             raise ValueError("Unexpected longitude centers or order")
 
-        source_grid, imputed = fill_nearest(cloud[0, :, :])
+        source_grid = np.ma.asarray(cloud[0, :, :], dtype=np.float64)
 
-    if not np.isfinite(source_grid).all() or source_grid.min() < 0 or source_grid.max() > 100:
+    valid = source_grid.compressed()
+    if valid.size == 0 or not np.isfinite(valid).all() or valid.min() < 0 or valid.max() > 100:
         raise ValueError("Cloud cover values must be finite and between 0 and 100 percent")
+    return source_grid
 
-    # Runtime cell order is north-to-south and -180..180 longitude.
-    runtime_grid = np.concatenate((source_grid[::-1, 180:], source_grid[::-1, :180]), axis=1)
-    return np.rint(runtime_grid).astype(np.uint8), source_month, imputed
+
+def load_climatology(source: Path) -> tuple[list[np.ndarray], list[dict[str, object]], list[int], list[int] | None]:
+    if source.is_file():
+        match = re.search(r"\.GLOBAL\.(\d{4})\.(\d{2})\.", source.name)
+        assert match is not None
+        source_month = f"{match.group(1)}-{match.group(2)}"
+        source_grid = read_month(source)
+        filled, imputed = fill_nearest(source_grid)
+        runtime_grid = np.concatenate((filled[::-1, 180:], filled[::-1, :180]), axis=1)
+        month = np.rint(runtime_grid).astype(np.uint8)
+        records = [{
+            "month": source_month,
+            "file": source.name,
+            "bytes": source.stat().st_size,
+            "sha256": sha256(source),
+            "missingCells": imputed,
+        }]
+        return [month] * 12, records, [imputed] * 12, None
+
+    if not source.is_dir():
+        raise ValueError(f"Source path is not a file or directory: {source}")
+
+    monthly_grids: list[np.ndarray] = []
+    source_records: list[dict[str, object]] = []
+    missing_by_month: list[int] = []
+    minimum_valid_years: list[int] = []
+    for month in range(1, 13):
+        accum = np.zeros((ROWS, COLUMNS), dtype=np.float64)
+        counts = np.zeros((ROWS, COLUMNS), dtype=np.uint8)
+        for year in range(2004, 2014):
+            source_month = f"{year:04d}-{month:02d}"
+            candidates = sorted(source.glob(f"*.GLOBAL.{year:04d}.{month:02d}.*.nc"))
+            if len(candidates) != 1:
+                raise ValueError(f"Expected one HGM Basic file for {source_month}; found {len(candidates)}")
+            path = candidates[0]
+            values = read_month(path)
+            valid = ~np.ma.getmaskarray(values)
+            accum[valid] += np.asarray(values.data, dtype=np.float64)[valid]
+            counts[valid] += 1
+            source_records.append({
+                "month": source_month,
+                "file": path.name,
+                "bytes": path.stat().st_size,
+                "sha256": sha256(path),
+            })
+
+        mean = np.ma.array(accum / np.maximum(counts, 1), mask=counts == 0)
+        filled, imputed = fill_nearest(mean)
+        minimum_valid_years.append(int(counts.min()))
+        runtime_grid = np.concatenate((filled[::-1, 180:], filled[::-1, :180]), axis=1)
+        monthly_grids.append(np.rint(runtime_grid).astype(np.uint8))
+        missing_by_month.append(imputed)
+    return monthly_grids, source_records, missing_by_month, minimum_valid_years
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path, help="one global monthly ISCCP HGM Basic NetCDF file")
+    parser.add_argument("source", type=Path, help="directory of the 120 2004-2013 source files, or one interim monthly file")
     parser.add_argument("--output-dir", type=Path, default=Path("public/data/weather"))
     args = parser.parse_args()
 
     source = args.source.resolve()
-    if not source.is_file():
-        parser.error(f"source file does not exist: {source}")
+    if not source.exists():
+        parser.error(f"source path does not exist: {source}")
 
-    grid, source_month, imputed = load_month(source)
-    table = np.tile(grid.ravel(order="C"), 12)
+    monthly_grids, source_records, missing_by_month, minimum_valid_years = load_climatology(source)
+    table = np.concatenate([grid.ravel(order="C") for grid in monthly_grids])
     if table.size != TABLE_BYTES:
         raise ValueError(f"Generated {table.size} values; expected {TABLE_BYTES}")
 
@@ -129,16 +180,15 @@ def main() -> None:
         "productVersion": "v01r00 Basic",
         "variable": "cldamt",
         "units": "whole percentage points",
-        "sourceMonth": source_month,
-        "baselineMethod": "single-month spatial snapshot repeated across all 12 calendar months (temporary prototype baseline)",
-        "selectedClimatologyTarget": "2004-2013 monthly means; not yet built",
-        "sourceFile": source.name,
-        "sourceBytes": source.stat().st_size,
-        "sourceSha256": sha256(source),
+        "years": [2004, 2013] if source.is_dir() else None,
+        "baselineMethod": "cellwise mean of matching calendar months across 2004-2013; source-masked values excluded before averaging" if source.is_dir() else "single-month spatial snapshot repeated across all 12 calendar months (temporary prototype baseline)",
+        "sourceFiles": source_records,
+        "sourceAccessDate": datetime.now(timezone.utc).date().isoformat(),
+        "minimumValidYearsPerGridCellByMonth": minimum_valid_years if source.is_dir() else None,
         "sourceUrl": SOURCE_URL,
         "doi": DOI,
         "grid": {"rows": ROWS, "columns": COLUMNS, "resolutionDegrees": 1, "rowOrder": "north-to-south", "longitude": "-180 to 180"},
-        "missingSourceCells": imputed,
+        "missingCellsFilledByMonth": missing_by_month,
         "missingCellMethod": "nearest valid 1-degree neighbor; deterministic row-major tie break",
         "baselineSha256": sha256(table_path),
         "generatedAtUtc": datetime.now(timezone.utc).isoformat(),
@@ -149,8 +199,8 @@ def main() -> None:
     print(json.dumps({
         "baseline": str(table_path),
         "bytes": table_path.stat().st_size,
-        "sourceMonth": source_month,
-        "sourceMissingCellsImputed": imputed,
+        "sourceMonths": len(source_records),
+        "missingCellsFilledByMonth": missing_by_month,
         "baselineSha256": manifest["baselineSha256"],
         "metadata": str(metadata_path),
     }, indent=2))

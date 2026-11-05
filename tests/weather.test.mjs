@@ -47,7 +47,7 @@ test("hourly forecast is stable within its issue hour and uses coarse monotone w
   assert.equal(first.forecastPercent, repeated.forecastPercent);
   assert.equal(first.weight, repeated.weight);
   assert.equal(forecastWeight(20).weight, 4);
-  assert.equal(PROTOTYPE_CLOUD_THRESHOLD_PERCENT, 20);
+  assert.equal(PROTOTYPE_CLOUD_THRESHOLD_PERCENT, 30);
   assert.equal(forecastWeight(21).weight, 3);
   assert.equal(forecastWeight(40).weight, 3);
   assert.equal(forecastWeight(50).weight, 2);

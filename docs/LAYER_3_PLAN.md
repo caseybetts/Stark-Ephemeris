@@ -4,7 +4,7 @@ Reviewed 2026-10-15 after BIZ-02 launch integration; FLEET-02B prototype designe
 
 ## Sequence
 
-**Priority update (2026-11-02):** The [current starting order](PENDING_CHANGES.md#suggested-starting-order) supersedes this historical feature sequence. Finish the bounded procurement/reset review and gather baseline play evidence, then define and deliver one replayable challenge. OPS-02 follows demonstrated mission needs; its onset-only notice proposal must be reconciled with the agreed warning/response direction. Its repair prices and recovery/upload rules remain unapproved.
+**Priority update (2026-11-02):** The [current starting order](AI_IMPLEMENTATION_PLAN.md#suggested-starting-order) supersedes this historical feature sequence. Finish the bounded procurement/reset review and gather baseline play evidence, then define and deliver one replayable challenge. OPS-02 follows demonstrated mission needs; its onset-only notice proposal must be reconciled with the agreed warning/response direction. Its repair prices and recovery/upload rules remain unapproved.
 
 | Step | Deliverable | Readiness |
 | --- | --- | --- |

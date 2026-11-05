@@ -2,7 +2,7 @@
 
 **Status: Design drafted 2026-10-17; proposed rules, not implemented or approved.**
 
-This is a candidate later challenge mechanic; the [current starting order](PENDING_CHANGES.md#suggested-starting-order) prioritizes baseline review and one replayable mission first. The 2026-11-02 gameplay direction calls for warning and a meaningful response window for authored events. The onset-only notification below remains an older proposal to revise, not an approved exception to that direction. Repair terms and recovery/upload policies also remain open.
+This is a candidate later challenge mechanic; the [current starting order](AI_IMPLEMENTATION_PLAN.md#suggested-starting-order) prioritizes baseline review and one replayable mission first. The 2026-11-02 gameplay direction calls for warning and a meaningful response window for authored events. The onset-only notification below remains an older proposal to revise, not an approved exception to that direction. Repair terms and recovery/upload policies also remain open.
 
 ## Existing agreements
 

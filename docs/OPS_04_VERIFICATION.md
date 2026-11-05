@@ -1,6 +1,6 @@
 # OPS-04 implementation and verification guide
 
-**Status:** Completed 2026-10-14 — runtime repair, shared orchestration, deterministic integration coverage, production build, and live contact/capture/downlink walkthrough are complete. The brief partial-transfer interval was verified in deterministic tests but was too short to sample visually at 300× playback. This guide specifies verification work, not approved game balance. The [task](PENDING_CHANGES.md#ops-04--verify-the-integrated-operational-loop) records the outcome; [Technical Strategy](TECHNICAL_STRATEGY.md#ops-04-integration-verification) owns the architecture boundary. Gameplay rules remain in [Gameplay](GAMEPLAY.md).
+**Status:** Completed 2026-10-14 — runtime repair, shared orchestration, deterministic integration coverage, production build, and live contact/capture/downlink walkthrough are complete. The brief partial-transfer interval was verified in deterministic tests but was too short to sample visually at 300× playback. This guide specifies verification work, not approved game balance. The [task](AI_IMPLEMENTATION_PLAN.md#ops-04--verify-the-integrated-operational-loop) records the outcome; [Technical Strategy](TECHNICAL_STRATEGY.md#ops-04-integration-verification) owns the architecture boundary. Gameplay rules remain in [Gameplay](GAMEPLAY.md).
 
 ## 1. Baseline and first work
 

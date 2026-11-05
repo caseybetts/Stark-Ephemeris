@@ -1,4 +1,5 @@
 import type { SatelliteOperationalTimeSnapshot, SatelliteYieldSnapshot } from "../simulation/satellitePerformance.ts";
+import { formatPercent } from "../format.ts";
 
 type ChartEntry = { label: string; value: number; color: string; detail?: string };
 
@@ -35,7 +36,7 @@ function renderLegend(list: HTMLElement, entries: readonly ChartEntry[], total: 
     label.className = "performance-legend-label";
     label.textContent = entry.label;
     const value = document.createElement("strong");
-    value.textContent = entry.detail ?? `${entry.value}${total > 0 ? ` · ${(entry.value / total * 100).toFixed(0)}%` : ` ${unit}`}`;
+    value.textContent = entry.detail ?? `${entry.value}${total > 0 ? ` · ${formatPercent(entry.value / total * 100)}%` : ` ${unit}`}`;
     item.append(marker, label, value);
     return item;
   }));
@@ -98,7 +99,7 @@ export function mountSatellitePerformanceView(container: HTMLElement): (
     metrics.append(item);
     return value;
   };
-  const paidClear = metric("PAID CLEAR YIELD · ≤20% CLOUD");
+  const paidClear = metric("PAID CLEAR YIELD · ≤30% CLOUD");
   const attempts = metric("COLLECTION ATTEMPTS");
   const revenue = metric("DELIVERED REVENUE");
   const deleted = metric("IMAGES DELETED");
@@ -114,7 +115,7 @@ export function mountSatellitePerformanceView(container: HTMLElement): (
   return (yieldSnapshot, timeSnapshot) => {
     paidClear.textContent = yieldSnapshot.paidClearPercent === null
       ? "—"
-      : `${yieldSnapshot.paidClearPercent.toFixed(0)}%`;
+      : `${formatPercent(yieldSnapshot.paidClearPercent)}%`;
     paidClear.title = yieldSnapshot.paidClearPercent === null
       ? "No collection attempts have completed."
       : `${yieldSnapshot.paidClearCount} qualifying collections out of ${yieldSnapshot.attemptCount} resolved attempts.`;

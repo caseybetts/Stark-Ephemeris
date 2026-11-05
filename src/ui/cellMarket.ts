@@ -5,6 +5,7 @@ import type { CellGrid, CellLayer } from "../simulation/cells";
 import type { CellMarketState } from "../simulation/cellMarketState";
 import type { GeographicLocation } from "../simulation/model";
 import type { CellOperationalVisualization } from "../simulation/operationalLoop";
+import { formatPercent } from "../format";
 import { categoryPriorityDisplayMaximum, createCellLayer, type CellPlanningLayer } from "../rendering/cellLayer";
 import { monthlyCloudBaselineAtPercent, WEATHER_EPOCH_UTC_MS } from "../simulation/weather";
 
@@ -41,6 +42,7 @@ type CellMarketActions = {
   clearCellCaptureDraft: () => string;
   enforceStorageCapacity: (satelliteId: string, timeSeconds: number) => number;
   notifySchedulingInputsChanged: () => void;
+  setStationRingsVisible: (visible: boolean) => void;
   getCellOperationalVisualization: () => CellOperationalVisualization;
   getSatelliteEarthFixedKm: () => { x: number; y: number; z: number } | null;
   onLoadError?: (retry: () => void) => void;
@@ -49,14 +51,14 @@ type CellMarketActions = {
 export async function setupCellMarket(
   viewer: Viewer,
   actions: CellMarketActions,
-  onMounted: (refresh: () => void, focusCell: (index: number) => void) => void,
+  onMounted: (refresh: () => void, focusCell: (index: number) => void, setCurrentPriorityLayer: () => void) => void,
 ): Promise<void> {
   const panel = document.querySelector<HTMLElement>("#panel-orders")!;
   panel.innerHTML = '<p class="cell-loading" role="status">Loading geographic cell data…</p>';
   try {
     const grid = await loadCellGrid();
     const mounted = await mount(viewer, grid, actions, actions.getOrCreateMarket(grid), panel);
-    onMounted(mounted.refresh, mounted.focusCell);
+    onMounted(mounted.refresh, mounted.focusCell, mounted.setCurrentPriorityLayer);
   } catch (error) {
     console.error("Cell market initialization failed", error);
     panel.replaceChildren();
@@ -76,7 +78,7 @@ export async function setupCellMarket(
   }
 }
 
-async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions, market: CellMarketState, panel: HTMLElement): Promise<{ refresh: () => void; focusCell: (index: number) => void }> {
+async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions, market: CellMarketState, panel: HTMLElement): Promise<{ refresh: () => void; focusCell: (index: number) => void; setCurrentPriorityLayer: () => void }> {
   const { nowSeconds } = actions;
   panel.innerHTML = `
     <div class="cell-market-heading"><div><p class="eyebrow">GEOGRAPHIC MARKET</p><h2>Coverage & cell values</h2></div><span class="cell-tag">¼° × ¼° CELLS</span></div>
@@ -107,6 +109,83 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     </div>
     <details class="cell-data-notes"><summary>Data coverage & sources</summary><p>Zero means no feature recorded in these datasets; it does not prove none exists. Dollar values use sample rates and candidate categories for checking the formula; they are not final market balance. Automatic collection has not been connected.</p><div id="cell-sources"></div><ul id="cell-limitations"></ul></details>
   `;
+  const originalChildren = [...panel.children];
+  const marketHeading = originalChildren[0] as HTMLElement;
+  const summary = originalChildren[1] as HTMLElement;
+  const tabs = document.createElement("div");
+  tabs.className = "cell-metrics-tabs";
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "Orders information");
+  const pricingTab = document.createElement("button");
+  pricingTab.type = "button"; pricingTab.id = "orders-pricing-tab"; pricingTab.className = "cell-metrics-tab";
+  pricingTab.setAttribute("role", "tab"); pricingTab.setAttribute("aria-selected", "true");
+  pricingTab.setAttribute("aria-controls", "orders-pricing-panel"); pricingTab.tabIndex = 0; pricingTab.textContent = "Pricing";
+  const collectionTab = document.createElement("button");
+  collectionTab.type = "button"; collectionTab.id = "orders-collection-tab"; collectionTab.className = "cell-metrics-tab";
+  collectionTab.setAttribute("role", "tab"); collectionTab.setAttribute("aria-selected", "false");
+  collectionTab.setAttribute("aria-controls", "orders-collection-panel"); collectionTab.tabIndex = -1; collectionTab.textContent = "Collection metrics";
+  tabs.append(pricingTab, collectionTab);
+  const pricingPanel = document.createElement("section");
+  pricingPanel.id = "orders-pricing-panel"; pricingPanel.className = "cell-metrics-panel";
+  pricingPanel.setAttribute("role", "tabpanel"); pricingPanel.setAttribute("aria-labelledby", pricingTab.id);
+  const collectionPanel = document.createElement("section");
+  collectionPanel.id = "orders-collection-panel"; collectionPanel.className = "cell-metrics-panel";
+  collectionPanel.setAttribute("role", "tabpanel"); collectionPanel.setAttribute("aria-labelledby", collectionTab.id); collectionPanel.hidden = true;
+  const metricsHeading = document.createElement("div"); metricsHeading.className = "cell-collection-heading";
+  const metricsTitle = document.createElement("h3"); metricsTitle.textContent = "Captured quantities by category";
+  const metricsNote = document.createElement("p"); metricsNote.className = "cell-collection-note";
+  const metricsBody = document.createElement("tbody");
+  const metricRows = new Map<string, { total: HTMLTableCellElement; average: HTMLTableCellElement; age: HTMLTableCellElement }>();
+  const metricsTable = document.createElement("table"); metricsTable.className = "operations-table cell-collection-table";
+  metricsTable.innerHTML = "<thead><tr><th scope=\"col\">Category</th><th scope=\"col\">Total collected</th><th scope=\"col\">Unit</th><th scope=\"col\">Trailing 3-day average / day</th><th scope=\"col\">Average days since collection</th></tr></thead>";
+  metricsTable.append(metricsBody);
+  metricsHeading.append(metricsTitle, metricsNote);
+  collectionPanel.append(metricsHeading, metricsTable);
+  for (const child of originalChildren.slice(2)) pricingPanel.append(child);
+  panel.replaceChildren(marketHeading, summary, tabs, pricingPanel, collectionPanel);
+  const selectOrdersTab = (selected: "pricing" | "collection", moveFocus = false) => {
+    const isCollection = selected === "collection";
+    pricingTab.setAttribute("aria-selected", String(!isCollection));
+    collectionTab.setAttribute("aria-selected", String(isCollection));
+    pricingTab.tabIndex = isCollection ? -1 : 0;
+    collectionTab.tabIndex = isCollection ? 0 : -1;
+    pricingPanel.hidden = isCollection;
+    collectionPanel.hidden = !isCollection;
+    if (moveFocus) (isCollection ? collectionTab : pricingTab).focus();
+    if (isCollection) renderCollectionMetrics();
+  };
+  pricingTab.addEventListener("click", () => selectOrdersTab("pricing"));
+  collectionTab.addEventListener("click", () => selectOrdersTab("collection"));
+  tabs.addEventListener("keydown", event => {
+    if (!(event instanceof KeyboardEvent)) return;
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault(); selectOrdersTab(collectionTab.getAttribute("aria-selected") !== "true" ? "collection" : "pricing", true);
+    } else if (event.key === "Home") { event.preventDefault(); selectOrdersTab("pricing", true); }
+    else if (event.key === "End") { event.preventDefault(); selectOrdersTab("collection", true); }
+  });
+  function renderCollectionMetrics(): void {
+    const now = nowSeconds();
+    metricsNote.textContent = "Successful captures count, including repeats. Runs shorter than 3 days use elapsed time for the daily average. Collection age is quantity-weighted; never-collected cells start at run time zero.";
+    for (const metric of market.getCollectionMetrics(now)) {
+      let cells = metricRows.get(metric.categoryId);
+      if (!cells) {
+        const row = document.createElement("tr");
+        const category = document.createElement("th"); category.scope = "row";
+        category.textContent = market.exposures.definitions.find(definition => definition.id === metric.categoryId)?.label ?? metric.categoryId;
+        const total = document.createElement("td");
+        const unit = document.createElement("td"); unit.textContent = unitLabel(metric.unit);
+        const average = document.createElement("td");
+        const age = document.createElement("td");
+        row.append(category, total, unit, average, age);
+        metricsBody.append(row);
+        cells = { total, average, age };
+        metricRows.set(metric.categoryId, cells);
+      }
+      cells.total.textContent = amount(metric.totalCollected);
+      cells.average.textContent = metric.trailingAveragePerDay === null ? "—" : `${amount(metric.trailingAveragePerDay)} ${unitLabel(metric.unit)} / day`;
+      cells.age.textContent = metric.averageDaysSinceCollection === null ? "—" : `${amount(metric.averageDaysSinceCollection)} days`;
+    }
+  }
   const element = <T extends HTMLElement>(id: string) => panel.querySelector<T>(`#${id}`)!;
   element("cell-count").textContent = count(grid.ids.length);
   element("cell-coast-count").textContent = count(grid.metadata.statistics.coastalCells);
@@ -142,10 +221,11 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   const mapKey = document.createElement("aside");
   mapKey.className = "cell-map-key";
   mapKey.setAttribute("aria-label", "Cell map legend");
-  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span></div><label class="cell-map-select-label">Fill layer<select id="cell-land-layer" aria-label="Cell fill layer"></select></label><label class="cell-map-select-label">Planning<select id="cell-planning-layer" aria-label="Planning"></select></label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><div class="cell-planning-key"><span><i class="planning-outline"></i>Scheduled cell</span><span><i class="planning-imaging"></i>Imaging target / line</span></div><p>Zoom for boundaries · Click to inspect</p>';
+  mapKey.innerHTML = '<div><span class="eyebrow">MAP LAYERS</span></div><label class="cell-map-select-label">Fill layer<select id="cell-land-layer" aria-label="Cell fill layer"></select></label><label class="cell-map-select-label">Planning<select id="cell-planning-layer" aria-label="Planning"></select></label><label class="cell-ring-toggle"><input id="station-rings-toggle" type="checkbox"> Approximate station contact range</label><strong class="cell-map-layer-name"></strong><span class="cell-map-ramp"></span><small class="cell-map-scale"></small><div class="cell-planning-key"><span><i class="planning-outline"></i>Scheduled cell</span><span><i class="planning-imaging"></i>Imaging target / line</span></div><p>Zoom for boundaries · Click to inspect</p>';
   document.querySelector(".globe-stage")!.append(mapKey);
   const landLayerSelect = mapKey.querySelector<HTMLSelectElement>("#cell-land-layer")!;
   const planningSelect = mapKey.querySelector<HTMLSelectElement>("#cell-planning-layer")!;
+  const stationRingsToggle = mapKey.querySelector<HTMLInputElement>("#station-rings-toggle")!;
   landLayerSelect.add(new Option("Choose category", ""));
   for (const category of market.exposures.definitions) landLayerSelect.add(new Option(category.label, category.id));
   landLayerSelect.add(new Option("Monthly average cloud cover", "cloud-cover"));
@@ -226,8 +306,15 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     map.setPlanningLayer(lastPlanningLayer);
     updateMapLayerLegend();
   });
+  stationRingsToggle.addEventListener("change", () => actions.setStationRingsVisible(stationRingsToggle.checked));
   map.setPlanningLayer(lastPlanningLayer);
   setCategory();
+  const setCurrentPriorityLayer = () => {
+    lastPlanningLayer = "current-priority";
+    planningSelect.value = lastPlanningLayer;
+    map.setPlanningLayer(lastPlanningLayer);
+    updateMapLayerLegend();
+  };
 
   function applyFilters() {
     const sort = element<HTMLSelectElement>("cell-sort").value as CellLayer;
@@ -311,7 +398,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     const cloudTable = actions.getCloudBaselineTable();
     const cloudMonth = new Date(WEATHER_EPOCH_UTC_MS + nowSeconds() * 1000).getUTCMonth();
     const entries: [string, string][] = [
-      ...(cloudTable ? [["Monthly average cloud cover", `${monthlyCloudBaselineAtPercent(cloudTable, grid.ids[selected]!, cloudMonth)}% · ${new Date(Date.UTC(2020, cloudMonth, 1)).toLocaleString(undefined, { month: "long", timeZone: "UTC" })}`] as [string, string]] : []),
+      ...(cloudTable ? [["Monthly average cloud cover", `${formatPercent(monthlyCloudBaselineAtPercent(cloudTable, grid.ids[selected]!, cloudMonth))}% · ${new Date(Date.UTC(2020, cloudMonth, 1)).toLocaleString(undefined, { month: "long", timeZone: "UTC" })}`] as [string, string]] : []),
       ["Maximum payout", money(snapshot.maximumPayoutUsd)],
       ["Available payout", money(snapshot.availablePayoutUsd)],
       ["Maximum priority", `${points(snapshot.maximumPriorityPoints)} points`],
@@ -334,7 +421,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       const exposure = document.createElement("p");
       exposure.textContent = `${amount(category.quantity)} ${unitLabel(category.unit)} × ${money(marketRate.marketPriceUsdPerUnit)} / ${unitLabel(category.unit)} = ${money(category.maximumPayoutUsd)} maximum`;
       const payout = document.createElement("p");
-      payout.textContent = `${amount(marketRate.cadenceSeconds / 86_400)} day cadence · VAM ${amount(category.valueAvailabilityMultiplier * 100)}% → ${money(category.availablePayoutUsd)} available`;
+      payout.textContent = `${amount(marketRate.cadenceSeconds / 86_400)} day cadence · VAM ${formatPercent(category.valueAvailabilityMultiplier * 100)}% → ${money(category.availablePayoutUsd)} available`;
       const priority = document.createElement("p");
       priority.textContent = `${amount(category.quantity)} × ${amount(priorityRate.pointsPerUnit)} points / ${unitLabel(category.unit)} × ${amount(category.valueAvailabilityMultiplier)} VAM = ${points(category.availablePriorityPoints)} points`;
       card.append(title, exposure, payout, priority); list.append(card);
@@ -360,6 +447,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     if (panel.hidden && !force) return;
     if (!force && now === lastRefreshedAt) return;
     lastRefreshedAt = now;
+    if (collectionPanel.hidden === false) renderCollectionMetrics();
     refreshSelectedImages?.();
     element("cell-preview-cash").textContent = money(market.companyCashUsd);
     const imagery = market.getImagerySummary();
@@ -581,5 +669,6 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   return {
     refresh: () => refreshEconomy(),
     focusCell: (index: number) => selectCell(index, true),
+    setCurrentPriorityLayer,
   };
 }

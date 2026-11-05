@@ -17,6 +17,7 @@ export class ImageryOperations {
   private readonly initialCapacityBytesBySatellite: Readonly<Record<string, number>>;
   private capacityBytesBySatellite: Record<string, number>;
   private readonly fractionalBytesByImage = new Map<string, number>();
+  private readonly deliveredBytesByStation = new Map<string, number>();
 
   constructor(configuration: ImageryOperationsConfiguration) {
     this.initialCapacityBytesBySatellite = { ...configuration.storageCapacityBytesBySatellite };
@@ -116,6 +117,7 @@ export class ImageryOperations {
             completedAtSeconds,
             image.valuePotentialUsdAtCapture,
           ));
+          this.recordStationDelivery(station.id, remainingBytes);
           this.fractionalBytesByImage.delete(image.imageId);
           cursorSeconds = completedAtSeconds;
         } else {
@@ -129,6 +131,7 @@ export class ImageryOperations {
               endsAtSeconds,
               transferredBytes,
             ));
+            this.recordStationDelivery(station.id, availableBytes);
           }
           break;
         }
@@ -164,6 +167,10 @@ export class ImageryOperations {
     return Number.isFinite(next) ? next : null;
   }
 
+  getDeliveredBytesThroughStation(stationId: string): number {
+    return this.deliveredBytesByStation.get(stationId) ?? 0;
+  }
+
   getCapacityBytes(satelliteId: string): number {
     const capacityBytes = this.capacityBytesBySatellite[satelliteId];
     if (capacityBytes === undefined) throw new Error(`No storage capacity is configured for spacecraft ${satelliteId}`);
@@ -173,10 +180,19 @@ export class ImageryOperations {
   reset(): void {
     this.eventSequence = 0;
     this.fractionalBytesByImage.clear();
+    this.deliveredBytesByStation.clear();
     this.capacityBytesBySatellite = { ...this.initialCapacityBytesBySatellite };
   }
 
   private nextEventId(kind: string): string {
     return `imagery-${kind}-${this.eventSequence++}`;
+  }
+
+  private recordStationDelivery(stationId: string, bytes: number): void {
+    if (bytes <= 0) return;
+    this.deliveredBytesByStation.set(
+      stationId,
+      (this.deliveredBytesByStation.get(stationId) ?? 0) + bytes,
+    );
   }
 }

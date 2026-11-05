@@ -1,6 +1,6 @@
 # CLOUD-01 cloud, forecast, and capture design framework
 
-**Status: prototype behavior approved 2026-10-14; deterministic simulation slice implemented.** [Gameplay](GAMEPLAY.md#agreed-scheduling-behavior) remains the source of truth. A temporary spatial baseline has been built from the January 2013 NOAA HGM Basic map and is repeated across all 12 calendar months. The agreed 2004–2013 climatology remains the target for the completed asset.
+**Status: prototype behavior approved 2026-10-14; deterministic simulation slice and 2004–2013 baseline implemented.** [Gameplay](GAMEPLAY.md#agreed-scheduling-behavior) remains the source of truth. The monthly baseline is the cellwise mean of matching NOAA HGM Basic months across the selected ten years.
 
 ## Goal and boundaries
 
@@ -68,7 +68,7 @@ Weather failure reasons should appear with other capture diagnostics in the Spac
 
 ## Implementation stages and verification
 
-1. Acquire/build the baseline asset with a manifest, license attribution, checksum, units, coordinate orientation, and reproducible aggregation tool. Verify dimensions, range, missing values, dateline wrapping, and polar rows.
+1. Download/build the baseline with `scripts/download_cloud_sources.py` and `scripts/build_cloud_baseline.py`. The manifest records the 120 source filenames and checksums, access date, dataset citation, units, orientation, missing-cell fill, and baseline checksum. Validate dimensions, range, coverage, dateline wrapping, and polar rows.
 2. Add calendar mapping, scenario seed, stable hash/PRNG, actual hourly lookup, and tests proving key stability and order independence.
 3. Add forecast lookup and tests proving forecast/actual separation, fixed forecast within its validity hour, deterministic refresh, and increasing uncertainty with lead time.
 4. Integrate threshold/time-weighted completion into capture outcome and the existing planner score; preserve the current image/VAM/power/TEL invariants.
@@ -84,7 +84,7 @@ These are the approved prototype settings; values are playtest knobs, not realis
 
 - Start the scenario at 2026-01-01 00:00 UTC and advance its calendar from simulation seconds.
 - Store cloud cover as whole percentage points. Use a shared 5° region disturbance that persists for six hours, then smaller keyed hourly 1° variation and keyed ¼° variation. Standard deviations are 12, 8, and 12 percentage points respectively; clamp the combined result to 0–100.
-- Mark an image usable when time-weighted mean cloud over collection is at or below 20%.
+- Mark an image usable when time-weighted mean cloud over collection is at or below 30%.
 - Use an imperfect forecast derived from the shared six-hour component with keyed lead-dependent noise. Map its result to four simple scheduling weights (4, 3, 2, 1 across clearer-to-cloudier bands); no probability integration or additional outcome branches.
 - On weather failure, consume the scheduled time and admitted energy, create no image, and do not reset VAM. Add no retry or cooldown mechanism; later ordinary scheduling may consider the cell again.
 - Show forecasted mean cloud cover in the Scheduled cells table; a forecast map remains out of scope.
@@ -93,14 +93,14 @@ These are the approved prototype settings; values are playtest knobs, not realis
 | --- | --- | --- |
 | Simulation calendar | UTC epoch 2026-01-01 00:00 | Agreed |
 | Actual cloud variability | 5° region pattern for six hours (12 pp), 1° hourly variation (8 pp), and ¼° child variation (12 pp) | Agreed |
-| Usable image rule | Time-weighted collection cover <=20% | Agreed and implemented (2026-11-02) |
+| Usable image rule | Time-weighted collection cover <=30% | Updated by user request (2026-11-04); implemented |
 | Capture failure costs | Keep elapsed slot and admitted capture energy; no image, revenue, or VAM reset | Agreed |
 | Forecast | Coarse shared six-hour signal with keyed lead-dependent error and four weights (4 to 1) | Agreed; bands/error spreads are tuning inputs |
 | Planner scoring | Scale projected available priority by forecast weight; raw market priority and payout remain unchanged | Agreed |
 | Retry | No automatic retry or cooldown; later ordinary planning may reconsider | Agreed |
 | Player forecast display | Show forecasted mean cloud cover beside each scheduled collection; no map required | Implemented in the Scheduled cells table |
 
-The deterministic calendar, actual-weather variation, <=20% usability threshold, failure costs, and retry behavior are implemented. Forecast scheduling weights use the provisional bands <=20, <=40, <=60, and >60%, with error spreads still tuning inputs. They guide target selection only; actual capture success uses observed cover and the <=20% rule. Keep validation at the level of deterministic replay, monotone weights, broad forecast direction, and responsive planning; high forecast accuracy is not a goal.
+The deterministic calendar, actual-weather variation, <=30% usability threshold, failure costs, and retry behavior are implemented. Forecast scheduling weights use the provisional bands <=20, <=40, <=60, and >60%, with error spreads still tuning inputs. They guide target selection only; actual capture success uses observed cover and the <=30% rule. Keep validation at the level of deterministic replay, monotone weights, broad forecast direction, and responsive planning; high forecast accuracy is not a goal.
 
 ## Feasibility, efficiency, and strategy review — 2026-10-14
 
@@ -112,7 +112,7 @@ The deterministic calendar, actual-weather variation, <=20% usability threshold,
 2. **High — projected VAM and inventory remain uncertain.** The current scheduler assumes each planned capture succeeds when projecting VAM and committed work. Keep that inexpensive all-success projection and label the weather-adjusted score as a heuristic. Do not create success/failure branches or fractional VAM timestamps for this feature. A later repeat after weather failure may be undervalued because failed imagery does not reset VAM; actual execution and later plan refreshes use real outcomes. No plan forecast may read actual future weather. Test that a failed capture leaves VAM unchanged and uploaded/committed work remains intact.
 3. **Medium — slew and pointing.** Cloud exposure applies only to the collection interval, as corrected above. A cloud-failed collection still slewed to its target: retain its normal end pointing and original successor times. Power-rejected commands keep the existing distinct behavior. Preserve failure precedence: existing power/geometry/timing/market failures first, cloud quality next, successful image creation last. Record one terminal outcome per command.
 4. **Medium — replan timing and retries.** At a forecast issuance, expose the new forecast before a same-time ground replan; coalesce it with the existing two-minute trigger. Freeze one issuance snapshot for the whole plan build, including predictions through upload and locked work; do not advance issuance into the future as the planning cursor advances. Forecast changes cannot edit active/next captures or upload again within an existing contact episode. The initial proposal's same-bucket retry ban is underspecified: completed-capture results may inform a ground revision, but cannot cancel an already-uploaded repeat. Prefer no added retry mechanism in this slice; define any suppression key, interval-overlap rule, and information availability before introducing a cooldown.
-5. **Medium — baseline preprocessing.** The public NOAA source is selected and already uses the runtime's 1° resolution. Verify a real source sample, axis order, and direct download before declaring the asset pipeline ready. Missing/corrupt data must produce a visible unavailable state; never silently substitute clear skies. Keep test fixtures explicitly labeled synthetic. The official [NCEI ISCCP-H entry](https://www.ncei.noaa.gov/products/international-satellite-cloud-climatology) documents the HGM product and access options.
+5. **Medium — baseline preprocessing.** Complete. The public NOAA source uses the runtime's 1° resolution. The download and aggregation scripts verify source layout, coordinates, units, value range, and all 120 source months. Missing/corrupt runtime data must produce a visible unavailable state; never silently substitute clear skies. Keep test fixtures explicitly labeled synthetic. The official [NCEI ISCCP-H entry](https://www.ncei.noaa.gov/products/international-satellite-cloud-climatology) documents the HGM product and access options.
 6. **Medium — observability.** Show a coarse forecast risk band, its issue/valid time, raw priority, and weather-weighted score in the existing chosen-target detail if that view can expose it cheaply. This is a proposed small UI addition; a map remains optional. Show observed cover only in completed-capture diagnostics, clearly labeled as observed.
 
 ### Efficiency and modeling limits
@@ -129,8 +129,8 @@ The gameplay settings and runtime slice are now approved and implemented. Remain
 
 ## Current implementation handoff
 
-The user approved the starter package above and later chose 2004–2013 (10 years) for the prototype climatology. The current forecast bands are <=20, <=40, <=60, and >60%; forecast error spreads are 12, 20, and 28 percentage points for lead through 6h, through 24h, and beyond. These are low-cost tuning inputs, not calibrated probabilities. The earlier wider bands (<=40, 41–60, 61–80, >80%) were superseded when the 20% usability threshold was implemented.
+The user approved the starter package above and later chose 2004–2013 (10 years) for the prototype climatology. The current forecast bands are <=20, <=40, <=60, and >60%; forecast error spreads are 12, 20, and 28 percentage points for lead through 6h, through 24h, and beyond. These are low-cost tuning inputs, not calibrated probabilities. The earlier wider bands (<=40, 41–60, 61–80, >80%) were superseded when the 20% usability threshold was implemented; the capture usability threshold is now 30%.
 
 `src/simulation/weather.ts` now provides keyed integer cloud values, time-weighted collection exposure, and a separate deterministic forecast. `OperationalLoop` checks weather at the normal capture-completion boundary, and `cellScheduler` uses forecast-weighted priority. The model does not create an hourly world field.
 
-The interim ISCCP-H HGM asset now supplies real spatial variation. Its January 2013 map is repeated across the monthly table, and 14 source-masked cells are filled from their nearest valid grid neighbor; both limitations are recorded in the manifest. Full completion still requires the 2004–2013 monthly climatology and its validation. Replace the interim table with the verified 12 × 180 × 360 monthly mean before marking CLOUD-01 complete.
+The runtime asset now contains 12 monthly 180 × 360 grids from the cellwise 2004–2013 climatology. Each climatological month averages available `cldamt` values for that same month across the ten years; cells with no valid years are filled from the nearest valid grid neighbor. The manifest records all 120 source hashes, per-month filled-cell counts, minimum source coverage, access date, citation, and baseline checksum. The build scripts live at `scripts/download_cloud_sources.py` and `scripts/build_cloud_baseline.py`; download files to a temporary directory and run the builder on that directory to reproduce the binary asset and manifest.

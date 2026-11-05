@@ -4,12 +4,748 @@
   "productVersion": "v01r00 Basic",
   "variable": "cldamt",
   "units": "whole percentage points",
-  "sourceMonth": "2013-01",
-  "baselineMethod": "single-month spatial snapshot repeated across all 12 calendar months (temporary prototype baseline)",
-  "selectedClimatologyTarget": "2004-2013 monthly means; not yet built",
-  "sourceFile": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
-  "sourceBytes": 4329947,
-  "sourceSha256": "38af6153b5951d0c03fa5ac3dc5d2377e48b361181588dce71851bc991592193",
+  "years": [
+    2004,
+    2013
+  ],
+  "baselineMethod": "cellwise mean of matching calendar months across 2004-2013; source-masked values excluded before averaging",
+  "sourceFiles": [
+    {
+      "month": "2004-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4237157,
+      "sha256": "680dd85682e3a1db26ba81d945a439eb98602913fb02b4372a05a0d19455d1e0"
+    },
+    {
+      "month": "2005-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4234654,
+      "sha256": "da9429ecef66d0232ef281ac09b131041e30c2b74e5d42e62f21e11c53e7a9bc"
+    },
+    {
+      "month": "2006-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4204950,
+      "sha256": "f25dd703fff3fb491f7a2b1ff97a43e1263ef30f6f3530b45024597c4f1a01b6"
+    },
+    {
+      "month": "2007-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4352490,
+      "sha256": "dbc1dcd0f58800886bd5ca19afc1f19f4626735bcd461e83b54daf9242a0e1d1"
+    },
+    {
+      "month": "2008-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4236759,
+      "sha256": "0a9eb48369fc2f2d0b69a7023a863026cb34a961d396ec661b86feb6a28f2a96"
+    },
+    {
+      "month": "2009-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4256129,
+      "sha256": "201cbb0fe4ab40ad2e29762be71fae6056cdcb55a787b59ded03e82567972657"
+    },
+    {
+      "month": "2010-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4231364,
+      "sha256": "bdf452df199c1c5e68b2de4efb073ea0e6f7c8b1f3971a08feb9e043af5e5ba7"
+    },
+    {
+      "month": "2011-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4243518,
+      "sha256": "d30445a57b313050d1d44806b6eb02444b0e21042c7b217914fb28ed588675c2"
+    },
+    {
+      "month": "2012-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4249613,
+      "sha256": "224defbb7317d6311fa347917f6ea693687fd1e1bc546f252ce323356c9ad7de"
+    },
+    {
+      "month": "2013-01",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.01.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4329947,
+      "sha256": "38af6153b5951d0c03fa5ac3dc5d2377e48b361181588dce71851bc991592193"
+    },
+    {
+      "month": "2004-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4348113,
+      "sha256": "4cc9efaacecab17f1aaa92dbecc2e232501ee108288ed6a543763eae7ccf97e9"
+    },
+    {
+      "month": "2005-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4359552,
+      "sha256": "04c4723753ade98cc67f95aafbab00c08810447cb480497ed76eca6d413ccbaf"
+    },
+    {
+      "month": "2006-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4359621,
+      "sha256": "fd89b2031a2ec399f409caad9b689d54002f5ad2bc8fa850c0af412b72c130fe"
+    },
+    {
+      "month": "2007-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4334832,
+      "sha256": "561a7ba7e89a13ee5e7a63097aca2744bf963523e77379a6a0fabcddecba04e5"
+    },
+    {
+      "month": "2008-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4365238,
+      "sha256": "e7fa388b1f436e16a095b41a80c995b14da5db47b4bac21fcb1dec96983e35d2"
+    },
+    {
+      "month": "2009-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4356512,
+      "sha256": "1e108869407bd8d2b0f12b3642f75351407c9cec9ad7e6a9f9194318cd7e1a88"
+    },
+    {
+      "month": "2010-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4354972,
+      "sha256": "f4511397285721b22794528778a3fd23d15854d3bd4f1b95d15cee4aa5e02713"
+    },
+    {
+      "month": "2011-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4363025,
+      "sha256": "9ac7b5cb4090048a92d43130cb8cc8dc0b0ef0a292dd133000eaec6cbc0f42bf"
+    },
+    {
+      "month": "2012-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4395837,
+      "sha256": "d953b20413d17dc3e2000a031b340efa9640ce441ccda16bf9faf5ee3f37502a"
+    },
+    {
+      "month": "2013-02",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.02.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4360512,
+      "sha256": "3b55d16234acb4a66e8e59814bbb536beee3783efe8b24c4203d31fa99ed2c68"
+    },
+    {
+      "month": "2004-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4475335,
+      "sha256": "cc48a34cc55a24846ebbf6d2676dffca24d1a6abfd271d64a80b5ca6c7e59b74"
+    },
+    {
+      "month": "2005-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4454136,
+      "sha256": "41d3acd5e5828c2d4f820a01ea9d06f4427b1c4daa557469272d8008a062e443"
+    },
+    {
+      "month": "2006-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4446965,
+      "sha256": "ba41486bc9c30c5ae72f7924d6006ac3791fd87eecb9fa4fc90d5e39417be14d"
+    },
+    {
+      "month": "2007-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4461011,
+      "sha256": "3dbd0691be51e0b840278d97fe454a826d2b608da4068b2c4dcf7fad9eef3497"
+    },
+    {
+      "month": "2008-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4460494,
+      "sha256": "840b81b05fb06673afe6eb5dfc83f9ef748754c582ccd9ae0dd952e26e0fe7f3"
+    },
+    {
+      "month": "2009-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4476690,
+      "sha256": "ea5c2b68367b39d1484822c910e4b06f3ea84ca8a4759e854944cc2f083c76bd"
+    },
+    {
+      "month": "2010-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4451404,
+      "sha256": "2fb68fc74e4360542ba903d1ee30c8402dd30ca9a5c2e5f67692b8ad7d5d3631"
+    },
+    {
+      "month": "2011-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4483276,
+      "sha256": "7c57b2746d6dddb1ceedf541a1a46d4e733c8d9a2b379e6b2e52c34f947228d6"
+    },
+    {
+      "month": "2012-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4498905,
+      "sha256": "b0b1bec9152572ebfac696beece0b236493cf203b7e129f07d9e7029d34ee861"
+    },
+    {
+      "month": "2013-03",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.03.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4536398,
+      "sha256": "55a6a091f6397fdc6fe98b442d318e7ceddb88ab14873aa90f682fa2e633cedd"
+    },
+    {
+      "month": "2004-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4423518,
+      "sha256": "8489531f99b4ce89b785622deb5a7a8a6fbbf3d2b9285194690f587dbedfbf1a"
+    },
+    {
+      "month": "2005-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4412197,
+      "sha256": "3e7cb955c0f770f4dba47c7e94d89c71e524bf4f4fcf514ac946ed99768542ed"
+    },
+    {
+      "month": "2006-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4411379,
+      "sha256": "60d33de45a538a63fcc5ea78924da4611e2877204cef9ba35928ce5da85594c7"
+    },
+    {
+      "month": "2007-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4422317,
+      "sha256": "63f0183098d22733d10f7534ccadbfacce05652ae965030608a6a6d6930c472c"
+    },
+    {
+      "month": "2008-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4429701,
+      "sha256": "3e3388b986993600457e68a621d3a67145c33ce1ba179c046b50e20a84d3002e"
+    },
+    {
+      "month": "2009-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4423889,
+      "sha256": "73b07454f947fa41231c9703fddb9cda947837a84667a7f621967d6e4423cd57"
+    },
+    {
+      "month": "2010-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4410215,
+      "sha256": "235530673876b76167acafaadd35dc4078ae56845222ffdeb55e59c78379dac8"
+    },
+    {
+      "month": "2011-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4410764,
+      "sha256": "f38b54ffa9275ef105029af9c31b66accf2986d1a8764f5fd9721a5a7ed220b7"
+    },
+    {
+      "month": "2012-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4448670,
+      "sha256": "20795de1b6e82aa97a401d5509e493f509375f2b6886807703733b060e8d854a"
+    },
+    {
+      "month": "2013-04",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.04.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4433830,
+      "sha256": "38d18d840783e7ef56c5b722ab48ec6e1ba36eafd0858473fb17e662d4d23b0f"
+    },
+    {
+      "month": "2004-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4286987,
+      "sha256": "5b19100c6b42d041a9861e26c774074e9aef7e3f8a995d50faa24619f6d734da"
+    },
+    {
+      "month": "2005-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4273547,
+      "sha256": "cd6555f2f0431460e32e43b4867c6efbaba8193604e68fbc603700791bb86b59"
+    },
+    {
+      "month": "2006-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4275762,
+      "sha256": "2c990f583c4f2228b20ce589ca570119050239af8dea82f3e7f0524591aad00e"
+    },
+    {
+      "month": "2007-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4296643,
+      "sha256": "5bd2a0b7cf39d83e7a814d4a9f16a757383f67a19627b24640a4a2bd13bcf117"
+    },
+    {
+      "month": "2008-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4273385,
+      "sha256": "900244920f750733618160fc986c3290392727b26eda71add0e42a248812ee87"
+    },
+    {
+      "month": "2009-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4294462,
+      "sha256": "b2c97f6ad0d3b4a31e65505d43fb096cf252d78dae751f55a051b48bc9508601"
+    },
+    {
+      "month": "2010-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4265989,
+      "sha256": "39cdb14d4641dfb5b776a859a09c989d2b6bcb45e9670326aa470f18b9ad92ff"
+    },
+    {
+      "month": "2011-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4284970,
+      "sha256": "7a731cedf926fc78ee3fa3e6fcf89d73522d58d014193c14683f2d6526fb8a46"
+    },
+    {
+      "month": "2012-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4304069,
+      "sha256": "f72ab43a34861fd28bb5d81e4a5911b43b070c7c0caa0ec850f1891e8fae70ef"
+    },
+    {
+      "month": "2013-05",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.05.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4308613,
+      "sha256": "3d0c9413e914bfa9dbae29950064ae61a53666f56a841bdb416424aeff60f5de"
+    },
+    {
+      "month": "2004-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4150766,
+      "sha256": "87ef23d2781d572a2b01f87fae7f19fb54d7548ee7fc964c8ed7fef959323e84"
+    },
+    {
+      "month": "2005-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4157344,
+      "sha256": "a40ed6de257d75a8fdda83291d266890508d4f4d9b34ad4b6b60131da051429d"
+    },
+    {
+      "month": "2006-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4164096,
+      "sha256": "c6030c917a8c6400ef74aac6d09319a1c56a3c5ed84f2d7caf061bdca75b89b9"
+    },
+    {
+      "month": "2007-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4177866,
+      "sha256": "062e920940e6e94e284de898f0dbfd211b2a627291bd68b8a7f535284e0d0658"
+    },
+    {
+      "month": "2008-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4162241,
+      "sha256": "b36e0c5110aea103845c81fd713060779044ac48f0976f7bc58e59f4b2b2fc56"
+    },
+    {
+      "month": "2009-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4160833,
+      "sha256": "40fc5e06c482b68093ed84bd830eba0224c77a36370028705e0fbd87b437c316"
+    },
+    {
+      "month": "2010-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4153838,
+      "sha256": "6351187811cf1d797f5a00717a2cfcfdb0f87f34c475724ed609f4da4d824eaa"
+    },
+    {
+      "month": "2011-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4165787,
+      "sha256": "df7f7069dc28dbeabae058209c8416c6bd70262362794b1837db97d9e86b405d"
+    },
+    {
+      "month": "2012-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4194403,
+      "sha256": "ab015c1608f5cf17e5e58ff3ce8608e6bb1f372412ad20c2ce5ded99e0a859df"
+    },
+    {
+      "month": "2013-06",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.06.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4166972,
+      "sha256": "0f8d8e953b1d761dde5461cf7ccd5226d68ea6bdfdac9669b6c3ee8061325c79"
+    },
+    {
+      "month": "2004-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4204558,
+      "sha256": "23eab488f5a95f360325005334862cbf57363ae20240372ea9a5b32979834f6b"
+    },
+    {
+      "month": "2005-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4235107,
+      "sha256": "c17a6f8375de3fb4a0bddfaa3d11fd70a5e47385c1f888ab3aca20224fb2d0d2"
+    },
+    {
+      "month": "2006-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4180987,
+      "sha256": "3f2d1f4c08a282befe49b76357e16296467b8094d2e8f36106bcbb7b59899880"
+    },
+    {
+      "month": "2007-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4209543,
+      "sha256": "08aefbcd80530ad45f32c38359a1ebcbd9c74ff570616135711b52498991b31a"
+    },
+    {
+      "month": "2008-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4195815,
+      "sha256": "5c5dfc9decce789a7a83f74b464ce94ea1581f7d8fde5a71bb0b88a14d154b23"
+    },
+    {
+      "month": "2009-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4195962,
+      "sha256": "f92ca6e20fedb6bacb65394ef81a9f4db318cb4432238fe2e10dd702c05c482f"
+    },
+    {
+      "month": "2010-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4189793,
+      "sha256": "7c2abf2abfcb6a4be05bd899569e3dfe6deb735cddd4a43e80f332ef2769e227"
+    },
+    {
+      "month": "2011-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4205954,
+      "sha256": "a913d59444397b494b05ba99bf076d3208353dec11a7d2ff9116f0324ae2d73e"
+    },
+    {
+      "month": "2012-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4234107,
+      "sha256": "e9787928a4a0fe0669a4da22016e6ba469c823c30e315d565167f74b82cbd119"
+    },
+    {
+      "month": "2013-07",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.07.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4207433,
+      "sha256": "3dc7e649aebba89cf18d8952aa8bc27d4e052f5f242e1f1c9cfb71b91f071eb9"
+    },
+    {
+      "month": "2004-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4311331,
+      "sha256": "6f1b41028fd9e61a0a4eaf867e93ce85b2a79bfd65971a7f7637564f188e5405"
+    },
+    {
+      "month": "2005-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4316598,
+      "sha256": "fab6486a91c07e0f9ff672d1a7316094c03a854d3d19aa2ed9cabea024ea5042"
+    },
+    {
+      "month": "2006-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4316858,
+      "sha256": "49d662903d0a831862fb4d8d68cd100ab1feeb82a957a4a7cb7e8c40c484d060"
+    },
+    {
+      "month": "2007-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4302221,
+      "sha256": "848f563449ab9a89862e5243098e4dd13c90c24967cc68fa193c07161ea18bc3"
+    },
+    {
+      "month": "2008-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4328465,
+      "sha256": "539f315d726f813d4b156574bb4fed42cfd4d3f4e725f90777ec32ff1241f582"
+    },
+    {
+      "month": "2009-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4306500,
+      "sha256": "e22378aec32b2454e04e9403bb3830e5e292d24fdd7f3b9bc434e53ea968a096"
+    },
+    {
+      "month": "2010-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4307755,
+      "sha256": "4f56f5c2bed6197865fa69cad623db8aecdd49735afb7deaff5d9bf2161f24cc"
+    },
+    {
+      "month": "2011-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4287669,
+      "sha256": "eb7005c98c2668a3d3f583c267853594e70a0bd15b911e972d34eec3c85a0492"
+    },
+    {
+      "month": "2012-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4362081,
+      "sha256": "a32b4e2de9cddc6007cf76a8351bfe81254e56aa891680e375936de0c4cf6a6a"
+    },
+    {
+      "month": "2013-08",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.08.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4299476,
+      "sha256": "65140c9a31d79f104dca3deca8480b016a887120e5cca535a64da2858856aad0"
+    },
+    {
+      "month": "2004-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4398143,
+      "sha256": "028737e9f7e0aa54fb6353326ef9cdc574be0407f3943d830162c82eead77cfb"
+    },
+    {
+      "month": "2005-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4409458,
+      "sha256": "2020ba58213e3414498ced88ed558e7437dbab8dee3d0c5c154f3b4be83e9bba"
+    },
+    {
+      "month": "2006-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4410104,
+      "sha256": "9073489722a51e018440cf3e64d3ac410d0f7f8faa37a8c8af2948c10f8b2600"
+    },
+    {
+      "month": "2007-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4405068,
+      "sha256": "4618e488a2ab15c4959106ff192407482e5107dfd156481dea5df5bfe8940620"
+    },
+    {
+      "month": "2008-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4423525,
+      "sha256": "c8574644c1fa8969f4500ca94367f79243714a5e09763c0ef94b5a29016ede3e"
+    },
+    {
+      "month": "2009-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4407586,
+      "sha256": "3dda0b142410f590c072aea7050d9805ca312754612e822a19c593ce81d0b33f"
+    },
+    {
+      "month": "2010-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4418746,
+      "sha256": "8675286f777d05a193a7d61508052d05602550bc35128613ecc0443e9af3fb1e"
+    },
+    {
+      "month": "2011-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4409441,
+      "sha256": "ac9818a8e49542587bab7101657314ab082ac6587856a148f955ea96490b20db"
+    },
+    {
+      "month": "2012-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4526700,
+      "sha256": "47cf44eb3991db32655e317b8de95dce7b9b86dd4a0ee406c2903fa81c059ba8"
+    },
+    {
+      "month": "2013-09",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.09.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4397723,
+      "sha256": "e9ab1dec3af9765f6d02bf19318849a07cda0d8abd16bbfcef62dd88870f3f14"
+    },
+    {
+      "month": "2004-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4392407,
+      "sha256": "1c3f42110fdffcf5aabd8c4fd878518119ac19703ae1b8ec997bd2cee45c1a1c"
+    },
+    {
+      "month": "2005-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4403305,
+      "sha256": "167a537af0f4bc660b2dea8576d04e5af5c7a47d3217d4025fed04119e112da3"
+    },
+    {
+      "month": "2006-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4387934,
+      "sha256": "8dc5d1624e7f0e1d1fff8edccb5871241ba877562dacab29de26fb8b9a15b8e0"
+    },
+    {
+      "month": "2007-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4391142,
+      "sha256": "a7cf075cca946612962521370790142be7877d82a6f1a2398dc92247881b2c5a"
+    },
+    {
+      "month": "2008-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4384704,
+      "sha256": "d9031a955a3561abf2412e2eb012e472f492f8271b79d2e57703bb014ceddb77"
+    },
+    {
+      "month": "2009-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4403957,
+      "sha256": "96112e6d24840dfb23551d55b92ee47979b211dc81ac1b7e487e80369b14b108"
+    },
+    {
+      "month": "2010-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4400003,
+      "sha256": "d18a90e60916b91843736a318933fc21ece5514138e9107dc5fd8d71e57a2926"
+    },
+    {
+      "month": "2011-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4389552,
+      "sha256": "b31f931865845207ef07d0df0c1b07346db10a3f200c3729ef86ca04801cad8e"
+    },
+    {
+      "month": "2012-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4532318,
+      "sha256": "c18c1070cb23edfabf3a59bba1e040a676ee60998a03c220a18d0504f023b46f"
+    },
+    {
+      "month": "2013-10",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.10.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4426106,
+      "sha256": "20b358f897f36d264b3feaf588a53546d5b596dbf9062deda3d344a866a58157"
+    },
+    {
+      "month": "2004-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4292273,
+      "sha256": "49b9d480fa2d1a375a5d2f8ea3e864c69e96a05479c01216ccb6640d8b1da7e8"
+    },
+    {
+      "month": "2005-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4278247,
+      "sha256": "026c6abd69e7a97d9827c0743ef8cb33b3d9d5b10c10e9b59333f9a6e68a84e3"
+    },
+    {
+      "month": "2006-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4275488,
+      "sha256": "a57ff8ab6ff3a7c029c16058279955ce312924390b74d41da011da17df6c1b14"
+    },
+    {
+      "month": "2007-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4300821,
+      "sha256": "8457bf4171647d4b5695b8152ef3f31c8a79d1e8e6b1c04be35472db76ab8de1"
+    },
+    {
+      "month": "2008-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4290392,
+      "sha256": "fa786a7f593f32d0a54de3e7f41ef8e98471f8b2135d1f2092bd58e78ae5f978"
+    },
+    {
+      "month": "2009-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4301499,
+      "sha256": "9ebb1487b02c7765f51e9126e53118255d555bc7d3d7493eb390a4a97be2c329"
+    },
+    {
+      "month": "2010-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4291901,
+      "sha256": "d2bcb8259c3e9b57aa1c9d957970513d3bd8b4df0765250f913f36e6740d1a14"
+    },
+    {
+      "month": "2011-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4289767,
+      "sha256": "129eae1195f4d41b912e9e608de4159f6cbf4a66014b68dc7ec1f2518b64afee"
+    },
+    {
+      "month": "2012-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4366951,
+      "sha256": "7e9d9eb4068278ab247a10b7a1fb36066c68c9fd209f0feeab42635d7eb50250"
+    },
+    {
+      "month": "2013-11",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.11.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4261318,
+      "sha256": "f3e0bc4216a3382b61d6cfd029a48f6b2a60cb1a0ab3a642ae45ddf39c4792d9"
+    },
+    {
+      "month": "2004-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2004.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4156471,
+      "sha256": "9d693aa513f18489ddbdadcd9faa4056516ba83313ec7eaa26e39c4dac8c48b9"
+    },
+    {
+      "month": "2005-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2005.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4162690,
+      "sha256": "5f232e2ffaaabf9a57ce74687068eab32a58cff0956c914264c775e31c480a57"
+    },
+    {
+      "month": "2006-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2006.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4149812,
+      "sha256": "28a060ef617e8d8ec49370b18ac4db1fda716a10ab896d8af66eb08f5cb91021"
+    },
+    {
+      "month": "2007-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2007.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4183034,
+      "sha256": "16e29f0c537a54315efb19f2345dd317ede86bdd01fd40fba69e3a67dde6b909"
+    },
+    {
+      "month": "2008-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2008.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4202585,
+      "sha256": "d3cc489b944101154df5813c7f2401f92bd9ac2a1658b4846a93d35f27c9ef70"
+    },
+    {
+      "month": "2009-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2009.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4145098,
+      "sha256": "3a3d38a612dd4f7f55d2c4ed42a9c3bc2856c4ccd86c064b8f256915f96f898c"
+    },
+    {
+      "month": "2010-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2010.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4191000,
+      "sha256": "a78c2067a2fbaae63f3d8b8f0ddf59e7382aa8a965c3aa535da2b1a762da06b7"
+    },
+    {
+      "month": "2011-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2011.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4204370,
+      "sha256": "5f7c191be3fb45137c0fe7f172158bf84f99020874b267cd4690c3e4c24bb484"
+    },
+    {
+      "month": "2012-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2012.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4277666,
+      "sha256": "92a46d1e818c563c5ed5b4cdbd927fee0464d1f0fdfa0a95682f80f299482292"
+    },
+    {
+      "month": "2013-12",
+      "file": "ISCCP-Basic.HGM.v01r00.GLOBAL.2013.12.99.9999.GPC.10KM.CS00.EA1.00.nc",
+      "bytes": 4177614,
+      "sha256": "fcb68bc74c6c392b6be506d802c092f464df3a963c27e077daf3db60d47d5737"
+    }
+  ],
+  "sourceAccessDate": "2026-11-05",
+  "minimumValidYearsPerGridCellByMonth": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
   "sourceUrl": "https://www.ncei.noaa.gov/products/international-satellite-cloud-climatology",
   "doi": "10.7289/V5QZ281S",
   "grid": {
@@ -19,9 +755,22 @@
     "rowOrder": "north-to-south",
     "longitude": "-180 to 180"
   },
-  "missingSourceCells": 14,
+  "missingCellsFilledByMonth": [
+    12,
+    12,
+    12,
+    12,
+    12,
+    12,
+    12,
+    12,
+    12,
+    12,
+    12,
+    12
+  ],
   "missingCellMethod": "nearest valid 1-degree neighbor; deterministic row-major tie break",
-  "baselineSha256": "bfcc4b736a4982f9ba30881758e9a4dd21009ab5bff5db17029547d4bdd18cc0",
-  "generatedAtUtc": "2026-10-25T16:41:08.359448+00:00",
+  "baselineSha256": "7b47f25d2e4713c63fdf5fed34dae839d0b1f34d5d38f9061c693be027c8f2dc",
+  "generatedAtUtc": "2026-11-05T18:11:55.887931+00:00",
   "citation": "Hankins, B.; NOAA Climate Data Record Program (2016): International Satellite Cloud Climatology Project Climate Data Record, H-Series. NOAA National Centers for Environmental Information. https://doi.org/10.7289/V5QZ281S"
 }

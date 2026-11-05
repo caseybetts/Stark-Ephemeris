@@ -1,5 +1,6 @@
 import type { GroundOperations } from "../simulation/groundOperations.ts";
 import type { SatelliteDefinition } from "../simulation/model.ts";
+import { formatPercent } from "../format.ts";
 import type { CellMarketState } from "../simulation/cellMarketState.ts";
 import { cellLabel } from "../simulation/cells.ts";
 
@@ -191,7 +192,7 @@ export function setupScheduleView(options: ScheduleViewOptions): () => void {
           const forecastCloudCover = document.createElement("td");
           forecastCloudCover.className = "schedule-number-cell";
           const forecastPercent = capture.forecastCloudCoverPercent;
-          forecastCloudCover.textContent = forecastPercent === undefined ? "—" : `${forecastPercent}%`;
+          forecastCloudCover.textContent = forecastPercent === undefined ? "—" : `${formatPercent(forecastPercent)}%`;
           if (forecastPercent !== undefined) {
             forecastCloudCover.title = "Forecasted mean cloud cover over this collection interval when the schedule was prepared.";
           }

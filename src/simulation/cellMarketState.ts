@@ -32,6 +32,14 @@ export type CellMarketStateSnapshot = CellEconomySnapshot & {
   cellId: number;
 };
 
+export type CellCollectionMetric = {
+  categoryId: string;
+  unit: string;
+  totalCollected: number;
+  trailingAveragePerDay: number | null;
+  averageDaysSinceCollection: number | null;
+};
+
 export type RecordedCellCapture = CellCaptureEvent & {
   eventId: string;
   satelliteId: string;
@@ -80,6 +88,8 @@ export class CellMarketState {
   private readonly images = new Map<string, CellImageRecord>();
   private readonly lifecycleEvents: ImageLifecycleEvent[] = [];
   private imageryRevisionValue = 0;
+  private readonly totalCategoryExposure = new Map<string, number>();
+  private readonly weightedCollectionTimestamp = new Map<string, number>();
   private readonly initialMarketReadout: MarketReadoutCategory[];
   private readonly initialPriorityRates: PlayerCategoryPriorityRate[];
   private readonly grid: CellGrid;
@@ -99,6 +109,12 @@ export class CellMarketState {
     this.exposures = new CellCategoryExposureIndex(grid, definitions);
     this.lastCollectedAt = new Float64Array(grid.ids.length);
     this.lastCollectedAt.fill(Number.NaN); // NaN represents never collected (VAM starts at 1).
+    for (const definition of this.exposures.definitions) {
+      let total = 0;
+      for (let index = 0; index < this.grid.ids.length; index++) total += definition.read(this.grid, index);
+      this.totalCategoryExposure.set(definition.id, total);
+      this.weightedCollectionTimestamp.set(definition.id, 0);
+    }
     this.marketReadout = this.copyMarketReadout(marketReadout);
     this.playerPriorityRates = this.copyPriorityRates(playerPriorityRates);
     this.validateRateSets(this.marketReadout, this.playerPriorityRates);
@@ -114,6 +130,7 @@ export class CellMarketState {
   resetPreview(): void {
     this.imageryRevisionValue += 1;
     this.lastCollectedAt.fill(Number.NaN);
+    for (const definition of this.exposures.definitions) this.weightedCollectionTimestamp.set(definition.id, 0);
     this.collectionEvents.length = 0;
     this.captureEventIds.clear();
     this.lifecycleEventIds.clear();
@@ -136,6 +153,37 @@ export class CellMarketState {
 
   getCaptureEvents(): readonly RecordedCellCapture[] {
     return this.collectionEvents.map(event => ({ ...event, categoryPayoutsUsd: { ...event.categoryPayoutsUsd } }));
+  }
+
+  getCollectionMetrics(nowSeconds: number): CellCollectionMetric[] {
+    if (!Number.isFinite(nowSeconds) || nowSeconds < 0) throw new RangeError("Collection metric time must be finite and non-negative");
+    const windowSeconds = Math.min(nowSeconds, 3 * 86_400);
+    const windowStartsAt = nowSeconds - windowSeconds;
+    const totals = new Map(this.exposures.definitions.map(definition => [definition.id, { total: 0, recent: 0 }]));
+    for (const event of this.collectionEvents) {
+      if (event.completedAtSeconds > nowSeconds) continue;
+      const cellIndex = this.grid.indexById[event.cellId];
+      if (cellIndex < 0) continue;
+      const inWindow = windowSeconds > 0 && event.completedAtSeconds >= windowStartsAt;
+      for (const exposure of this.exposures.forCell(cellIndex)) {
+        const total = totals.get(exposure.categoryId)!;
+        total.total += exposure.quantity;
+        if (inWindow) total.recent += exposure.quantity;
+      }
+    }
+    return this.exposures.definitions.map(definition => {
+      const total = totals.get(definition.id)!;
+      return {
+        categoryId: definition.id,
+        unit: definition.unit,
+        totalCollected: total.total,
+        trailingAveragePerDay: windowSeconds > 0 ? total.recent / (windowSeconds / 86_400) : null,
+        averageDaysSinceCollection: (this.totalCategoryExposure.get(definition.id) ?? 0) > 0
+          ? Math.max(0, nowSeconds - (this.weightedCollectionTimestamp.get(definition.id) ?? 0)
+            / this.totalCategoryExposure.get(definition.id)!) / 86_400
+          : null,
+      };
+    });
   }
 
   getImages(): readonly CellImageRecord[] {
@@ -251,6 +299,17 @@ export class CellMarketState {
     this.collectionEvents.push(event);
     this.captureEventIds.add(eventId);
     this.images.set(image.imageId, image);
+    const previousCollectionTime = this.lastCollectedAtSeconds(cellIndex) ?? 0;
+    for (const definition of this.exposures.definitions) {
+      const quantity = definition.read(this.grid, cellIndex);
+      if (quantity > 0) {
+        this.weightedCollectionTimestamp.set(
+          definition.id,
+          (this.weightedCollectionTimestamp.get(definition.id) ?? 0)
+            + quantity * (completedAtSeconds - previousCollectionTime),
+        );
+      }
+    }
     this.lastCollectedAt[cellIndex] = capture.nextRecoveryState.lastCollectedAtSeconds!;
     this.imageryRevisionValue += 1;
     return { ...event, categoryPayoutsUsd: { ...event.categoryPayoutsUsd } };

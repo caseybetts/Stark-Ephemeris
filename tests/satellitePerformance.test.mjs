@@ -53,11 +53,11 @@ test("per-satellite yield separates paid, pending, deleted, weather failures, an
   assert.equal(Number(paidClearPercent.toFixed(2)), 16.67);
 });
 
-test("paid clear yield counts both below and exactly at the inclusive 20% cutoff", () => {
+test("paid clear yield counts both below and exactly at the inclusive 30% cutoff", () => {
   const performance = new SatellitePerformance(["sat-a"]);
-  performance.recordCaptureAttempt(attempt("below", { imageId: "img-below", observedCloudCoverPercent: 19 }));
-  performance.recordCaptureAttempt(attempt("equal", { imageId: "img-equal", observedCloudCoverPercent: 20 }));
-  performance.recordCaptureAttempt(attempt("above", { imageId: "img-above", observedCloudCoverPercent: 21 }));
+  performance.recordCaptureAttempt(attempt("below", { imageId: "img-below", observedCloudCoverPercent: 29, acceptedThresholdPercent: 30 }));
+  performance.recordCaptureAttempt(attempt("equal", { imageId: "img-equal", observedCloudCoverPercent: 30, acceptedThresholdPercent: 30 }));
+  performance.recordCaptureAttempt(attempt("above", { imageId: "img-above", observedCloudCoverPercent: 31, acceptedThresholdPercent: 30 }));
   const snapshot = performance.getYieldSnapshot("sat-a", [
     image("img-below", "delivered", 1),
     image("img-equal", "delivered", 1),

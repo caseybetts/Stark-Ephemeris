@@ -12,6 +12,7 @@ import { isEclipsedAt, PowerOperations, projectSatellitePower, PROTOTYPE_POWER_C
 import { SimulationRuntime, type RuntimeEvent } from "./runtime.ts";
 import type { PointingDirection } from "./slew.ts";
 import { averageCloudCoverPercent, PROTOTYPE_CLOUD_THRESHOLD_PERCENT, type WeatherConfiguration } from "./weather.ts";
+import { formatPercent } from "../format.ts";
 import { SatellitePerformance, type CaptureFailureKind } from "./satellitePerformance.ts";
 
 export type OperationalLoopConfiguration = {
@@ -721,7 +722,7 @@ export class OperationalLoop {
     } else if (measuredCloudPercent !== null && measuredCloudPercent > acceptedThresholdPercent) {
       failureKind = "weather";
       observedCloudCoverPercent = measuredCloudPercent;
-      detail = `Cell capture failed: cloud cover averaged ${measuredCloudPercent}% during collection (usable at or below ${acceptedThresholdPercent}%). No image was created and cell recovery did not reset.`;
+      detail = `Cell capture failed: cloud cover averaged ${formatPercent(measuredCloudPercent)}% during collection (usable at or below ${formatPercent(acceptedThresholdPercent)}%). No image was created and cell recovery did not reset.`;
     } else {
       observedCloudCoverPercent = measuredCloudPercent;
       try {

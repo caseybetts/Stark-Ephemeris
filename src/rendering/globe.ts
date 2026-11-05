@@ -20,9 +20,9 @@ import {
   VerticalOrigin,
   Viewer,
 } from "cesium";
-import type { DataSource, ImageryLayer } from "cesium";
+import type { DataSource, Entity, ImageryLayer } from "cesium";
 import type { SatelliteDefinition, SurfaceObject, WorldSnapshot } from "../simulation/model";
-import { SIMULATED_DAY_SECONDS } from "../simulation/constants";
+import { EFFECTIVE_CONTACT_RADIUS_KM, SIMULATED_DAY_SECONDS } from "../simulation/constants";
 import {
   circularOrbitPeriodSeconds,
   rotateInertialToEarthFixed,
@@ -39,6 +39,7 @@ export type GlobeView = {
   setBasemapVisible(visible: boolean): void;
   setSurfaceObjectsVisible(visible: boolean): void;
   setSurfaceObjects(surfaceObjects: readonly SurfaceObject[]): void;
+  setStationRingsVisible(visible: boolean): void;
   setPreviewSurfaceObjects(surfaceObjects: readonly SurfaceObject[]): void;
   destroy(): void;
 };
@@ -60,6 +61,24 @@ function groundStationImage(object: SurfaceObject, preview: boolean): string {
   const accent = preview || leased ? "#72d9df" : "#ffbd70";
   const dash = preview ? ' stroke-dasharray="2 2"' : "";
   return svgImage(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><radialGradient id="a"><stop offset="0" stop-color="${accent}" stop-opacity=".42"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient></defs><circle cx="24" cy="24" r="23" fill="url(#a)"/><circle cx="24" cy="24" r="13" fill="none" stroke="${accent}" stroke-opacity=".72" stroke-width="1"${dash}/><path d="M24 19v13m-6 4h12m-9 0 3-7 3 7M18 17a8 8 0 0 0 0 8m12-8a8 8 0 0 1 0 8M14 13a14 14 0 0 0 0 16m20-16a14 14 0 0 1 0 16" fill="none" stroke="#f3fbff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"/><circle cx="24" cy="18" r="2" fill="#fff"/></svg>`);
+}
+
+function addStationRangeRing(viewer: Viewer, station: SurfaceObject): Entity {
+  const radiusMeters = EFFECTIVE_CONTACT_RADIUS_KM * 1_000;
+  return viewer.entities.add({
+    name: `${station.name} approximate contact range`,
+    position: locationToCartesian(station.location),
+    ellipse: {
+      semiMajorAxis: radiusMeters,
+      semiMinorAxis: radiusMeters,
+      height: 0,
+      heightReference: HeightReference.CLAMP_TO_GROUND,
+      material: Color.fromCssColorString("#72d9bd").withAlpha(0.035),
+      outline: true,
+      outlineColor: Color.fromCssColorString("#72d9bd").withAlpha(0.7),
+      outlineWidth: 2,
+    },
+  });
 }
 
 function orbitArcPositions(
@@ -309,6 +328,14 @@ export async function createGlobeView(
     object,
     entity: addSurfaceObject(viewer, object),
   }));
+  let stationRingsVisible = false;
+  let stationRingEntities: Entity[] = [];
+  const refreshStationRings = (stations: readonly SurfaceObject[]) => {
+    for (const entity of stationRingEntities) viewer.entities.remove(entity);
+    stationRingEntities = stationRingsVisible
+      ? stations.filter(object => object.kind === "ground-station").map(station => addStationRangeRing(viewer, station))
+      : [];
+  };
   let previewSurfaceEntities: { object: SurfaceObject; entity: ReturnType<typeof addSurfaceObject> }[] = [];
 
   return {
@@ -371,6 +398,12 @@ export async function createGlobeView(
       for (const item of surfaceEntities) viewer.entities.remove(item.entity);
       surfaceEntities = nextObjects.map(object => ({ object, entity: addSurfaceObject(viewer, object) }));
       if (!visible) for (const item of surfaceEntities) item.entity.show = false;
+      refreshStationRings(nextObjects);
+      viewer.scene.requestRender();
+    },
+    setStationRingsVisible(visible) {
+      stationRingsVisible = visible;
+      refreshStationRings(surfaceEntities.map(item => item.object));
       viewer.scene.requestRender();
     },
     setPreviewSurfaceObjects(nextObjects) {

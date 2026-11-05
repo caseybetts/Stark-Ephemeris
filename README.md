@@ -24,7 +24,7 @@ Vite prints a local URL to open in a browser. The first load uses the bundled Ce
 - Satellite and world state calculations live separately from Cesium rendering.
 - A land-intersecting ¼° grid with 363,779 cells, a toggleable globe overlay, and a searchable Orders view for sourced city, port, per-cell urban footprint area, border, coast, agriculture, power plant, and mapped oil pipeline attributes.
 
-The prototype also implements automatic collection planning, contact-based plan uploads, cell value/recovery, onboard imagery storage, power, cloud-dependent capture outcomes, downlink revenue, company operating costs, and standard-spacecraft purchases. Economy and subsystem values remain provisional; growth pacing is unbalanced. Customer satisfaction, degradation/anomaly response, and save/load remain future work. See [cell data and visualization](docs/CELL_DATA.md) for sources, limitations, and regeneration instructions, and [Pending Changes](docs/PENDING_CHANGES.md) for feature status.
+The prototype also implements automatic collection planning, contact-based plan uploads, cell value/recovery, onboard imagery storage, power, cloud-dependent capture outcomes, downlink revenue, company operating costs, and standard-spacecraft purchases. Economy and subsystem values remain provisional; growth pacing is unbalanced. Customer satisfaction, degradation/anomaly response, and save/load remain future work. See [cell data and visualization](docs/CELL_DATA.md) for sources, limitations, and regeneration instructions, [Your work list](docs/PENDING_CHANGES.md) for experiences and decisions, and the [AI implementation plan](docs/AI_IMPLEMENTATION_PLAN.md) for technical feature status.
 
 ## Try the single-spacecraft revenue loop
 
@@ -41,7 +41,9 @@ Opening cash is **−$50,000**, and negative cash does not stop collection or re
 npm run build
 ```
 
-The static site output is written to `dist/`. The Vite base path is configured for the `Stark-Ephemeris` GitHub Pages project URL in GitHub Actions. A Pages workflow and repository Pages settings still need to be added/configured before publishing.
+The static site output is written to `dist/`. The Vite base path is configured for the `Stark-Ephemeris` GitHub Pages project URL in GitHub Actions.
+
+The existing [Pages workflow](.github/workflows/deploy-pages.yml) builds and deploys the site when changes are pushed to `main`, and can also be run manually. It expects GitHub Pages to use **GitHub Actions** as its publishing source. The repository setting and latest remote workflow result have not been checked here.
 
 ## Project brief
 
