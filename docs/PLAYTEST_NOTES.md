@@ -21,11 +21,24 @@ When continuing work, agents should read new entries and turn actionable observa
 - **Outcome:** Success
 - **Observations:**
   - I did not see the Awaiting Downlink in the summary section ever change from 0. Seems wrong.
+  - Orbit trak is still displayed as a complete circle rather than showing the future orbit and past orbit track of the satellite.
+  - Sat is showing as sunlit at all times, is this a bug?
 - **Requests or changes to consider:**
-  - _What would you like changed, explored, or kept?_
+  - Can you add a readout on the spacecraft tab for each spacecraft of number of images on board vs total in TEL? So a fraction showing how many orders are on the current plan (past and future) and how many of them have been collected and are sitting on the spacecraft.
 - **Questions:**
   - _Anything you want the AI to investigate or explain?_
 
+#### 2026-11-06 — Third Playthrough
+
+- **Outcome:** Success
+- **Observations:**
+  - The orbit track is still not right. It shows a partial rev, but it still moves latterally over time. The idea is for the orbit track to accurately show where  the satellite will be (or has been). So, like a snake, it should move arond the world, but not slide latterally. Is this possible? Would it take too much compute to be practical?
+  - I'm not seeing the scheduled cells show up on the map, can this be double checked?
+  - I think we need more collections. Can you reduce the time in between collections by about half?
+- **Requests or changes to consider:**
+  -
+- **Questions:**
+  -
 
 ### New playtest entry template
 

@@ -51,7 +51,7 @@ This document records implementation constraints and architecture direction. The
 
 - Keep spacecraft as a collection keyed by stable satellite IDs. The current initial fleet contains only Asteria-1, preserving the intended one-spacecraft start; no additional satellite or launch cost is invented for the prototype.
 - Calculate a separate world snapshot per spacecraft from the shared simulation clock and surface-object set. Drive each table row, selected detail view, marker, and orbit from that spacecraft's definition and snapshot.
-- The selected spacecraft is highlighted with a larger marker, visible label, and brighter orbit path. Health, onboard storage, battery state, camera capability, and cell-market revenue remain absent until their gameplay systems are implemented.
+- The selected spacecraft is highlighted with a larger marker, visible label, and brighter projected ground track. The Spacecraft detail includes the count of onboard images from commands in its current TEL against all cell-capture commands in that TEL. Other health and camera-capability details remain outside the current prototype.
 
 ### Ground-station prototype data
 
@@ -69,8 +69,8 @@ This document records implementation constraints and architecture direction. The
 
 - Designers and game content should describe surface locations in familiar latitude/longitude terms, with altitude/height where needed. Coordinate conversion should be an implementation detail.
 - The displayed globe stays fixed while satellite markers and their paths move relative to the surface as game time advances.
-- Keep satellite altitude to scale in the visualization. Make the satellite marker visible with a glowing dot; an orbit path can be shown optionally. Marker size is a visual choice and does not change simulated position or altitude.
-- Show the displayed 3D orbit path as half an orbit ahead and half an orbit behind each satellite's current position. Keep its orbital geometry stable and move it relative to the fixed globe as simulation time advances; it does not change the propagated satellite state.
+- Keep satellite altitude to scale in the visualization. Make the satellite marker visible with a glowing dot. Marker size is a visual choice and does not change simulated position or altitude.
+- The optional 24-hour ground-track layer projects each future satellite position onto Earth's surface using the existing orbit and Earth-rotation model. Generate the path from simulation UTC 00:00 or 12:00 through the next 24 hours, sample every 60 seconds, and replace it only at the next 12-hour boundary or when the fleet changes. Keep the line fixed between those updates. Show sunlit segments as solid warm gold and Earth-eclipse segments as solid muted blue. It is a forecast from the displayed update time, while the satellite marker continues to move live; the layer does not change propagated satellite state.
 - Use the current 550 km / 53° orbit as a configurable suggestion. Each launch can set its own altitude, inclination, ascending node, and phase before it enters the fleet.
 - Approximate ground-station contact with a constant distance threshold for the prototype. Treat this as a gameplay approximation of visibility; it can later become altitude-dependent or use a more exact line-of-sight/elevation rule.
 
@@ -80,7 +80,7 @@ This document records implementation constraints and architecture direction. The
 - Keep the simulation independent of the renderer's coordinate conventions. A small geography/visualization adapter converts named geographic inputs and satellite positions to the renderer's Earth-centered coordinates.
 - Model satellite motion from a simple orbit description and game time in an Earth-centered inertial-like frame, then transform the current position into the Earth-fixed frame used to draw it on a stationary globe. A simplified Earth-rotation angle is sufficient initially; high-precision astrodynamics is not a goal for the first build.
 - Keep orbit configuration and propagation per spacecraft. The initial fleet may use a shared provisional orbit profile, but simulation and visualization APIs must accept each spacecraft's own orbit parameters and calculate its state independently. Put propagation behind a model boundary so additional orbit classes or fidelity levels can be added without changing fleet/UI logic; the supported future orbit types and their accuracy remain open.
-- Keep the concepts of a 3D orbital path and a surface ground track distinct. The initial optional line is the 3D orbit path; a projected ground track can be added separately if it helps explain coverage.
+- Keep the concepts of a 3D orbital path and a surface ground track distinct. The current optional layer is a projected ground track; altitude remains visible through the satellite marker and readout.
 - Use the same game-time/world model as the basis for later sunlight and eclipse calculations.
 - If using CesiumJS, wrap its coordinate helpers so game code uses named fields and explicit units rather than positional arguments or library-specific types.
 
@@ -154,7 +154,7 @@ CELL-03A in [AI implementation plan](AI_IMPLEMENTATION_PLAN.md) is implemented. 
 
 The readout uses the proposed mapping and explicitly labeled sample rates. All cells initially have VAM 1. CELL-03B has selected-cell capture, failed-attempt, clock-advance, and reset previews. Capture stores imagery without cash; settlement occurs on delivery. TEL capture execution and contact-limited transfer/storage deletion are implemented as prototype behavior, with sample settings documented in [Gameplay](GAMEPLAY.md).
 
-The globe's Fill layer reads a selected category's current available-priority contribution or the current-month NOAA cloud baseline; Planning draws operational state as outlines and target cues, plus maximum-value and total current-priority dots. Keep category fills in tiled/aggregated imagery and use Cesium entities only for the comparatively small active schedule; do not create one globe entity per market cell. Search and filter by geographic attributes are implemented; sorting by calculated dollar value and priority remains future work. See [AI implementation plan](AI_IMPLEMENTATION_PLAN.md#cell-03--show-the-cell-market-in-orders).
+The globe's Fill layer reads a selected category's current available-priority contribution or the current-month NOAA cloud baseline; Planning shows one selected mode at a time: scheduled-cell outlines, active target cues, maximum-value dots, or total current-priority dots. The Orders default remains Current priority; select Scheduled cells in Planning to see schedule outlines. Keep category fills in tiled/aggregated imagery and use Cesium entities only for the comparatively small active schedule; do not create one globe entity per market cell. Search, geographic and market-value filters, and geographic and market-value sorting are implemented. See [AI implementation plan](AI_IMPLEMENTATION_PLAN.md#cell-03--show-the-cell-market-in-orders).
 
 ### Open implementation and gameplay decisions
 
@@ -196,7 +196,7 @@ Names and folder layout are proposals until the project scaffold is chosen.
 
 - **Simulation/domain:** State types, event-boundary time advancement, timed actions, operating policies, and business rules.
 - **Presentation:** Dashboard panels, satellite details, charts, event/alert feed, and time controls.
-- **Visualization:** Planet, orbit paths, and satellite markers, driven by domain state.
+- **Visualization:** Planet, projected ground tracks, and satellite markers, driven by domain state.
 - **Persistence:** Browser save/load and save-format versioning.
 
 UI components should request domain actions and render resulting state; they should not independently implement business or satellite simulation rules.

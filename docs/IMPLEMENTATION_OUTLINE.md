@@ -15,7 +15,7 @@ Read [`README.md`](README.md), [`VISION.md`](VISION.md), [`GAMEPLAY.md`](GAMEPLA
 - The game is a single-player browser experience intended for static hosting on GitHub Pages.
 - The player configures and operates earth-imagery satellites in replayable, time-limited challenges. Operations, business state, and status panels are more important than high-end graphics. Mission setup, objectives, debriefs, and progression are not yet implemented; see the [challenge development plan](CHALLENGE_RUNS.md).
 - The world view should show a realistic-scale Earth and satellites. The globe remains stationary while satellites move relative to its surface.
-- Satellite altitude should not be exaggerated in the visualization. A glowing point can make a satellite visible; a 3D orbital path is optional.
+- Satellite altitude should not be exaggerated in the visualization. A glowing point makes a satellite visible; the optional ground track shows its projected path on Earth.
 - Designers and content authors should specify locations with named latitude/longitude values. Conversion to renderer coordinates is an implementation detail.
 - Initial satellites may share one nominal altitude. The data model should leave room for different altitudes later.
 - Ground-station contact may initially use a constant distance threshold as a gameplay approximation. Exact line-of-sight or elevation-angle modeling can come later.
@@ -124,7 +124,7 @@ This is a low-complexity prototype model, not a final orbit-system decision. Tim
 - A **3D orbit path** is a loop in orbital space. It can be shown as a line around Earth and should move relative to the fixed globe as Earth rotation advances.
 - A **ground track** is the projection of a satellite's path onto Earth's surface. Earth rotation makes it drift over the surface; it is not the same curve as the 3D orbit.
 
-The 3D orbit path is the current candidate for the optional line. A ground-track display is not required yet.
+The current optional line is a 24-hour projected ground track, fixed between simulation UTC 00:00 and 12:00 updates. The earlier moving 3D orbit line was removed after repeated visual flicker.
 
 ### 5.4 Surface sunlight
 
@@ -197,7 +197,7 @@ Whole-cell collection is the gameplay abstraction. Collection duration, resource
 
 ### Current prototype slice
 
-- Globe area: Earth globe, visible surface objects, satellite marker, optional orbit path.
+- Globe area: Earth globe, visible surface objects, satellite marker, optional projected ground track.
 - Compact controls: pause/resume, orbit-track toggle, and 1×/60×/300× speed selector, starting at 60×.
 - The vertical management interface has six tabs: Summary (default), Spacecraft, Schedule, Orders, Ground Stations, and Finance & Growth.
 - Summary presents current spacecraft status, company cash, world-state status, approximate station range, and daylight status of configured ground stations. The globe models no standalone imaging-market sites (previously shown at Singapore and the Amazon Basin); commercial value remains represented by the cell market. Finance & Growth reports the BIZ-01 ledger, -$50,000 opening balance, and standard spacecraft procurement.
@@ -216,7 +216,7 @@ This sequence is a proposal for an agent asked to begin coding; it is not a user
 1. **Scaffold is in place.** TypeScript, Vite, CesiumJS, npm scripts, and local run instructions are present.
 2. **Define geography and simulation types.** Use named coordinates and explicit units. Keep the types independent of Cesium.
 3. **Implement pure world calculations.** Add simple time advancement, one circular orbit, Earth rotation, sunlight/eclipse state, and the approximate contact rule. Keep defaults in the simulation constants module.
-4. **Render the Earth and objects.** Use the ellipsoid/globe, Natural Earth II texture, known surface points, satellite marker, and optional 3D orbit path. Convert coordinates at a single renderer boundary.
+4. **Render the Earth and objects.** Use the ellipsoid/globe, Natural Earth II texture, known surface points, satellite marker, and optional 24-hour projected ground track. Convert coordinates at a single renderer boundary.
 5. **Expose state in a small panel.** Show calculated values so frame or sunlight mistakes are visible to the user.
 6. **Settle automatic collection and scheduling.** CELL-03A/B make cell payout, priority, and VAM recovery visible for inspection. CELL-04A/B define capture execution and automatic planning. OPS-01A/B connect storage, delivery, and simplified power resources. Customer satisfaction, degradation, anomaly response, satellite design, and fleet growth still need their own explicit rules.
 
@@ -240,7 +240,7 @@ The user approved prototype policies for CELL-04A/OPS-03/OPS-01A/CELL-02A, OPS-0
 2. **Refine geospatial assets:** decide on higher-resolution/satellite imagery, country/city boundary data, license/attribution, and whether offline operation matters.
 3. **Refine orbit/time:** decide calendar time, seasons, Earth spin/solar angle, other orbit classes, and whether orbital perturbations matter.
 4. **Refine contact:** tune the 1,800 km prototype radius and decide if it varies with altitude or station/radio characteristics.
-5. **Expand visual behavior:** decide whether to draw a day/night terminator, camera selection, target footprints, or historical/future ground tracks.
+5. **Expand visual behavior:** decide whether to draw a day/night terminator, camera selection, target footprints, or richer time cues on the existing future ground track.
 
 The current prototype constants are implemented and visible in `src/simulation/constants.ts`; they remain easy to tune.
 

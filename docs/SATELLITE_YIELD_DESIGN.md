@@ -4,7 +4,7 @@
 
 ## Player-facing design
 
-Keep each satellite's current payload, battery, and next-contact readouts. Add a compact performance section beneath them, labeled **This run · since launch**. For the continuous prototype, a run means time since reset; a purchased satellite starts its own elapsed-time clock at registration.
+Keep each satellite's current payload, battery, and next-contact readouts. The Summary card also shows **Images Aboard / TEL Captures**: onboard images created by capture commands in the current uploaded TEL over all capture commands in that TEL, including completed and future commands. Delivered, deleted, and images from replaced plans do not count in the numerator. Add the compact performance section beneath these operational readouts, labeled **This run · since launch**. For the continuous prototype, a run means time since reset; a purchased satellite starts its own elapsed-time clock at registration.
 
 | Metric | Definition |
 | --- | --- |

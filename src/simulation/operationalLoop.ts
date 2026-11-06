@@ -66,6 +66,7 @@ export class OperationalLoop {
   private readonly initialFleet: SatelliteDefinition[];
   private readonly stations: SurfaceObject[];
   private readonly initialStations: SurfaceObject[];
+  private readonly baseDownlinkRatesMbps = new Map<string, number>();
   private readonly weather?: WeatherConfiguration;
   private readonly scenario: CellCaptureScenario;
   private readonly getMarket: () => CellMarketState | null;
@@ -84,6 +85,9 @@ export class OperationalLoop {
       location: { ...station.location },
       ...(station.groundStationDetails ? { groundStationDetails: { ...station.groundStationDetails } } : {}),
     }));
+    for (const station of this.stations) {
+      if (station.groundStationDetails) this.baseDownlinkRatesMbps.set(station.id, station.groundStationDetails.downlinkRateMbps);
+    }
     this.initialStations = this.stations.map(station => ({
       ...station,
       location: { ...station.location },
@@ -144,6 +148,33 @@ export class OperationalLoop {
 
   getStations(): readonly SurfaceObject[] {
     return this.stations;
+  }
+
+  /** Apply a mission's throughput constraint to the starter network without changing its baseline data. */
+  configureInitialDownlinkRateMultiplier(multiplier: number): void {
+    if (!Number.isFinite(multiplier) || multiplier <= 0 || multiplier > 1) {
+      throw new RangeError("Initial downlink multiplier must be greater than zero and at most one");
+    }
+    for (const station of this.stations) {
+      const baseRate = this.baseDownlinkRatesMbps.get(station.id);
+      if (baseRate === undefined || !station.groundStationDetails) continue;
+      station.groundStationDetails.downlinkRateMbps = baseRate * multiplier;
+    }
+    for (const station of this.initialStations) {
+      const baseRate = this.baseDownlinkRatesMbps.get(station.id);
+      if (baseRate === undefined || !station.groundStationDetails) continue;
+      station.groundStationDetails.downlinkRateMbps = baseRate * multiplier;
+    }
+  }
+
+  /** Change the weather acceptance rule for the selected mission before playback begins. */
+  configureUsableCloudThreshold(percent: number): void {
+    if (!Number.isInteger(percent) || percent < 0 || percent > 100) {
+      throw new RangeError("Usable cloud threshold must be an integer percentage");
+    }
+    if (this.runtime.elapsedSeconds !== 0) throw new Error("Mission weather can only be configured before playback");
+    if (!this.weather) throw new Error("Mission weather configuration is unavailable");
+    this.weather.usableThresholdPercent = percent;
   }
 
   validateGroundStationRegistration(station: SurfaceObject): void {
@@ -732,6 +763,7 @@ export class OperationalLoop {
           `${event.actionId}:image`,
           event.timeSeconds,
           this.imageSizeBytes,
+          action.commandId,
         );
         imageId = image.imageId;
         const deletions = this.imageryOperations.enforceStorageCapacity(market, action.satelliteId, event.timeSeconds);

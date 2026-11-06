@@ -51,6 +51,7 @@ export type RecordedCellCapture = CellCaptureEvent & {
 export type CellImageRecord = {
   imageId: string;
   captureEventId: string;
+  captureCommandId?: string;
   cellId: number;
   satelliteId: string;
   capturedAtSeconds: number;
@@ -257,6 +258,7 @@ export class CellMarketState {
     eventId: string,
     completedAtSeconds: number,
     sizeBytes = PROTOTYPE_CELL_IMAGE_SIZE_BYTES,
+    captureCommandId?: string,
   ): RecordedCellCapture {
     this.validateCellIndex(cellIndex);
     if (!satelliteId.trim()) throw new Error("Satellite ID is required for a cell capture");
@@ -282,6 +284,7 @@ export class CellMarketState {
     const image: CellImageRecord = {
       imageId: event.imageId,
       captureEventId: eventId,
+      ...(captureCommandId ? { captureCommandId } : {}),
       cellId: event.cellId,
       satelliteId,
       capturedAtSeconds: completedAtSeconds,

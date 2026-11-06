@@ -10,23 +10,37 @@
   <body>
     <section class="mission-gate" id="mission-gate" aria-labelledby="mission-gate-title">
       <div class="mission-gate-card">
-        <p class="eyebrow" id="mission-gate-kicker">MISSION SETUP · PROVISIONAL INPUTS</p>
-        <h1 id="mission-gate-title" tabindex="-1">First Delivery</h1>
-        <p id="mission-gate-copy">Deliver $2,000 in imagery within 24 simulation hours. Select one spacecraft package and starting orbit before launch.</p>
-        <div class="mission-setup-fields">
-          <label>Package<select id="mission-equipment"><option value="standard">Standard · $50M</option><option value="enhanced-slew">Enhanced slew · $55M</option></select></label>
-          <label>Altitude (km)<input id="mission-altitude" type="number" min="10" step="10" value="550" required></label>
-          <label>Inclination (°)<input id="mission-inclination" type="number" min="0" max="180" step="1" value="53" required></label>
-          <label>Ascending node (°)<input id="mission-node" type="number" min="0" max="359" step="1" value="12" required></label>
-          <label>Phase (°)<input id="mission-phase" type="number" min="0" max="359" step="1" value="8" required></label>
+        <p class="eyebrow" id="mission-gate-kicker">SELECT A MISSION</p>
+        <h1 id="mission-gate-title" tabindex="-1">Mission Select</h1>
+        <div id="mission-menu" class="mission-menu">
+          <p>Each challenge shares the same delivery objective and spacecraft setup, with a different satellite-operations constraint.</p>
+          <div id="mission-options" class="mission-options">
+            <button class="mission-option" type="button" data-mission-id="M01"><strong>First Delivery</strong><span>Baseline operating conditions</span><small>Standard weather · standard downlink</small></button>
+            <button class="mission-option" type="button" data-mission-id="M02"><strong>Narrow Link Margin</strong><span>Deliver with slower ground-station links</span><small>Downlink speed reduced to 20%</small></button>
+            <button class="mission-option" type="button" data-mission-id="M03"><strong>Clear-Sky Window</strong><span>Plan around a strict cloud limit</span><small>Cloud tolerance reduced to 10%</small></button>
+          </div>
         </div>
-        <p id="mission-setup-quote" class="mission-gate-summary"></p>
-        <p class="mission-gate-summary mission-gate-brief">$55,120,000 allowance · four starter stations · same market and weather seed on retry.</p>
-        <p id="mission-ready-status" role="status">Preparing cell market data…</p>
-        <button id="mission-market-retry" class="primary-button" type="button" hidden>RETRY MARKET DATA</button>
-        <p id="mission-debrief-findings" class="mission-debrief-findings" hidden></p>
-        <div id="mission-debrief" class="mission-debrief" hidden></div>
-        <button id="mission-gate-action" class="primary-button" type="button" disabled>START MISSION</button>
+        <div id="mission-setup" hidden>
+          <p id="mission-gate-copy">Deliver $2,000 within 24 simulation hours. Configure one spacecraft and orbit.</p>
+          <p id="mission-constraint" class="mission-gate-summary"></p>
+          <div class="mission-setup-fields">
+            <label>Package<select id="mission-equipment"><option value="standard">Standard · $50M</option><option value="enhanced-slew">Enhanced slew · $55M</option></select></label>
+            <label>Altitude (km)<input id="mission-altitude" type="number" min="10" step="10" value="550" required></label>
+            <label>Inclination (°)<input id="mission-inclination" type="number" min="0" max="180" step="1" value="53" required></label>
+            <label>Ascending node (°)<input id="mission-node" type="number" min="0" max="359" step="1" value="12" required></label>
+            <label>Phase (°)<input id="mission-phase" type="number" min="0" max="359" step="1" value="8" required></label>
+          </div>
+          <p id="mission-setup-quote" class="mission-gate-summary"></p>
+          <p class="mission-gate-summary mission-gate-brief">$55,120,000 allowance · four starter stations · same market and weather seed on retry.</p>
+          <p id="mission-ready-status" role="status">Preparing cell market data…</p>
+          <button id="mission-market-retry" class="primary-button" type="button" hidden>RETRY MARKET DATA</button>
+          <p id="mission-debrief-findings" class="mission-debrief-findings" hidden></p>
+          <div id="mission-debrief" class="mission-debrief" hidden></div>
+          <div class="mission-actions">
+            <button id="mission-change-button" class="secondary-button" type="button">CHANGE MISSION</button>
+            <button id="mission-gate-action" class="primary-button" type="button" disabled>START MISSION</button>
+          </div>
+        </div>
       </div>
     </section>
     <div id="app" class="mission-mode">
@@ -89,10 +103,11 @@
                 <svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.25"/><path d="M3 10h14M10 2.75c2 2 3 4.4 3 7.25s-1 5.25-3 7.25C8 15.25 7 12.85 7 10s1-5.25 3-7.25Z"/></svg>
                 <span>BASEMAP</span>
               </button>
-              <button class="icon-button" id="track-toggle" type="button" aria-pressed="true">
+              <button class="icon-button" id="track-toggle" type="button" aria-pressed="true" aria-label="Toggle next 24 hours ground track; updates at 00:00 and 12:00 simulation UTC">
                 <svg aria-hidden="true" viewBox="0 0 20 20"><ellipse cx="10" cy="10" rx="7.5" ry="3.5" transform="rotate(-35 10 10)"/><circle class="orbit-icon-point" cx="15.4" cy="5.4" r="1.5"/></svg>
-                <span>ORBIT TRACK</span>
+                <span>24H GROUND TRACK</span>
               </button>
+              <span class="ground-track-legend" aria-label="Ground track legend"><span><i class="sunlit-swatch"></i>Sunlit</span><span><i class="eclipse-swatch"></i>Eclipse</span></span>
               <button class="icon-button" id="pause-toggle" type="button" aria-pressed="true" aria-label="Resume simulation">
                 <svg class="pause-glyph" aria-hidden="true" viewBox="0 0 20 20"><path d="M6.5 4.5h2.5v11H6.5zM11 4.5h2.5v11H11z"/></svg>
                 <svg class="play-glyph" aria-hidden="true" viewBox="0 0 20 20"><path d="M6.5 4.25 15 10l-8.5 5.75z"/></svg>
@@ -225,10 +240,8 @@
                 <span class="table-status table-status-active" id="spacecraft-detail-state">—</span>
               </div>
               <div class="spacecraft-detail-grid">
-                <div><span>ORBIT ALTITUDE</span><strong id="spacecraft-detail-altitude">—</strong></div>
                 <div><span>INCLINATION</span><strong id="spacecraft-detail-inclination">—</strong></div>
                 <div><span>INSTALLED SLEW</span><strong id="spacecraft-detail-slew">—</strong></div>
-                <div><span>SUBSATELLITE POINT</span><strong id="spacecraft-detail-coordinate">—</strong></div>
                 <div><span>NEAREST STATION</span><strong id="spacecraft-detail-station">—</strong></div>
                 <div><span>BATTERY</span><strong id="spacecraft-detail-battery">—</strong></div>
                 <div><span>POWER STATE</span><strong id="spacecraft-detail-power-state">—</strong></div>

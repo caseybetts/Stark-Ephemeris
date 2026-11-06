@@ -1,7 +1,7 @@
 import type { SatelliteOperationalTimeSnapshot, SatelliteYieldSnapshot } from "../simulation/satellitePerformance.ts";
 import { formatPercent } from "../format.ts";
 
-type ChartEntry = { label: string; value: number; color: string; detail?: string };
+type ChartEntry = { label: string; value: number; color: string; detail?: string; title?: string };
 
 const money = (cents: number): string => (cents / 100).toLocaleString(undefined, {
   style: "currency",
@@ -29,6 +29,7 @@ function setDonut(donut: HTMLElement, entries: readonly ChartEntry[], total: num
 function renderLegend(list: HTMLElement, entries: readonly ChartEntry[], total: number, unit: string): void {
   list.replaceChildren(...entries.map(entry => {
     const item = document.createElement("li");
+    if (entry.title) item.title = entry.title;
     const marker = document.createElement("span");
     marker.className = "performance-legend-marker";
     marker.style.backgroundColor = entry.color;
@@ -125,7 +126,12 @@ export function mountSatellitePerformanceView(container: HTMLElement): (
 
     const outcomeEntries: ChartEntry[] = [
       { label: "Paid clear", value: yieldSnapshot.paidClearCount, color: "#72d9bd" },
-      { label: "Awaiting downlink", value: yieldSnapshot.pendingCount, color: "#6eb9e8" },
+      {
+        label: "Awaiting downlink",
+        value: yieldSnapshot.pendingCount,
+        color: "#6eb9e8",
+        title: "Current count of captured images still onboard. At accelerated playback, an image may downlink between display updates.",
+      },
       { label: "Deleted", value: yieldSnapshot.deletedCount, color: "#c98472" },
       { label: "Cloud rejected", value: yieldSnapshot.cloudRejectedCount, color: "#bba2e6" },
       { label: "Other failure", value: yieldSnapshot.otherFailureCount, color: "#d89c51" },

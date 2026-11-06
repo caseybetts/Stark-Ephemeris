@@ -28,6 +28,14 @@ const marketPriceUnitLabels: Readonly<Record<string, string>> = {
 const marketPriceUnitLabel = (unit: string) => marketPriceUnitLabels[unit] ?? unitLabel(unit);
 const coordinate = (latitude: number, longitude: number) => `${Math.abs(latitude).toFixed(3)}°${latitude >= 0 ? "N" : "S"}, ${Math.abs(longitude).toFixed(3)}°${longitude >= 0 ? "E" : "W"}`;
 const PAGE_SIZE = 10;
+type CellValueMetric = "maximumPayout" | "availablePayout" | "maximumPriority" | "availablePriority";
+type CellValueSnapshot = Record<CellValueMetric, Float64Array>;
+const CELL_VALUE_METRICS: ReadonlyArray<{ id: CellValueMetric; label: string }> = [
+  { id: "maximumPayout", label: "Maximum payout (USD)" },
+  { id: "availablePayout", label: "Available payout (USD)" },
+  { id: "maximumPriority", label: "Maximum priority (points)" },
+  { id: "availablePriority", label: "Available priority (points)" },
+];
 
 type CellMarketActions = {
   nowSeconds: () => number;
@@ -99,6 +107,13 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       <label>Show<select id="cell-filter"><option value="coverage">All eligible cells</option><option value="cityCount">With cities & towns</option><option value="portCount">With ports</option><option value="urban">With urban footprint</option><option value="border">Land borders</option><option value="coastal">Coastal cells</option><option value="cropland">With cropland</option><option value="pasture">With pasture</option><option value="powerPlants">With power plants</option><option value="oilPipelines">With oil pipelines</option><option value="militarySites">With military installations</option><option value="dataCenters">With data centers</option><option value="researchSites">With NOAA research sites</option><option value="monuments">With World Heritage sites</option></select></label>
       <label>Sort by<select id="cell-sort"><option value="cityPopulation">City population ↓</option><option value="urban">Urban footprint ↓</option><option value="cityCount">City count ↓</option><option value="portCount">Port count ↓</option><option value="cropland">Cropland area ↓</option><option value="pasture">Pasture area ↓</option><option value="powerPlants">Power plant count ↓</option><option value="powerCapacity">Power capacity ↓</option><option value="oilPipelines">Oil pipeline count ↓</option><option value="militarySites">Military installations ↓</option><option value="dataCenters">Data centers ↓</option><option value="researchSites">NOAA research sites ↓</option><option value="monuments">World Heritage sites ↓</option><option value="coverage">Cell ID ↑</option></select></label>
     </div>
+    <div class="cell-controls cell-value-controls">
+      <label>Sort market by<select id="cell-market-sort"><option value="">Geographic sort</option><option value="maximumPayout">Maximum payout ↓</option><option value="availablePayout">Available payout ↓</option><option value="maximumPriority">Maximum priority ↓</option><option value="availablePriority">Available priority ↓</option></select></label>
+      <label>Value filter<select id="cell-value-filter"><option value="">No value filter</option>${CELL_VALUE_METRICS.map(metric => `<option value="${metric.id}">${metric.label}</option>`).join("")}</select></label>
+      <label>Minimum<input id="cell-value-min" type="number" min="0" step="any" inputmode="decimal" aria-label="Minimum value filter" /></label>
+      <label>Maximum<input id="cell-value-max" type="number" min="0" step="any" inputmode="decimal" aria-label="Maximum value filter" /></label>
+    </div>
+    <p class="cell-layer-note" id="cell-value-note" aria-live="polite">Value limits are inclusive. Payout limits use USD; priority limits use points.</p>
     <p class="cell-layer-note" id="cell-layer-note"></p>
     <div class="cell-workspace">
       <section class="cell-results" aria-label="Eligible market cells">
@@ -246,6 +261,10 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   let lastRefreshedAt = Number.NaN;
   let lastCategoryRefreshAt = Number.NEGATIVE_INFINITY;
   const ranks = new Map<string, Uint32Array>();
+  let marketValues: CellValueSnapshot | null = null;
+  let marketValuesAtSeconds = Number.NaN;
+  let marketValuesPriorityKey = "";
+  let filterRequestId = 0;
   const map = await createCellLayer(viewer, grid, (index, route) => {
     selectCell(index, false, route);
     document.querySelector<HTMLButtonElement>("#tab-orders")!.click();
@@ -270,7 +289,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       ramp.dataset.palette = "value";
       scale.textContent = "Log scale · blue low to red high";
       planningKey.hidden = true;
-      element("cell-layer-note").textContent = "Centered dot colors show each cell’s current total available priority across all categories, adjusted by its recovery (VAM), from blue (lower) through green, yellow, and orange to red (higher).";
+      element("cell-layer-note").textContent = "Centered dot colors show each cell’s current total available priority across all categories, adjusted by its recovery (VAM), from blue (lower) through green, yellow, and orange to red (higher). To show schedule outlines, choose Scheduled cells in Planning.";
       return;
     }
     if (lastPlanningLayer === "maximum-value") {
@@ -278,7 +297,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       ramp.dataset.palette = "value";
       scale.textContent = "Log scale · blue low to red high";
       planningKey.hidden = true;
-      element("cell-layer-note").textContent = "Centered dot colors show each cell’s maximum potential payout at full VAM, from blue (lower) through green, yellow, and orange to red (higher); this is not current available value or realized revenue.";
+      element("cell-layer-note").textContent = "Centered dot colors show each cell’s maximum potential payout at full VAM, from blue (lower) through green, yellow, and orange to red (higher); this is not current available value or realized revenue. To show schedule outlines, choose Scheduled cells in Planning.";
       return;
     }
     planningKey.hidden = false;
@@ -316,22 +335,88 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     updateMapLayerLegend();
   };
 
-  function applyFilters() {
-    const sort = element<HTMLSelectElement>("cell-sort").value as CellLayer;
+  const marketValue = (metric: CellValueMetric, index: number): number => marketValues![metric][index];
+  const marketPriorityKey = () => market.getPlayerPriorityRates().map(rate => `${rate.categoryId}:${rate.pointsPerUnit}`).join("|");
+
+  async function buildMarketValues(requestId: number, now: number, priorityKey: string): Promise<void> {
+    const values: CellValueSnapshot = {
+      maximumPayout: new Float64Array(grid.ids.length),
+      availablePayout: new Float64Array(grid.ids.length),
+      maximumPriority: new Float64Array(grid.ids.length),
+      availablePriority: new Float64Array(grid.ids.length),
+    };
+    // Keep the Orders controls responsive while deriving the full-grid snapshot.
+    const chunkSize = 2_000;
+    for (let start = 0; start < grid.ids.length; start += chunkSize) {
+      if (requestId !== filterRequestId) return;
+      const end = Math.min(start + chunkSize, grid.ids.length);
+      for (let index = start; index < end; index++) {
+        const cell = market.calculateCell(index, now);
+        values.maximumPayout[index] = cell.maximumPayoutUsd;
+        values.availablePayout[index] = cell.availablePayoutUsd;
+        values.maximumPriority[index] = cell.maximumPriorityPoints;
+        values.availablePriority[index] = cell.availablePriorityPoints;
+      }
+      if (end < grid.ids.length) await new Promise<void>(resolve => setTimeout(resolve, 0));
+    }
+    if (requestId !== filterRequestId) return;
+    marketValues = values;
+    marketValuesAtSeconds = now;
+    marketValuesPriorityKey = priorityKey;
+    ranks.clear();
+  }
+
+  async function applyFilters() {
+    const requestId = ++filterRequestId;
+    const geographicSort = element<HTMLSelectElement>("cell-sort").value as CellLayer;
+    const marketSort = element<HTMLSelectElement>("cell-market-sort").value as CellValueMetric | "";
+    const sort = marketSort || geographicSort;
     const filter = element<HTMLSelectElement>("cell-filter").value as CellLayer;
+    const valueFilter = element<HTMLSelectElement>("cell-value-filter").value as CellValueMetric | "";
+    const minimumInput = element<HTMLInputElement>("cell-value-min");
+    const maximumInput = element<HTMLInputElement>("cell-value-max");
+    const minimum = minimumInput.value === "" ? null : Number(minimumInput.value);
+    const maximum = maximumInput.value === "" ? null : Number(maximumInput.value);
     const query = element<HTMLInputElement>("cell-search").value.trim().toLocaleLowerCase();
-    let ranked = ranks.get(sort);
+    if (valueFilter && ((minimum !== null && (!Number.isFinite(minimum) || minimum < 0))
+      || (maximum !== null && (!Number.isFinite(maximum) || maximum < 0))
+      || (minimum !== null && maximum !== null && minimum > maximum))) {
+      minimumInput.setCustomValidity("Enter a non-negative range with the minimum no greater than the maximum");
+      maximumInput.setCustomValidity("Enter a non-negative range with the maximum no less than the minimum");
+      minimumInput.reportValidity();
+      return;
+    }
+    minimumInput.setCustomValidity("");
+    maximumInput.setCustomValidity("");
+    const needsMarketValues = Boolean(marketSort || valueFilter);
+    if (needsMarketValues) {
+      const now = nowSeconds();
+      const priorityKey = marketPriorityKey();
+      if (!marketValues || marketValuesAtSeconds !== now || marketValuesPriorityKey !== priorityKey) {
+        element("cell-results-count").textContent = "Calculating cell values…";
+        await buildMarketValues(requestId, now, priorityKey);
+        if (requestId !== filterRequestId || !marketValues) return;
+      }
+    }
+    const rankKey = needsMarketValues ? `${sort}|${marketValuesAtSeconds}|${marketValuesPriorityKey}` : sort;
+    let ranked = ranks.get(rankKey);
     if (!ranked) {
       ranked = Uint32Array.from({ length: grid.ids.length }, (_, i) => i);
-      if (sort !== "coverage") ranked.sort((a, b) => grid.value(b, sort) - grid.value(a, sort) || grid.ids[a] - grid.ids[b]);
-      ranks.set(sort, ranked);
+      if (marketSort) ranked.sort((a, b) => marketValue(marketSort, b) - marketValue(marketSort, a) || grid.ids[a] - grid.ids[b]);
+      else if (geographicSort !== "coverage") ranked.sort((a, b) => grid.value(b, geographicSort) - grid.value(a, geographicSort) || grid.ids[a] - grid.ids[b]);
+      ranks.set(rankKey, ranked);
     }
     const coordinates = query.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
     const coordinateIndex = coordinates ? grid.indexAt(Number(coordinates[1]), Number(coordinates[2])) : null;
-    filtered = ranked.filter(i => grid.value(i, filter) > 0 && (!query ||
+    filtered = ranked.filter(i => grid.value(i, filter) > 0 && (!valueFilter ||
+      ((minimum === null || marketValue(valueFilter, i) >= minimum) && (maximum === null || marketValue(valueFilter, i) <= maximum))) && (!query ||
       (coordinateIndex !== null ? i === coordinateIndex :
         cellLabel(grid.ids[i]).toLowerCase().includes(query) || Boolean(grid.searchNames.get(grid.ids[i])?.includes(query)))));
     page = 0;
+    const snapshotNote = element("cell-value-note");
+    snapshotNote.textContent = needsMarketValues
+      ? `Value sorting and filtering use the market snapshot at simulation day ${amount(marketValuesAtSeconds / 86_400)}. Payout limits use USD; priority limits use points.`
+      : "Value limits are inclusive. Payout limits use USD; priority limits use points.";
     renderRows();
   }
 
@@ -339,6 +424,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     const body = element<HTMLTableSectionElement>("cell-table-body");
     const rows = [];
     visiblePayouts = [];
+    const useMarketSnapshot = Boolean(marketValues && (element<HTMLSelectElement>("cell-market-sort").value || element<HTMLSelectElement>("cell-value-filter").value));
     for (const index of filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)) {
       const id = grid.ids[index], bounds = cellBounds(id);
       const row = document.createElement("tr");
@@ -352,9 +438,11 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
       place.textContent = mapped ? [...new Set(mapped.map(p => p.name))].join(" · ") : "No named place in source";
       name.append(button, place);
       const position = document.createElement("td"); position.textContent = coordinate(bounds.latitudeDeg, bounds.longitudeDeg);
-      const cellValue = market.calculateCell(index, nowSeconds());
-      const maximum = document.createElement("td"); maximum.textContent = money(cellValue.maximumPayoutUsd);
-      const available = document.createElement("td"); available.textContent = money(cellValue.availablePayoutUsd);
+      const cellValue = useMarketSnapshot ? null : market.calculateCell(index, nowSeconds());
+      const maximumValue = useMarketSnapshot ? marketValue("maximumPayout", index) : cellValue!.maximumPayoutUsd;
+      const availableValue = useMarketSnapshot ? marketValue("availablePayout", index) : cellValue!.availablePayoutUsd;
+      const maximum = document.createElement("td"); maximum.textContent = money(maximumValue);
+      const available = document.createElement("td"); available.textContent = money(availableValue);
       visiblePayouts.push({ index, maximum, available });
       const cities = document.createElement("td"); cities.textContent = count(grid.cityCounts[index]);
       const ports = document.createElement("td"); ports.textContent = count(grid.portCounts[index]);
@@ -374,7 +462,7 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     }
     if (!rows.length) {
       const row = document.createElement("tr"), message = document.createElement("td"); message.colSpan = 12;
-      message.textContent = "No eligible cells match. Try a mapped city, port, cell ID, or latitude, longitude.";
+      message.textContent = "No eligible cells match. Adjust the search, mapped-attribute, or value filters.";
       row.append(message); rows.push(row);
     }
     body.replaceChildren(...rows);
@@ -436,6 +524,10 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   let refreshSelectedImages: (() => void) | null = null;
   function refreshEconomy(force = false) {
     const now = nowSeconds();
+    if (force) {
+      marketValues = null;
+      if (element<HTMLSelectElement>("cell-market-sort").value || element<HTMLSelectElement>("cell-value-filter").value) void applyFilters();
+    }
     // The globe controls are available on every management tab, so keep its operational
     // overlays current even while the Orders panel is hidden or simulation time is paused.
     map.setOperationalOverlay(actions.getCellOperationalVisualization(), actions.getSatelliteEarthFixedKm());
@@ -458,10 +550,16 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
     element("cell-transferred-bytes").textContent = `${(imagery.transferredBytes / (1024 * 1024)).toLocaleString(undefined, { maximumFractionDigits: 1 })} MiB transferred`;
     element("cell-lost-imagery-value").textContent = money(imagery.lostValuePotentialUsd);
     element("cell-deleted-imagery-count").textContent = `${count(imagery.deletedCount)} images deleted`;
+    const useMarketSnapshot = Boolean(marketValues && (element<HTMLSelectElement>("cell-market-sort").value || element<HTMLSelectElement>("cell-value-filter").value));
     for (const display of visiblePayouts) {
-      const value = market.calculateCell(display.index, now);
-      display.maximum.textContent = money(value.maximumPayoutUsd);
-      display.available.textContent = money(value.availablePayoutUsd);
+      if (useMarketSnapshot) {
+        display.maximum.textContent = money(marketValue("maximumPayout", display.index));
+        display.available.textContent = money(marketValue("availablePayout", display.index));
+      } else {
+        const value = market.calculateCell(display.index, now);
+        display.maximum.textContent = money(value.maximumPayoutUsd);
+        display.available.textContent = money(value.availablePayoutUsd);
+      }
     }
     renderSelectedEconomy();
   }
@@ -647,10 +745,26 @@ async function mount(viewer: Viewer, grid: CellGrid, actions: CellMarketActions,
   let searchTimer: ReturnType<typeof setTimeout>;
   element("cell-search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(applyFilters, 160); });
   element("cell-search").addEventListener("keydown", event => {
-    if (event.key === "Enter") { clearTimeout(searchTimer); applyFilters(); if (filtered.length) selectCell(filtered[0], true); }
+    if (event.key === "Enter") {
+      clearTimeout(searchTimer);
+      void applyFilters().then(() => {
+        if (element<HTMLInputElement>("cell-value-min").checkValidity()
+          && element<HTMLInputElement>("cell-value-max").checkValidity()
+          && filtered.length) selectCell(filtered[0], true);
+      });
+    }
   });
   element("cell-filter").addEventListener("change", applyFilters);
   element("cell-sort").addEventListener("change", applyFilters);
+  element("cell-market-sort").addEventListener("change", applyFilters);
+  element("cell-value-filter").addEventListener("change", () => {
+    const metric = CELL_VALUE_METRICS.find(value => value.id === element<HTMLSelectElement>("cell-value-filter").value);
+    element<HTMLInputElement>("cell-value-min").setAttribute("aria-label", `Minimum ${metric?.label.toLowerCase() ?? "value filter"}`);
+    element<HTMLInputElement>("cell-value-max").setAttribute("aria-label", `Maximum ${metric?.label.toLowerCase() ?? "value filter"}`);
+    applyFilters();
+  });
+  element("cell-value-min").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(applyFilters, 160); });
+  element("cell-value-max").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(applyFilters, 160); });
   element("cell-prev").addEventListener("click", () => { if (page > 0) { page--; renderRows(); } });
   element("cell-next").addEventListener("click", () => { if ((page + 1) * PAGE_SIZE < filtered.length) { page++; renderRows(); } });
   for (const source of grid.metadata.sources) {

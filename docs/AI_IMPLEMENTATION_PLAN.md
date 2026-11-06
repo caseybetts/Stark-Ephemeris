@@ -2,7 +2,7 @@
 
 This is the project's technical work inventory and implementation plan. Existing task IDs and headings are preserved for cross references. The human owns the experience priorities in [Your work list](PENDING_CHANGES.md); agents maintain the technical steps and evidence here.
 
-**Direction update (2026-11-03):** Replayable, time-limited challenges are the primary gameplay direction. RUN-03 technical acceptance and the UX-05/UI-04 responsive pass are complete; the next step is the human-led RUN-04 M01 playtest. The [challenge development plan](CHALLENGE_RUNS.md) distinguishes approved experience from proposed mechanics. The [technical sequence](#suggested-starting-order) below supersedes earlier dated handoffs.
+**Direction update (2026-11-06):** Replayable, time-limited challenges are the primary gameplay direction. RUN-03, the UX-05/UI-04 responsive pass, and three human-led M01 playthroughs are complete. RUN-05 adds a selectable mission menu with provisional one-constraint variants; future FLEET-04 records the planned multi-spacecraft challenge work. The [challenge development plan](CHALLENGE_RUNS.md) distinguishes agreed experience from provisional mission values. The [technical sequence](#suggested-starting-order) below supersedes earlier dated handoffs.
 
 **Design update (2026-10-15):** BIZ-02's standard purchase flow, pre-launch orbit selection, and shared antenna handoff are implemented; the production build passes. The user also approved prototype policies for capture completion, contact episodes, image retention/transfer, capture-time value quotes, and OPS-01B power behavior. Capacity and image-size values, physical capture limits, final power balance, and planner forecasts of antenna contention remain open.
 
@@ -30,7 +30,7 @@ The [roadmap](ROADMAP.md) owns the high-level sequence. This menu maps that sequ
 
 | Roadmap area | Work items and current boundary |
 | --- | --- |
-| Layer 1: GUI and visualizations, Global Order Deck | Management tabs, CELL-03A/B, and priority/value/schedule/imaging map prototypes are implemented. Value sorting/filtering and map behavior review remain; UI-03 is a ready, independent cleanup. Broader polish belongs to Layer 4. |
+| Layer 1: GUI and visualizations, Global Order Deck | Management tabs, CELL-03A/B, priority/value/schedule/imaging map prototypes, and value-aware table sorting/filtering are implemented. Focused map behavior review remains; UI-03 is complete. Broader polish belongs to Layer 4. |
 | Layer 1: Scheduling behavior | CELL-04A/B provide capture execution and automatic TEL planning for every spacecraft, preserving committed work through contact uploads. CELL-04C adds bounded search over tentative work. |
 | Layer 2: Ground contact dynamics | OPS-03 provides approximate contacts and one TEL upload per contact episode; OPS-01A provides contact-limited transfer. OPS-04 verifies their integrated behavior. BIZ-02 adds one spacecraft per station antenna with pass-ordered handoff. Dynamic outages belong to Layer 3. |
 | Layer 2: Basic Revenue Generation | CELL-02/CELL-02A and OPS-01A implement capture-to-downlink settlement with sample inputs. Full company accounting is BIZ-01 in Layer 3. |
@@ -39,12 +39,12 @@ The [roadmap](ROADMAP.md) owns the high-level sequence. This menu maps that sequ
 | Layer 3: Spacecraft building and launching | BIZ-02 owns procurement and launch choices; FLEET-02B adds paid slew upgrades for future launches. FLEET-03 now covers dynamic orbital maneuvers and orbit-model support. |
 | Layer 3: Outages, errors, and anomalies | OPS-02 owns degradation/anomaly response and the design of operational outages, including missed contacts. |
 | Layer 4: Playable attributes and revenue tuning | TUNE-01 coordinates final category/exposure review, balance, and operational scenario values after the relevant mechanics work. |
-| Layer 4: GUI refinement | UI-04 covers usability and operational explanations; remaining CELL-03 inspection tools and UI-03 can be selected earlier when useful. |
+| Layer 4: GUI refinement | UI-04 covers usability and operational explanations; focused CELL-03 map review can be selected earlier when useful. |
 | Release support, outside the four feature layers | PLATFORM-01 save/load and PLATFORM-02 publishing remain separately selectable. |
 
 **Current selection status:** OPS-04, CELL-04B, and the approved prototype policy closure for CELL-04A, OPS-03, OPS-01A, CELL-02A, and OPS-01B are complete. OPS-01B has passed its deterministic verification and local GUI walkthrough; see its [implementation/verification guide](OPS_01B_POWER_DESIGN.md). This sequence is a work proposal, not a change to gameplay agreements.
 
-**Ready alternative:** UI-03 is a small, specified table change. Do not interpret remaining design work as permission to invent pricing, contact, or failure policies.
+**Completed independent slice:** UI-03's station-location row identifier is implemented. Do not interpret remaining design work as permission to invent pricing, contact, or failure policies.
 
 ### OPS-04 — Verify the integrated operational loop
 
@@ -137,7 +137,7 @@ Do not select these as pending work unless a new defect is reported:
 
 - Browser app scaffold using TypeScript, Vite, and CesiumJS.
 - Static Earth globe with Natural Earth II imagery and sample ground locations.
-- One circular satellite orbit, moving satellite marker, optional orbit track, pause, and simulation speed controls.
+- One circular satellite orbit, moving satellite marker, optional 24-hour projected ground track, pause, and simulation speed controls.
 - Prototype sunlight, satellite eclipse, sub-satellite coordinates, and approximate ground-station range calculations with status readouts.
 - Orbit-track flicker fix and Earth occlusion for satellite and surface markers.
 - UI-01 management tabs and Summary view completed 2026-10-02: the globe sits above Summary, Spacecraft, Orders, Ground Stations, and Finance & Growth; switching tabs leaves the running simulation intact.
@@ -145,7 +145,7 @@ Do not select these as pending work unless a new defect is reported:
 - FLEET-01 Spacecraft table and selection view completed 2026-10-02: the starting fleet remains one spacecraft, while the collection, per-spacecraft world snapshots, table/detail views, and globe marker/orbit selection support additional configured spacecraft.
 - CELL-01/CELL-03 geographic foundation completed 2026-10-05: 363,779 eligible ¼° land/coastal cells and fourteen sourced datasets, including military installations, data centers, NOAA research stations, and UNESCO World Heritage points. Orders has search, filters, sorting, pagination, cell details, and sixteen cell map modes. CELL-03A/B added a sample-priced market readout, cell payout/priority breakdown, and controlled collection/recovery preview on 2026-10-06; category approval, final rates, and market trends remain open; TEL capture execution and automatic greedy continuation are implemented as prototypes.
 
-## Ready for implementation
+## Independently completed slice
 
 ### UI-03 — Use station location as the table identifier
 
@@ -236,9 +236,9 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 **Done when:** One spacecraft receives a generated TEL at contact and repeatedly executes feasible work until the next contact. Ground priority changes cannot silently change the onboard TEL. Segment transitions remain feasible, and planned idle periods have an explicit reason. The planner works with the same feasibility rules used by execution.
 
-**Remaining:** Richer skipped-candidate explanations and final access/collection/balance rules remain open. CELL-04C bounded search is implemented; current 60-second candidate sampling, two-minute segments, and clear-weather capture settings are prototype defaults.
+**Remaining:** Richer skipped-candidate explanations and final access/collection/balance rules remain open. CELL-04C bounded search is implemented; current 30-second candidate sampling, two-minute segments, and clear-weather capture settings are prototype defaults.
 
-**Implemented prototype:** The operations loop forecasts the next two distinct available contacts and automatically builds a ground-side plan from the first to the second for each spacecraft. It searches two-minute segments, samples candidate opportunities every 60 seconds, scores available priority at projected completion time, and carries planned VAM resets and pointing forward between captures. It uses CELL-04A's shared feasibility function and the current player category priorities. Ties resolve by higher priority, earlier start, then lower cell ID. When a segment has no feasible positive-priority target, an explicit idle TEL command records why. The plan remains ground-side until OPS-03 uploads it at an available contact; uploaded commands are unchanged by later priority edits. Orders remains the place to select a cell and optionally add an individual capture target.
+**Implemented prototype:** The operations loop forecasts the next two distinct available contacts and automatically builds a ground-side plan from the first to the second for each spacecraft. It searches two-minute segments, samples candidate opportunities every 30 seconds, scores available priority at projected completion time, and carries planned VAM resets and pointing forward between captures. It uses CELL-04A's shared feasibility function and the current player category priorities. Ties resolve by higher priority, earlier start, then lower cell ID. When a segment has no feasible positive-priority target, an explicit idle TEL command records why. The plan remains ground-side until OPS-03 uploads it at an available contact; uploaded commands are unchanged by later priority edits. Orders remains the place to select a cell and optionally add an individual capture target.
 
 **Automatic continuation:** The operations loop refreshes on action/capture completion, player priority changes, and each 120-second simulation-time boundary. At upload, active work and the next capture (including its active wait) remain committed while the later suffix is replaced. Successive contact cycles are verified with one large advance and equivalent partitioned advances. Segment start/advance behavior, sample interval, tie-breaking, and no-target idle behavior are prototype choices, not final balance decisions. Access geometry and collection settings remain provisional under CELL-04A.
 
@@ -262,20 +262,22 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 ### CELL-03 — Show the cell market in Orders
 
-**Status:** Partial — geographic visualization, CELL-03A/B readouts, and maximum/current priority, current dollar value, scheduled-cell, and active-imaging map prototypes are implemented. Value-aware table tools and focused map behavior review remain.
+**Status:** Partial — geographic visualization, CELL-03A/B readouts, and maximum/current priority, current dollar value, scheduled-cell, and active-imaging map prototypes are implemented. Value-aware table sorting/filtering is implemented; focused map behavior review remains.
 **Implemented:** Toggleable imagery tiles for eligibility and fourteen sourced geographic datasets, plus a mapped oil pipeline route overlay, cell selection on the globe, search, filters, sorting, pagination, and details in Orders. A read-only sample market price/cadence table, editable priority rates, numeric payout columns, selected-cell category calculations, and manual collection/recovery preview are visible. No globe entity is created for each cell.
 
 **Agreed:** The Orders tab presents the cell market, with toggleable globe layers for category exposure, calculated cell value, or repeat-purchase/freshness state once defined. The grid has about 1.04 million cells before land masking; the renderer must not create one globe entity per cell.
 
-**Agreed future UI requirement (2026-10-06):** The Cell table should eventually support sorting and filtering by calculated dollar value, maximum priority, and current/available priority, in addition to its existing geographic-attribute sorting and filtering. Cells on the globe should have selectable color modes that show dollar value, maximum priority, or current/available priority. “Maximum priority” is the sum of category priority points at VAM 1; “current priority” is the calculated available priority after each category's VAM is applied.
+**Agreed UI requirement (2026-10-06):** The Cell table supports sorting and filtering by calculated dollar value, maximum priority, and current/available priority, in addition to its geographic-attribute sorting and filtering. Cells on the globe have selectable color modes that show dollar value, maximum priority, or current/available priority. “Maximum priority” is the sum of category priority points at VAM 1; “current priority” is the calculated available priority after each category's VAM is applied.
 
-**Work:** Add value-aware table sorting/filtering; review category fill and Planning outlines against shared simulation state, including paused changes, spacecraft selection, switching management tabs, pending versus uploaded plans, and active capture transitions. Freshness coloring remains a separate future layer. Explicitly labeled sample inputs are sufficient; final category review and TUNE-01 balance are separate work.
+**Work:** Value-aware table sorting/filtering is complete. Review category fill and Planning outlines against shared simulation state, including paused changes, spacecraft selection, switching management tabs, pending versus uploaded plans, and active capture transitions. Freshness coloring remains a separate future layer. Explicitly labeled sample inputs are sufficient; final category review and TUNE-01 balance are separate work.
 
 **Done when:** The view and globe map reflect the same simulation state, support cell selection, expose sorting/filtering for calculated value and priority totals, and independently show one priority category as fill and operational planning as outlines.
 
-**Map implementation:** Land Categories selects any category that contributes to priority and colors each cell by that category's current available-priority contribution with a translucent yellow-to-teal fill. Coastal cells are included as a proposed binary-priority category. The separate Planning dropdown controls orange scheduled-cell outlines or the active imaging target/line; it does not replace fill. Both controls work independently and overlays refresh across tabs. See the [visualization design](CELL_VISUALIZATION_DESIGN.md). Production build passes; numeric table filters and palette tuning remain open.
+**Map implementation:** Land Categories selects any category that contributes to priority and colors each cell by that category's current available-priority contribution with a translucent yellow-to-teal fill. Coastal cells are included as a proposed binary-priority category. The separate Planning dropdown controls orange scheduled-cell outlines or the active imaging target/line; it does not replace fill. Both controls work independently and overlays refresh across tabs. See the [visualization design](CELL_VISUALIZATION_DESIGN.md). Production build passes; palette tuning remains open.
 
-**Remaining, in order:** Review category fill and planning outlines during normal revenue play; specify and add numeric value/priority sorting and filtering; consider freshness coloring separately. Geographic display conventions and source caveats remain in [Cell grid data](CELL_DATA.md).
+**Value-aware table tools (implemented 2026-11-06):** The Orders table can sort by maximum/available payout and maximum/available priority, and filter by inclusive minimum/maximum values for any selected measure. Payout thresholds use USD; priority thresholds use points. Metric values are prepared in yielding chunks for the full grid, cached for the snapshot's simulation time and player priority rates, and kept consistent across the displayed rows. The UI labels the snapshot time. No gameplay or market rules changed.
+
+**Remaining, in order:** Review category fill and planning outlines during normal revenue play; consider freshness coloring separately. Geographic display conventions and source caveats remain in [Cell grid data](CELL_DATA.md).
 
 ### FLEET-03 — Add dynamic orbital maneuvers and orbit-model support
 
@@ -324,6 +326,16 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 **Later tuning:** The surcharge, slew rate, and settling time are approved starter inputs, with standard subsystem settings retained. Final balance can be adjusted after playtesting. BIZ-02's behavioral review remains pending and is carried into the implementation handoff; broader upgrade variety is deferred.
 
 **Dependencies:** FLEET-02A, BIZ-01 financial accounting, and BIZ-02 procurement.
+
+### FLEET-04 — Add multi-spacecraft challenge setup and fleet evaluation
+
+**Status:** Planned later; not part of M01 or the current mission-menu prototype. Existing procurement, per-spacecraft operations, fleet views, and shared antenna allocation provide a foundation, but challenge setup and outcome reporting still assume one initial spacecraft in several places.
+
+**Work:** After the human chooses a fleet-focused mission experience, design a mission definition that can authorize and fund more than one initial spacecraft. Extend setup validation, clean retry/reset, mission performance summaries, and debrief evaluation to account for the configured fleet while retaining per-spacecraft visibility. Reuse existing shared antenna/contact behavior and verify simultaneous fleet operations do not double-allocate a station.
+
+**Dependencies:** RUN-05 mission selection and setup flow; a human-selected multi-spacecraft mission brief and its setup choices. Keep M01 as one spacecraft unless that scope is explicitly changed.
+
+**Done when:** A designed fleet mission can configure, launch, run, evaluate, and retry its authorized spacecraft as one challenge; each craft's contribution and shared-station contention remain understandable; M01 continues to start with exactly one spacecraft.
 
 ### OPS-01 — Model onboard storage, power, and downlink operations
 
@@ -512,7 +524,7 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 ### YIELD-01 — Per-satellite collection yield on Summary
 
-**Status:** Implemented prototype — per-satellite outcomes, ledger-linked delivered yield, deletion counts, and accessible charts are present.
+**Status:** Implemented prototype — per-satellite outcomes, ledger-linked delivered yield, deletion counts, accessible charts, and the Images Aboard / TEL Captures ratio on each Summary spacecraft card are present. The ratio was moved out of selected-spacecraft details; the detail card no longer repeats altitude or subsatellite point.
 
 **Work:** Record structured per-attempt outcomes and observed cloud cover; connect them to image deletion/delivery and the existing revenue ledger. Add collection-attempt count, paid clear yield (<=30% observed cloud and positive settled revenue), delivered dollars, and deleted-image count to each Summary spacecraft card. Show pending delivery and other failures alongside successful, cloudy, and deleted outcomes so chart counts reconcile.
 
@@ -554,9 +566,9 @@ For each cell-category, maximum payout is market unit price × eligible exposure
 
 **Open choice:** Confirm required asset/data attributions before treating the public site as release-ready.
 
-## First playtest follow-up strategy (2026-11-04)
+## Playtest follow-up strategy (updated 2026-11-06)
 
-Source: [first M01 playthrough](PLAYTEST_NOTES.md#2026-11-04--first-m01-playthrough). The human reports a successful basic-playability session; this does not establish final balance. PT-01 and PT-02 are implemented. PT-03 remains a proposed design pending review.
+Sources: [first M01 playthrough](PLAYTEST_NOTES.md#2026-11-04--first-m01-playthrough) and [second M01 playthrough](PLAYTEST_NOTES.md#2026-11-05--second-playthrough). Both runs succeeded. Address concrete usability requests and reproducible behavior; the sessions do not establish final balance.
 
 ### PT-01 — Apply map defaults when changing management tabs
 
@@ -598,11 +610,43 @@ Source: [first M01 playthrough](PLAYTEST_NOTES.md#2026-11-04--first-m01-playthro
 
 **Verification:** Production TypeScript/build passed. Transfer accounting uses the existing single fastest active station per spacecraft, so overlapping station windows are not double counted. Visual walkthrough remains available during playtesting.
 
-**Planning scope:** PT-01, PT-02, and PT-04 are implemented. PT-03's metric definitions remain proposed pending review. Leave broad tuning and second-mission choices for further human feedback.
+### PT-05 — Clarify orbit, eclipse, and onboard image state
+
+**Status:** Implemented 2026-11-06.
+
+**Source:** [Second M01 playthrough](PLAYTEST_NOTES.md#2026-11-05--second-playthrough).
+
+**Implemented:** The Spacecraft detail shows `onboard images / current TEL capture commands`. Images carry the ID of the capture command that created them, so the numerator includes only still-onboard images belonging to the current TEL; delivered, deleted, manually previewed, and prior-plan images are excluded. The denominator includes all cell-capture commands in the current uploaded TEL, completed and future, and excludes waits. The orbit display now shows 120 degrees of future path and 120 degrees of recent path in distinct brightness, leaving a visible gap around the remainder of the orbit. The Awaiting downlink chart value is confirmed to be correct at each rendered snapshot; its new tooltip explains that a fast transfer may complete between updates at accelerated playback. The default orbit's eclipse calculation is confirmed to switch to Earth eclipse during each roughly 95-minute orbit; no simulation defect was found.
+
+**Verification:** Focused TEL progress, yield, operational-loop, and default-orbit eclipse checks pass. The production build passes. The orbit arc change is a visual refinement; a human follow-up is not required to close this implementation task.
+
+**Planning scope:** PT-01 through PT-05 are implemented. PT-03 metric definitions are documented in Gameplay and remain open to feedback. Leave broad tuning and second-mission choices for further human feedback.
+
+### PT-06 — Correct the moving orbit track and clarify schedule visibility
+
+**Status:** Implemented 2026-11-06.
+
+**Source:** [Third M01 playthrough](PLAYTEST_NOTES.md#2026-11-06--third-playthrough).
+
+**Findings and implementation:** The previous renderer translated one fixed orbital arc using the current-time transform; its points did not each account for Earth rotation at their own predicted/recent times, making the line appear to slide sideways. Each future and past arc now samples the propagated satellite position at 91 timestamps across 120 degrees and converts each sample to Earth-fixed coordinates. This reuses the existing orbit model and processes 182 positions per spacecraft update, with no new simulation state. The scheduled-cell data was already reaching the map renderer; the outlines are hidden whenever Planning is set to Current priority or another mode. That default honors the first playthrough, so the map note now directs players to choose Scheduled cells to see them.
+
+**Pacing change:** Candidate opportunity sampling moved from 60 seconds to 30 seconds. This gives the scheduler finer timing opportunities without changing capture duration, contact timing, or approved gameplay rules. It can increase the feasible schedule density but does not guarantee a specific number of collections.
+
+**Verification:** Production TypeScript/build passes. The human report establishes that the prior visual and collection density were hard to read, not a requested broad balance pass. Track geometry is now derived from model-propagated time samples; full play-feel evaluation remains the human's judgment.
+
+**Planning scope:** PT-01 through PT-06 are implemented. The user-requested collection pacing change remains a provisional prototype value; preserve the open choices around final capture geometry and balance.
+
+### PT-07 — Replace the flashing orbit line with a projected ground track
+
+**Status:** Implemented 2026-11-06. The user approved a toggleable 24-hour surface projection of each satellite's modeled path, refreshed at simulation UTC 00:00 and 12:00. This supersedes the moving orbit-arc visualization in PT-05 and PT-06.
+
+**Implementation:** Sample each satellite's modeled position every simulation minute for 24 hours from the latest 00:00 or 12:00 boundary, project it onto Earth's surface, and split the stationary path where Earth eclipse state changes. Sunlit segments use solid warm gold; eclipse segments use solid muted blue, with a visible legend. Rebuild paths only when the simulation crosses the next boundary or the fleet changes. The live spacecraft marker continues to update independently. Track visibility persists through fleet rebuilds.
+
+**Verification:** Production TypeScript/build passes. The forecast is bounded to 1,441 positions per satellite per refresh and uses the existing orbit model; no additional physics or per-frame path rebuilding is required. Player-facing visual comfort remains for human playtesting.
 
 ## Suggested starting order
 
-**Current recommendation (2026-11-03):** RUN-01 baseline work, RUN-02's core M01 decisions, RUN-03 technical acceptance, and the UX-05/UI-04 technical responsive pass are complete. The core flow has been checked at phone and tablet widths; real-device comfort and player experience belong to the human-led RUN-04 playtest. Keep tuning and extra simulation systems behind observed need. This table guides work within a selected outcome; a **Needs design** task resolves its open rules before implementation.
+**Current recommendation (updated 2026-11-06):** Three M01 playthroughs succeeded. The concrete orbit-track, schedule-visibility, downlink-readout, and collection-opportunity feedback has been addressed. A three-option mission menu is now available with provisional constraints; detailed content and values remain for human review. The smaller candidate interval is a provisional response to the latest pacing request, not broad balance approval. Keep further tuning tied to observed issues. This table guides work within a selected outcome; a **Needs design** task resolves its open rules before implementation.
 
 | Order | Task and status | Next deliverable |
 | --- | --- | --- |
@@ -610,9 +654,11 @@ Source: [first M01 playthrough](PLAYTEST_NOTES.md#2026-11-04--first-m01-playthro
 | Complete | **RUN-02 — M01 core rules agreed; numeric inputs provisional** | Delivered-revenue scoring, one spacecraft fixed at launch, category-priority live control, and same-seed retry are recorded in [CHALLENGE_RUNS.md](CHALLENGE_RUNS.md#run-02--define-the-first-mission). |
 | Complete slice | **YIELD-01/02 — Yield and nominal/power time reporting** | Anomaly and scheduled-downtime intervals remain future extensions owned by their gameplay systems. |
 | Complete | **RUN-03 — M01 technical acceptance** | Controller and exact-cutoff checks pass; browser review confirmed the debrief and full retry reset. The single technical run is not a balance recommendation or player-experience test. |
-| Complete slice | **UX-05 / UI-04 — Technical mobile usability pass** | Setup, run controls, main management tabs, map toggle, debrief, and retry were checked at narrow phone/tablet widths. Human comfort and real-device usability are reserved for RUN-04. |
-| 1 | **RUN-04 — Human-led M01 playtest** | You judge pacing, clarity, comfort, and whether the run is enjoyable. Agents limit their checks to technical behavior, hidden state, boundary cases, and reproducible defects. Record feedback without broad parameter changes. |
-| After RUN-04, if evidence warrants | **TUNE-01 — Targeted tuning and second mission** | Adjust only values or explanations tied to observed issues. Then choose one clear constraint for a contrasting mission; do not make outages or anomalies prerequisites for the first loop. |
+| Complete slice | **UX-05 / UI-04 — Technical mobile usability pass** | Setup, run controls, main management tabs, map toggle, debrief, and retry were checked at narrow phone/tablet widths. |
+| Complete | **RUN-04 — Human-led M01 playtest** | Three successful playthroughs have produced concrete usability and pacing feedback. The human still owns comfort, enjoyment, and final tuning choices. |
+| Complete slice | **RUN-05 — Mission selection before spacecraft setup** | Three prototype briefs share M01's objective and setup; reduced downlink and strict cloud tolerance are provisional constraints. Detailed mission content remains open for review. |
+| If further evidence warrants | **TUNE-01 — Targeted tuning and second mission** | Address only values or explanations tied to observed issues. The collection opportunity interval has been reduced provisionally; broad balance and the contrasting mission constraint remain open. |
+| Later, after fleet mission design | **FLEET-04 — Multi-spacecraft challenge setup and fleet evaluation** | Extend challenge setup and outcome reporting for a human-selected fleet mission; keep M01 at one spacecraft. |
 | Later, when a mission needs it | **OPS-02 — Authored station outage** | Review the proposal's warning window, repair economics, and restoration/upload semantics before implementing an outage challenge. |
 | Later satellite systems | **OPS-01C/D/E — Design thermal pacing and add thermal/link constraints** | Write and review one combined design first, then implement thermal pacing and variable downlink as bounded extensions to power, scheduling, and existing contacts. Both remain opt-in backlog work. |
 | Complete / independent later | **CLOUD-01 complete; FLEET-03, PLATFORM-01/02** | The selected climatology is built and integrated. Maneuvers, save/load, and publishing remain later work unless M01 use reveals a concrete need. |

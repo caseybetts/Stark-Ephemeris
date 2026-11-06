@@ -36,6 +36,27 @@ export type SatelliteOperationalTimeSnapshot = {
   scheduledDowntimeSeconds: null;
 };
 
+export type SatelliteTelImageProgress = {
+  onboardImageCount: number;
+  plannedCaptureCount: number;
+};
+
+/** Counts onboard images created by cell captures in the current uploaded TEL. */
+export function getSatelliteTelImageProgress(
+  satelliteId: string,
+  commands: readonly { id: string; cellCapture?: unknown }[],
+  images: readonly CellImageRecord[],
+): SatelliteTelImageProgress {
+  const captureCommandIds = new Set(commands
+    .filter(command => command.cellCapture !== undefined)
+    .map(command => command.id));
+  const onboardImageCount = images.filter(image => image.satelliteId === satelliteId
+    && image.status === "onboard"
+    && image.captureCommandId !== undefined
+    && captureCommandIds.has(image.captureCommandId)).length;
+  return { onboardImageCount, plannedCaptureCount: captureCommandIds.size };
+}
+
 type SatelliteTime = {
   registeredAtSeconds: number;
   recordedThroughSeconds: number;

@@ -24,19 +24,30 @@ button { font: inherit; }
 
 .mission-gate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(3, 9, 13, .86); backdrop-filter: blur(8px); }
 .mission-gate[hidden] { display: none; }
+#mission-menu[hidden], #mission-setup[hidden] { display: none; }
+#mission-debrief[hidden] { display: none; }
 .mission-gate.mission-debrief-mode .mission-setup-fields,
 .mission-gate.mission-debrief-mode #mission-setup-quote,
 .mission-gate.mission-debrief-mode .mission-gate-brief,
 .mission-gate.mission-debrief-mode #mission-ready-status,
 .mission-gate.mission-debrief-mode #mission-market-retry { display: none; }
-.mission-gate-card { width: min(560px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 30px; border: 1px solid rgba(115, 215, 193, .42); border-radius: 12px; background: #0b171e; box-shadow: 0 24px 80px rgba(0, 0, 0, .5); }
-.mission-gate-card h1 { margin: 6px 0 12px; font-size: clamp(56px, 5vw, 84px); }
-.mission-gate-card p { color: #b6c5ca; line-height: 1.55; }
-.mission-gate-summary { padding: 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; font-size: 24px; }
-.mission-gate-card .primary-button { min-height: 42px; margin-top: 12px; padding: 0 18px; }
-.mission-setup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0; }
-.mission-setup-fields label { display: grid; gap: 5px; color: #b6c5ca; font-size: 22px; }
+.mission-gate-card { width: min(620px, 100%); max-height: calc(100dvh - 32px); overflow: auto; padding: 20px 24px; border: 1px solid rgba(115, 215, 193, .42); border-radius: 12px; background: #0b171e; box-shadow: 0 24px 80px rgba(0, 0, 0, .5); }
+.mission-gate-card h1 { margin: 4px 0 8px; font-size: clamp(32px, 3.2vw, 44px); line-height: 1.1; }
+.mission-gate-card p { margin: 8px 0; color: #b6c5ca; line-height: 1.4; }
+.mission-gate-summary { padding: 9px 11px; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; font-size: 16px; }
+.mission-gate-card .primary-button, .mission-gate-card .secondary-button { min-height: 40px; margin-top: 8px; padding: 0 16px; }
+.mission-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.mission-setup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; margin: 10px 0; }
+.mission-setup-fields label { display: grid; gap: 3px; color: #b6c5ca; font-size: 15px; }
 .mission-setup-fields input, .mission-setup-fields select { min-width: 0; padding: 8px; color: #e7f2ef; border: 1px solid rgba(255,255,255,.18); border-radius: 5px; background: #101f27; }
+.mission-menu { margin-top: 6px; }
+.mission-options { display: grid; gap: 8px; margin-top: 12px; }
+.mission-option { display: grid; gap: 3px; width: 100%; padding: 11px 13px; border: 1px solid rgba(115, 215, 193, .22); border-radius: 7px; background: #101f27; color: #dce9e5; text-align: left; cursor: pointer; }
+.mission-option:hover, .mission-option:focus-visible { border-color: var(--mint); background: #142a32; outline: none; }
+.mission-option strong { font-size: 17px; }
+.mission-option span { color: #b6c5ca; font-size: 14px; }
+.mission-option small { color: #86a49f; font-size: 12px; }
+.mission-gate.mission-debrief-mode #mission-change-button { display: none; }
 .mission-debrief { display: grid; grid-template-columns: 1fr auto; gap: 7px 18px; margin: 18px 0; padding: 14px; border-radius: 7px; background: rgba(255,255,255,.045); font-size: 26px; }
 .mission-debrief-findings { margin: 12px 0; padding: 12px; border-left: 3px solid var(--mint); background: rgba(115, 215, 193, .07); line-height: 1.45; }
 #app.mission-mode .cell-preview { display: none; }
@@ -85,6 +96,11 @@ button { font: inherit; }
 .live-dot, .footer-live i { width: 6px; height: 6px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 10px rgba(115, 215, 193, 0.75); }
 .clock-divider { width: 1px; height: 15px; margin: 0 3px; background: rgba(200, 224, 220, 0.24); }
 .top-actions { display: flex; gap: 8px; }
+.ground-track-legend { display: inline-flex; align-items: center; gap: 8px; color: #b8c8c5; font-size: 11px; white-space: nowrap; }
+.ground-track-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.ground-track-legend i { width: 10px; border-top: 2px solid; }
+.ground-track-legend .sunlit-swatch { border-color: #e8bd58; }
+.ground-track-legend .eclipse-swatch { border-color: #718eae; }
 .icon-button { display: flex; align-items: center; gap: 6px; min-height: 29px; padding: 0 8px; border: 1px solid rgba(202, 227, 218, 0.18); border-radius: 6px; background: rgba(9, 20, 26, 0.6); color: #c7d8d5; cursor: pointer; font-size: 14px; letter-spacing: 0.07em; transition: border-color 150ms ease, background 150ms ease; }
 .icon-button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 .icon-button svg .orbit-icon-point, .icon-button .pause-glyph path, .icon-button .play-glyph path { fill: currentColor; stroke: none; }
@@ -260,6 +276,9 @@ button { font: inherit; }
 .satellite-card-metric { min-width: 0; }
 .satellite-card-metric > span { display: block; margin-bottom: 4px; color: #71898d; font-size: 14px; letter-spacing: 0.08em; }
 .satellite-card-metric > strong { display: block; overflow-wrap: anywhere; color: #d7e5e2; font-size: 16px; font-weight: 600; line-height: 1.35; }
+.satellite-card-tel-progress { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-top: 2px; padding: 6px 8px; border-top: 1px solid rgba(175, 207, 205, 0.1); }
+.satellite-card-tel-progress > span { color: #71898d; font-size: 13px; letter-spacing: 0.07em; }
+.satellite-card-tel-value { color: #d7e5e2; font: 600 17px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .satellite-performance { grid-column: 1 / -1; min-width: 0; padding-top: 8px; border-top: 1px solid rgba(175, 207, 205, 0.1); }
 .satellite-performance-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
 .satellite-performance-heading h3 { margin: 0; color: #94b5b0; font-size: 14px; font-weight: 600; letter-spacing: .11em; }
@@ -387,6 +406,7 @@ button { font: inherit; }
   .sim-shell[data-layout="info"] .globe-stage .top-bar { position: fixed; z-index: 10; top: 0; right: 48px; left: 0; width: auto; height: auto; min-height: 58px; flex-wrap: wrap; align-content: flex-start; gap: 2px 8px; padding: 5px 10px; visibility: visible; background: #071016; }
   .sim-shell[data-layout="info"] .top-bar .brand,
   .sim-shell[data-layout="info"] .top-actions button:not(#pause-toggle) { display: none; }
+  .sim-shell[data-layout="info"] .ground-track-legend { display: none; }
   .sim-shell[data-layout="info"] .mission-clock { order: 0; width: auto; flex: 1; flex-wrap: wrap; }
   .sim-shell[data-layout="info"] .top-actions { order: 1; }
   .sim-shell[data-layout="info"] #pause-toggle,
@@ -421,7 +441,8 @@ button { font: inherit; }
 
 @media (max-width: 600px) {
   .mission-gate { padding: 12px; }
-  .mission-gate-card { max-height: calc(100dvh - 24px); padding: 18px; }
+  .mission-gate-card { max-height: calc(100dvh - 24px); padding: 16px; }
+  .mission-actions { align-items: stretch; flex-direction: column-reverse; gap: 4px; }
   .mission-debrief { grid-template-columns: minmax(0, 1fr); gap: 4px; font-size: 20px; }
   .mission-debrief > strong { margin-bottom: 7px; }
   .sim-shell { grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr); min-height: 0; }
@@ -672,4 +693,31 @@ button { font: inherit; }
   .finance-metrics { grid-template-columns: minmax(0, 1fr); }
   .finance-metrics strong { font-size: 24px; overflow-wrap: anywhere; }
   .finance-table { min-width: 420px; table-layout: auto; }
+}
+
+@media (max-height: 650px) {
+  .mission-gate { padding: 8px; }
+  .mission-gate-card { max-height: calc(100dvh - 16px); padding: 8px 14px; }
+  .mission-gate-card h1 { margin: 2px 0 4px; font-size: 26px; }
+  .mission-gate-card p { margin: 5px 0; font-size: 13px; line-height: 1.25; }
+  #mission-gate-copy { overflow: hidden; font-size: 12px; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; }
+  .mission-gate-summary { padding: 6px 8px; font-size: 13px; }
+  #mission-setup-quote { overflow: hidden; font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+  #mission-ready-status { margin: 3px 0; font-size: 11px; }
+  #mission-ready-status[data-ready="true"] { margin: 0; font-size: 0; line-height: 0; }
+  .mission-setup-fields { grid-template-columns: 1.25fr 1fr 1fr; gap: 4px 6px; margin: 6px 0; }
+  .mission-setup-fields label:nth-child(4) { grid-column: 1 / span 2; }
+  .mission-setup-fields label:nth-child(5) { grid-column: 3; }
+  .mission-setup-fields label { gap: 2px; font-size: 12px; }
+  .mission-setup-fields input, .mission-setup-fields select { padding: 5px 6px; }
+  .mission-gate-card .primary-button, .mission-gate-card .secondary-button { min-height: 30px; margin-top: 3px; padding: 0 10px; font-size: 12px; }
+  .mission-gate-brief { display: none; }
+  .mission-actions { flex-direction: row; gap: 8px; }
+  .mission-menu > p { display: none; }
+  .mission-menu { margin-top: 2px; }
+  .mission-options { gap: 5px; margin-top: 4px; }
+  .mission-option { gap: 1px; padding: 6px 9px; }
+  .mission-option strong { font-size: 15px; }
+  .mission-option span { font-size: 12px; }
+  .mission-option small { font-size: 10px; }
 }

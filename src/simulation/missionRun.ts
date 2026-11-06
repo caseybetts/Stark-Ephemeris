@@ -18,17 +18,62 @@ export type MissionOutcome = {
   completedAtSeconds: number;
 };
 
-/** Provisional first-mission content inputs, kept outside rendering code. */
-export const M01_MISSION = Object.freeze({
-  id: "M01",
-  title: "First Delivery",
+export type MissionDefinition = {
+  id: string;
+  title: string;
+  summary: string;
+  constraint: string;
+  startingBudgetUsd: number;
+  targetRevenueCents: number;
+  durationSeconds: number;
+  stationCount: number;
+  setupFeeCentsPerStation: number;
+  weatherSeed: number;
+  usableCloudThresholdPercent: number;
+  downlinkRateMultiplier: number;
+};
+
+/** Prototype mission values are deliberately shared except for one operating constraint. */
+const MISSION_BASE = {
   startingBudgetUsd: 55_120_000,
   targetRevenueCents: 200_000,
   durationSeconds: 24 * 60 * 60,
   stationCount: 4,
   setupFeeCentsPerStation: 500_000,
   weatherSeed: 20261014,
-});
+};
+
+export const MISSION_CATALOG: readonly MissionDefinition[] = Object.freeze([
+  {
+  id: "M01",
+  title: "First Delivery",
+    summary: "Establish the baseline with the current operating conditions.",
+    constraint: "Standard weather · standard downlink",
+    ...MISSION_BASE,
+    usableCloudThresholdPercent: 30,
+    downlinkRateMultiplier: 1,
+  },
+  {
+    id: "M02",
+    title: "Narrow Link Margin",
+    summary: "Deliver the same objective while ground-station links run slower.",
+    constraint: "Downlink speed reduced to 20%",
+    ...MISSION_BASE,
+    usableCloudThresholdPercent: 30,
+    downlinkRateMultiplier: 0.2,
+  },
+  {
+    id: "M03",
+    title: "Clear-Sky Window",
+    summary: "Plan carefully around a strict cloud limit for successful collections.",
+    constraint: "Cloud tolerance reduced to 10%",
+    ...MISSION_BASE,
+    usableCloudThresholdPercent: 10,
+    downlinkRateMultiplier: 1,
+  },
+]);
+
+export const M01_MISSION = MISSION_CATALOG[0]!;
 
 export type MissionSetupDraft = {
   equipmentOptionId: string;
@@ -88,7 +133,7 @@ export class MissionRunController {
   private outcomeValue: MissionOutcome | null = null;
   readonly deadlineSeconds: number;
 
-  constructor(deadlineSeconds: number) {
+  constructor(deadlineSeconds: number, private readonly mission: MissionDefinition = M01_MISSION) {
     if (!Number.isFinite(deadlineSeconds) || deadlineSeconds <= 0) {
       throw new RangeError("Mission deadline must be finite and positive");
     }
@@ -150,10 +195,10 @@ export class MissionRunController {
     }
     if (this.outcomeValue) return { ...this.outcomeValue };
     this.outcomeValue = {
-      missionId: M01_MISSION.id,
-      success: deliveredRevenueCents >= M01_MISSION.targetRevenueCents,
+      missionId: this.mission.id,
+      success: deliveredRevenueCents >= this.mission.targetRevenueCents,
       deliveredRevenueCents,
-      targetRevenueCents: M01_MISSION.targetRevenueCents,
+      targetRevenueCents: this.mission.targetRevenueCents,
       completedAtSeconds: this.deadlineSeconds,
     };
     return { ...this.outcomeValue };

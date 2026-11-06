@@ -2,31 +2,26 @@ import {
   Cartesian2,
   Cartesian3,
   Color,
+  ColorMaterialProperty,
   ConstantProperty,
   ConstantPositionProperty,
   EllipsoidTerrainProvider,
   GeoJsonDataSource,
-  GeometryInstance,
   HeightReference,
   HorizontalOrigin,
   LabelStyle,
-  Material,
-  Matrix3,
-  Matrix4,
-  PolylineGeometry,
-  PolylineMaterialAppearance,
-  Primitive,
   TileMapServiceImageryProvider,
   VerticalOrigin,
   Viewer,
 } from "cesium";
 import type { DataSource, Entity, ImageryLayer } from "cesium";
 import type { SatelliteDefinition, SurfaceObject, WorldSnapshot } from "../simulation/model";
-import { EFFECTIVE_CONTACT_RADIUS_KM, SIMULATED_DAY_SECONDS } from "../simulation/constants";
+import { EFFECTIVE_CONTACT_RADIUS_KM } from "../simulation/constants";
 import {
-  circularOrbitPeriodSeconds,
+  isSatelliteEclipsed,
   rotateInertialToEarthFixed,
   satellitePositionInertial,
+  subSatellitePoint,
 } from "../simulation/world";
 import { earthFixedKilometersToCartesian, locationToCartesian } from "./coordinates";
 
@@ -35,7 +30,7 @@ export type GlobeView = {
   update(snapshots: readonly WorldSnapshot[]): void;
   setSatellites(satellites: readonly SatelliteDefinition[]): void;
   setSelectedSatellite(satelliteId: string): void;
-  setTrackVisible(visible: boolean): void;
+  setGroundTrackVisible(visible: boolean): void;
   setBasemapVisible(visible: boolean): void;
   setSurfaceObjectsVisible(visible: boolean): void;
   setSurfaceObjects(surfaceObjects: readonly SurfaceObject[]): void;
@@ -43,10 +38,6 @@ export type GlobeView = {
   setPreviewSurfaceObjects(surfaceObjects: readonly SurfaceObject[]): void;
   destroy(): void;
 };
-
-function inertialKilometersToCartesian(positionKm: { x: number; y: number; z: number }): Cartesian3 {
-  return new Cartesian3(positionKm.x * 1_000, positionKm.y * 1_000, positionKm.z * 1_000);
-}
 
 function svgImage(svg: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -81,97 +72,58 @@ function addStationRangeRing(viewer: Viewer, station: SurfaceObject): Entity {
   });
 }
 
-function orbitArcPositions(
-  satellite: SatelliteDefinition,
-  startPhaseDeg: number,
-  endPhaseDeg: number,
-): Cartesian3[] {
-  const path: Cartesian3[] = [];
-  const samples = 90;
+const GROUND_TRACK_UPDATE_SECONDS = 12 * 60 * 60;
+const GROUND_TRACK_HORIZON_SECONDS = 24 * 60 * 60;
+const GROUND_TRACK_SAMPLE_SECONDS = 60;
 
-  for (let index = 0; index <= samples; index += 1) {
-    const phaseDegrees = startPhaseDeg + ((endPhaseDeg - startPhaseDeg) * index) / samples;
-    const position = satellitePositionInertial(
-      { ...satellite.orbit, ascendingNodeDeg: 0, inclinationDeg: 0, initialPhaseDeg: phaseDegrees },
-      0,
-    );
-    path.push(inertialKilometersToCartesian(position));
+type GroundTrackSegment = { eclipsed: boolean; positions: Cartesian3[] };
+type GroundTrackLine = { entity: Entity; eclipsed: boolean };
+const SUNLIT_TRACK_COLOR = Color.fromCssColorString("#e8bd58");
+const ECLIPSE_TRACK_COLOR = Color.fromCssColorString("#718eae");
+
+function groundTrackSegments(satellite: SatelliteDefinition, startsAtSeconds: number): GroundTrackSegment[] {
+  const segments: GroundTrackSegment[] = [];
+  let previousPoint: Cartesian3 | undefined;
+  for (let offsetSeconds = 0; offsetSeconds <= GROUND_TRACK_HORIZON_SECONDS; offsetSeconds += GROUND_TRACK_SAMPLE_SECONDS) {
+    const timeSeconds = startsAtSeconds + offsetSeconds;
+    const inertial = satellitePositionInertial(satellite.orbit, timeSeconds);
+    const eclipsed = isSatelliteEclipsed(inertial, { x: 1, y: 0, z: 0 });
+    const earthFixed = rotateInertialToEarthFixed(inertial, timeSeconds);
+    const point = subSatellitePoint(earthFixed);
+    const position = Cartesian3.fromDegrees(point.longitudeDeg, point.latitudeDeg);
+    let segment = segments.at(-1);
+    if (!segment || segment.eclipsed !== eclipsed) {
+      segment = { eclipsed, positions: previousPoint ? [previousPoint, position] : [position] };
+      segments.push(segment);
+    } else {
+      segment.positions.push(position);
+    }
+    previousPoint = position;
   }
-
-  return path;
+  return segments;
 }
 
-function orbitEarthFixedMatrix(satellite: SatelliteDefinition, elapsedSeconds: number): Matrix4 {
-  const radians = Math.PI / 180;
-  const earthAngle = (2 * Math.PI * elapsedSeconds) / SIMULATED_DAY_SECONDS;
-  const currentPhase = (satellite.orbit.initialPhaseDeg * radians)
-    + (2 * Math.PI * elapsedSeconds) / circularOrbitPeriodSeconds(satellite.orbit.altitudeKm);
-  const inclination = satellite.orbit.inclinationDeg * radians;
-  const ascendingNode = satellite.orbit.ascendingNodeDeg * radians;
-  const orbitalOrientation = Matrix3.multiply(
-    Matrix3.fromRotationZ(ascendingNode),
-    Matrix3.multiply(
-      Matrix3.fromRotationX(inclination),
-      Matrix3.fromRotationZ(currentPhase),
-      new Matrix3(),
-    ),
-    new Matrix3(),
-  );
-  const earthFixedOrientation = Matrix3.multiply(
-    Matrix3.fromRotationZ(-earthAngle),
-    orbitalOrientation,
-    new Matrix3(),
-  );
-  return Matrix4.fromRotationTranslation(
-    earthFixedOrientation,
-    Cartesian3.ZERO,
-    new Matrix4(),
-  );
-}
-
-function createOrbitPrimitive(
+function createGroundTrackEntities(
+  viewer: Viewer,
   satellite: SatelliteDefinition,
-  startPhaseDeg: number,
-  endPhaseDeg: number,
-  color: Color,
-): Primitive {
-  return new Primitive({
-    geometryInstances: new GeometryInstance({
-      geometry: new PolylineGeometry({
-        positions: orbitArcPositions(satellite, startPhaseDeg, endPhaseDeg),
-        width: 2,
-        vertexFormat: PolylineMaterialAppearance.VERTEX_FORMAT,
-      }),
+  startsAtSeconds: number,
+  visible: boolean,
+  selected: boolean,
+): GroundTrackLine[] {
+  return groundTrackSegments(satellite, startsAtSeconds).map((segment, index) => ({
+    eclipsed: segment.eclipsed,
+    entity: viewer.entities.add({
+      id: `${satellite.id}-ground-track-${index}`,
+      name: `${satellite.name} ${segment.eclipsed ? "eclipse" : "sunlit"} ground track`,
+      show: visible,
+      polyline: {
+        positions: segment.positions,
+        width: selected ? 3 : 2,
+        material: (segment.eclipsed ? ECLIPSE_TRACK_COLOR : SUNLIT_TRACK_COLOR).withAlpha(selected ? 0.95 : 0.55),
+        clampToGround: true,
+      },
     }),
-    appearance: new PolylineMaterialAppearance({
-      material: Material.fromType("PolylineGlow", {
-        color,
-        glowPower: 0.12,
-      }),
-      translucent: true,
-    }),
-    modelMatrix: Matrix4.IDENTITY,
-    asynchronous: false,
-  });
-}
-
-function createOrbitVisual(satellite: SatelliteDefinition, selected: boolean, color: Color) {
-  const ahead = createOrbitPrimitive(
-    satellite,
-    0,
-    180,
-    color.withAlpha(selected ? 0.82 : 0.46),
-  );
-  const behind = createOrbitPrimitive(
-    satellite,
-    -180,
-    0,
-    color.withAlpha(selected ? 0.3 : 0.16),
-  );
-  const modelMatrix = orbitEarthFixedMatrix(satellite, 0);
-  ahead.modelMatrix = modelMatrix;
-  behind.modelMatrix = modelMatrix;
-  return { ahead, behind };
+  }));
 }
 
 function addSurfaceObject(viewer: Viewer, object: SurfaceObject, preview = false) {
@@ -267,6 +219,8 @@ export async function createGlobeView(
   const satelliteColors = ["#effaff", "#76d9ff", "#75afff", "#c0e9ff", "#649bff"];
   let satelliteDefinitions = [...satellites];
   let selectedSatelliteId = satelliteDefinitions[0]?.id;
+  let groundTrackStartsAtSeconds = 0;
+  let trackVisible = true;
   const createSatelliteVisual = (satellite: SatelliteDefinition, index: number) => {
     const color = Color.fromCssColorString(satelliteColors[index % satelliteColors.length]);
     const selectedInitially = satellite.id === selectedSatelliteId;
@@ -299,10 +253,9 @@ export async function createGlobeView(
         verticalOrigin: VerticalOrigin.BOTTOM,
       },
     });
-    const orbit = createOrbitVisual(satellite, selectedInitially, color);
-    viewer.scene.primitives.add(orbit.ahead);
-    viewer.scene.primitives.add(orbit.behind);
-    return { entity, orbit };
+    const groundTracks = createGroundTrackEntities(viewer, satellite, groundTrackStartsAtSeconds,
+      trackVisible, selectedInitially);
+    return { entity, groundTracks };
   };
   const satelliteVisuals = new Map<string, ReturnType<typeof createSatelliteVisual>>(
     satelliteDefinitions.map((satellite, index) => [satellite.id, createSatelliteVisual(satellite, index)]),
@@ -310,16 +263,19 @@ export async function createGlobeView(
   const applySelectedSatellite = (satelliteId: string): void => {
     if (!satelliteVisuals.has(satelliteId)) return;
     selectedSatelliteId = satelliteId;
-    satelliteDefinitions.forEach((satellite, index) => {
+    satelliteDefinitions.forEach(satellite => {
       const visual = satelliteVisuals.get(satellite.id);
       if (!visual) return;
       const selected = satellite.id === selectedSatelliteId;
-      const color = Color.fromCssColorString(satelliteColors[index % satelliteColors.length]);
       visual.entity.billboard!.width = new ConstantProperty(selected ? 17 : 13.5);
       visual.entity.billboard!.height = new ConstantProperty(selected ? 17 : 13.5);
       visual.entity.label!.show = new ConstantProperty(selected);
-      visual.orbit.ahead.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.82 : 0.46);
-      visual.orbit.behind.appearance!.material.uniforms.color = color.withAlpha(selected ? 0.3 : 0.16);
+      for (const track of visual.groundTracks) {
+        track.entity.polyline!.width = new ConstantProperty(selected ? 3 : 2);
+        track.entity.polyline!.material = new ColorMaterialProperty(
+          (track.eclipsed ? ECLIPSE_TRACK_COLOR : SUNLIT_TRACK_COLOR).withAlpha(selected ? 0.95 : 0.55),
+        );
+      }
     });
     viewer.scene.requestRender();
   };
@@ -341,17 +297,26 @@ export async function createGlobeView(
   return {
     viewer,
     update(snapshots) {
+      const nextGroundTrackStart = snapshots.length
+        ? Math.floor(snapshots[0]!.elapsedSeconds / GROUND_TRACK_UPDATE_SECONDS) * GROUND_TRACK_UPDATE_SECONDS
+        : groundTrackStartsAtSeconds;
+      if (nextGroundTrackStart !== groundTrackStartsAtSeconds) {
+        groundTrackStartsAtSeconds = nextGroundTrackStart;
+        for (const satellite of satelliteDefinitions) {
+          const visual = satelliteVisuals.get(satellite.id);
+          if (visual) {
+            for (const track of visual.groundTracks) viewer.entities.remove(track.entity);
+            visual.groundTracks = createGroundTrackEntities(viewer, satellite, groundTrackStartsAtSeconds,
+              trackVisible, satellite.id === selectedSatelliteId);
+          }
+        }
+      }
       for (const snapshot of snapshots) {
         const visual = satelliteVisuals.get(snapshot.satelliteId);
         if (!visual) continue;
         visual.entity.position = new ConstantPositionProperty(
           earthFixedKilometersToCartesian(snapshot.satelliteEarthFixedKm),
         );
-        const satellite = satelliteDefinitions.find((item) => item.id === snapshot.satelliteId);
-        if (!satellite) continue;
-        const modelMatrix = orbitEarthFixedMatrix(satellite, snapshot.elapsedSeconds);
-        visual.orbit.ahead.modelMatrix = modelMatrix;
-        visual.orbit.behind.modelMatrix = modelMatrix;
       }
 
       viewer.scene.requestRender();
@@ -359,8 +324,7 @@ export async function createGlobeView(
     setSatellites(nextSatellites) {
       for (const visual of satelliteVisuals.values()) {
         viewer.entities.remove(visual.entity);
-        viewer.scene.primitives.remove(visual.orbit.ahead);
-        viewer.scene.primitives.remove(visual.orbit.behind);
+        for (const track of visual.groundTracks) viewer.entities.remove(track.entity);
       }
       satelliteVisuals.clear();
       satelliteDefinitions = [...nextSatellites];
@@ -376,11 +340,9 @@ export async function createGlobeView(
     setSelectedSatellite(satelliteId) {
       applySelectedSatellite(satelliteId);
     },
-    setTrackVisible(visible) {
-      for (const visual of satelliteVisuals.values()) {
-        visual.orbit.ahead.show = visible;
-        visual.orbit.behind.show = visible;
-      }
+    setGroundTrackVisible(visible) {
+      trackVisible = visible;
+      for (const visual of satelliteVisuals.values()) for (const track of visual.groundTracks) track.entity.show = visible;
       viewer.scene.requestRender();
     },
     setBasemapVisible(visible) {

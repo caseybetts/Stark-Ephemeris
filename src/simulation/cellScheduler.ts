@@ -13,7 +13,7 @@ import { projectSatellitePower, PROTOTYPE_POWER_CONFIGURATION, type SatellitePow
 import { cloudForecastForInterval, type WeatherConfiguration } from "./weather.ts";
 
 export const PROTOTYPE_OPTIMIZATION_SEGMENT_SECONDS = 2 * 60;
-const OPPORTUNITY_SAMPLE_SECONDS = 60;
+export const PROTOTYPE_OPPORTUNITY_SAMPLE_SECONDS = 30;
 export const PROTOTYPE_BEAM_WIDTH = 6;
 export const PROTOTYPE_BEAM_CANDIDATES = 8;
 export const PROTOTYPE_BEAM_EXTENSION_BUDGET = 48;
@@ -86,7 +86,7 @@ export type GreedyCellSchedule = {
 
 export function generateGreedyCellSchedule(input: ScheduleInput): GreedyCellSchedule {
   const segmentSeconds = input.segmentSeconds ?? PROTOTYPE_OPTIMIZATION_SEGMENT_SECONDS;
-  const sampleSeconds = input.opportunitySampleSeconds ?? OPPORTUNITY_SAMPLE_SECONDS;
+  const sampleSeconds = input.opportunitySampleSeconds ?? PROTOTYPE_OPPORTUNITY_SAMPLE_SECONDS;
   if (!Number.isFinite(input.startsAtSeconds) || input.startsAtSeconds < 0
     || !Number.isFinite(input.endsAtSeconds) || input.endsAtSeconds <= input.startsAtSeconds
     || !Number.isFinite(segmentSeconds) || segmentSeconds <= 0
@@ -184,7 +184,7 @@ type BeamNode = {
 export function generateBoundedCellSchedule(input: ScheduleInput): GreedyCellSchedule {
   const greedy = generateGreedyCellSchedule(input);
   const segmentSeconds = input.segmentSeconds ?? PROTOTYPE_OPTIMIZATION_SEGMENT_SECONDS;
-  const sampleSeconds = input.opportunitySampleSeconds ?? OPPORTUNITY_SAMPLE_SECONDS;
+  const sampleSeconds = input.opportunitySampleSeconds ?? PROTOTYPE_OPPORTUNITY_SAMPLE_SECONDS;
   const power = input.powerConfiguration ?? PROTOTYPE_POWER_CONFIGURATION;
   const accessRadiusKm = maximumAccessSurfaceRadiusKm(
     input.satellite, input.scenario.maximumOffNadirAngleDeg,

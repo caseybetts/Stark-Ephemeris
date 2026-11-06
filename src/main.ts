@@ -11,7 +11,7 @@ import { cellLookDirectionAt, evaluateCellCaptureOpportunity, nadirPointingAt, t
 import { cellLabel } from "./simulation/cells";
 import type { CellMarketState } from "./simulation/cellMarketState";
 import { OperationalLoop } from "./simulation/operationalLoop";
-import { M01_MISSION, MissionRunController, validateM01Setup } from "./simulation/missionRun";
+import { M01_MISSION, MISSION_CATALOG, MissionRunController, validateM01Setup, type MissionDefinition } from "./simulation/missionRun";
 import { CompanyFinance, SIMULATION_DAY_SECONDS } from "./simulation/companyFinance";
 import { getSpacecraftEquipmentOption, quoteSpacecraftPurchase, purchaseSpacecraftWithEquipment } from "./simulation/spacecraftCatalog";
 import { GROUND_STATION_CATALOG, quoteGroundStationLease, quoteGroundStationPurchase } from "./simulation/groundStationCatalog";
@@ -19,9 +19,9 @@ import type { GeographicLocation, SatelliteDefinition, SurfaceObject, WorldSnaps
 import { setupFinanceView } from "./ui/finance";
 import { setupScheduleView } from "./ui/schedule";
 import { loadCloudBaseline } from "./data/weather";
-import { cloudForecastForInterval } from "./simulation/weather";
+import { cloudForecastForInterval, WEATHER_EPOCH_UTC_MS } from "./simulation/weather";
 import { mountSatellitePerformanceView } from "./ui/satellitePerformance";
-import type { SatelliteOperationalTimeSnapshot, SatelliteYieldSnapshot } from "./simulation/satellitePerformance";
+import { getSatelliteTelImageProgress, type SatelliteOperationalTimeSnapshot, type SatelliteYieldSnapshot } from "./simulation/satellitePerformance";
 
 declare global {
   interface Window {
@@ -66,10 +66,8 @@ const elements = {
   purchaseSpacecraftStatus: document.querySelector<HTMLElement>("#purchase-spacecraft-status")!,
   spacecraftDetailTitle: document.querySelector<HTMLElement>("#spacecraft-detail-title")!,
   spacecraftDetailState: document.querySelector<HTMLElement>("#spacecraft-detail-state")!,
-  spacecraftDetailAltitude: document.querySelector<HTMLElement>("#spacecraft-detail-altitude")!,
   spacecraftDetailInclination: document.querySelector<HTMLElement>("#spacecraft-detail-inclination")!,
   spacecraftDetailSlew: document.querySelector<HTMLElement>("#spacecraft-detail-slew")!,
-  spacecraftDetailCoordinate: document.querySelector<HTMLElement>("#spacecraft-detail-coordinate")!,
   spacecraftDetailStation: document.querySelector<HTMLElement>("#spacecraft-detail-station")!,
   spacecraftDetailBattery: document.querySelector<HTMLElement>("#spacecraft-detail-battery")!,
   spacecraftDetailPowerState: document.querySelector<HTMLElement>("#spacecraft-detail-power-state")!,
@@ -84,6 +82,10 @@ const elements = {
   missionGateKicker: document.querySelector<HTMLElement>("#mission-gate-kicker")!,
   missionGateCopy: document.querySelector<HTMLElement>("#mission-gate-copy")!,
   missionGateAction: document.querySelector<HTMLButtonElement>("#mission-gate-action")!,
+  missionMenu: document.querySelector<HTMLElement>("#mission-menu")!,
+  missionSetup: document.querySelector<HTMLElement>("#mission-setup")!,
+  missionConstraint: document.querySelector<HTMLElement>("#mission-constraint")!,
+  missionChangeButton: document.querySelector<HTMLButtonElement>("#mission-change-button")!,
   missionDebrief: document.querySelector<HTMLElement>("#mission-debrief")!,
   missionEquipment: document.querySelector<HTMLSelectElement>("#mission-equipment")!,
   missionAltitude: document.querySelector<HTMLInputElement>("#mission-altitude")!,
@@ -115,12 +117,14 @@ const groundOperations = new GroundOperations(fleet.map(({ id }) => id), simulat
 const fundedProcurementTest = import.meta.env.DEV
   && new URLSearchParams(window.location.search).get("scenario") === "funded-procurement-test";
 const companyFinance = new CompanyFinance({ startingCashUsd: fundedProcurementTest ? 70_000_000 : M01_MISSION.startingBudgetUsd });
-const missionRun = new MissionRunController(M01_MISSION.durationSeconds);
+let selectedMission: MissionDefinition = M01_MISSION;
+let missionRun = new MissionRunController(selectedMission.durationSeconds, selectedMission);
+let refreshMissionSetupQuote: () => void = () => {};
 const contactForecasts = new Map<string, { computedAt: number; window?: GroundContactWindow }>();
 const simulation = {
   timeMultiplier: DEFAULT_TIME_MULTIPLIER,
   running: false,
-  showTrack: true,
+  showGroundTrack: true,
   lastFrameMilliseconds: performance.now(),
 };
 const formatRunState = (running: boolean): string => fundedProcurementTest
@@ -130,6 +134,32 @@ elements.runState.textContent = formatRunState(simulation.running);
 if (fundedProcurementTest) {
   elements.runState.title = "Development-only procurement test funds: $70,000,000. The normal economy is unchanged.";
 }
+for (const button of document.querySelectorAll<HTMLButtonElement>(".mission-option[data-mission-id]")) {
+  button.addEventListener("click", () => {
+    const mission = MISSION_CATALOG.find(candidate => candidate.id === button.dataset.missionId);
+    if (!mission || missionRun.phase !== "setup") return;
+    selectedMission = mission;
+    missionRun = new MissionRunController(selectedMission.durationSeconds, selectedMission);
+    elements.missionGateTitle.textContent = selectedMission.title;
+    elements.missionGateKicker.textContent = "MISSION SETUP · PROVISIONAL INPUTS";
+    elements.missionGateCopy.textContent = `Deliver $${(selectedMission.targetRevenueCents / 100).toLocaleString()} within ${selectedMission.durationSeconds / 3600} simulation hours. Configure one spacecraft and orbit.`;
+    elements.missionConstraint.textContent = selectedMission.constraint;
+    elements.missionMenu.hidden = true;
+    elements.missionSetup.hidden = false;
+    elements.missionGateAction.textContent = "START MISSION";
+    elements.missionGate.hidden = false;
+    elements.missionGateTitle.focus();
+    refreshMissionSetupQuote();
+  });
+}
+elements.missionChangeButton.addEventListener("click", () => {
+  if (missionRun.phase !== "setup") return;
+  elements.missionSetup.hidden = true;
+  elements.missionMenu.hidden = false;
+  elements.missionGateTitle.textContent = "Mission Select";
+  elements.missionGateKicker.textContent = "SELECT A MISSION";
+  elements.missionGateTitle.focus();
+});
 
 type SpacecraftTableRow = {
   row: HTMLTableRowElement;
@@ -145,6 +175,7 @@ type SummarySatelliteCard = {
   payload: HTMLElement;
   power: HTMLElement;
   contact: HTMLElement;
+  imagesTel: HTMLElement;
   renderPerformance: (yieldSnapshot: SatelliteYieldSnapshot, timeSnapshot: SatelliteOperationalTimeSnapshot) => void;
 };
 
@@ -413,13 +444,7 @@ function renderSummarySatelliteCards(
   market: CellMarketState | null,
 ): void {
   const activeIds = new Set(snapshots.map(({ satelliteId }) => satelliteId));
-  const onboardImageCounts = new Map<string, number>();
   const images = market?.getImages() ?? [];
-  for (const image of images) {
-    if (image.status === "onboard") {
-      onboardImageCounts.set(image.satelliteId, (onboardImageCounts.get(image.satelliteId) ?? 0) + 1);
-    }
-  }
   for (const [satelliteId, card] of summarySatelliteCards) {
     if (!activeIds.has(satelliteId)) {
       card.name.closest("article")?.remove();
@@ -453,9 +478,17 @@ function renderSummarySatelliteCards(
         payload: createMetric("PAYLOAD STATUS"),
         power: createMetric("POWER STATUS"),
         contact: createMetric("NEXT CONTACT"),
+        imagesTel: document.createElement("strong"),
         renderPerformance: () => {},
       };
-      article.append(heading, metrics);
+      const imagesTel = document.createElement("div");
+      imagesTel.className = "satellite-card-tel-progress";
+      const imagesTelLabel = document.createElement("span");
+      imagesTelLabel.textContent = "IMAGES ABOARD / TEL CAPTURES";
+      card.imagesTel.className = "satellite-card-tel-value";
+      card.imagesTel.title = "Onboard images captured by cell-collection commands in this uploaded TEL, including completed commands. Delivered or deleted images are not counted.";
+      imagesTel.append(imagesTelLabel, card.imagesTel);
+      article.append(heading, metrics, imagesTel);
       card.renderPerformance = mountSatellitePerformanceView(article);
       elements.summarySatelliteCards.append(article);
       summarySatelliteCards.set(satellite.id, card);
@@ -463,14 +496,11 @@ function renderSummarySatelliteCards(
 
     card.name.textContent = satellite.name;
     const payload = operationalLoop.getCellOperationalVisualization(satellite.id);
-    const onboardImageCount = onboardImageCounts.get(satellite.id) ?? 0;
     card.payload.textContent = payload.activeCapture
-      ? `IMAGING · ${onboardImageCount} STORED`
-      : onboardImageCount > 0
-        ? `${onboardImageCount} IMAGE${onboardImageCount === 1 ? "" : "S"} ABOARD`
-        : market
-          ? "IDLE · NO IMAGERY"
-          : "AWAITING CELL DATA";
+      ? "IMAGING"
+      : market
+        ? "IDLE"
+        : "AWAITING CELL DATA";
 
     const power = operationalLoop.getPowerSnapshot(satellite.id);
     const powerLabel = power.depleted
@@ -481,6 +511,8 @@ function renderSummarySatelliteCards(
     card.power.textContent = `${powerLabel} · ${formatPercent(power.chargePercent)}%`;
 
     const groundState = groundOperations.getSatelliteState(satellite.id);
+    const telImageProgress = getSatelliteTelImageProgress(satellite.id, groundState.onboardCommands, images);
+    card.imagesTel.textContent = `${telImageProgress.onboardImageCount} / ${telImageProgress.plannedCaptureCount}`;
     const activeStationId = groundState.activeStationIds[0];
     const activeStation = activeStationId
       ? snapshot.stationContacts.find(contact => contact.station.id === activeStationId)?.station
@@ -518,16 +550,11 @@ function renderSelectedSpacecraft(
   elements.spacecraftDetailTitle.textContent = satellite.name;
   elements.spacecraftDetailState.textContent = snapshot.satelliteEclipsed ? "EARTH ECLIPSE" : "SUNLIT";
   elements.spacecraftDetailState.classList.toggle("table-status-active", !snapshot.satelliteEclipsed);
-  elements.spacecraftDetailAltitude.textContent = `${Math.round(satellite.orbit.altitudeKm).toLocaleString()} km`;
   elements.spacecraftDetailInclination.textContent = `${satellite.orbit.inclinationDeg.toFixed(1)}°`;
   const equipment = satellite.equipmentOptionId
     ? getSpacecraftEquipmentOption(satellite.equipmentOptionId)
     : getSpacecraftEquipmentOption("standard");
   elements.spacecraftDetailSlew.textContent = `${equipment.name} · ${satellite.slew.slewRateDegPerSecond}°/s · ${satellite.slew.settlingTimeSeconds}s settle`;
-  elements.spacecraftDetailCoordinate.textContent = formatCoordinate(
-    snapshot.subSatellitePoint.latitudeDeg,
-    snapshot.subSatellitePoint.longitudeDeg,
-  );
   const groundState = groundOperations.getSatelliteState(satellite.id);
   const activeStation = groundState.activeStationIds
     .map(id => snapshot.stationContacts.find(contact => contact.station.id === id))
@@ -822,13 +849,12 @@ async function start(): Promise<void> {
     globe.setSelectedSatellite(satelliteId);
   });
   globe.setSelectedSatellite(selectedSatelliteId);
-  globe.setTrackVisible(simulation.showTrack);
+  globe.setGroundTrackVisible(simulation.showGroundTrack);
   setBasemap(true);
 
   // Geography loads independently so a data failure does not stop the world clock.
   let cellMarket: CellMarketState | null = null;
   let cellGrid: import("./simulation/cells").CellGrid | null = null;
-  let refreshMissionSetupQuote: () => void = () => {};
   const automaticallyPlannedSatellites = new Set<string>();
   const enableAutomaticPlanning = (satelliteId: string, grid: import("./simulation/cells").CellGrid): void => {
     if (automaticallyPlannedSatellites.has(satelliteId)) return;
@@ -902,6 +928,7 @@ async function start(): Promise<void> {
     seed: M01_MISSION.weatherSeed,
     epochUtcMs: Date.parse("2026-01-01T00:00:00Z"),
     baselinePercent: 50,
+    usableThresholdPercent: selectedMission.usableCloudThresholdPercent,
     ...(cloudBaseline ? { baselineTable: cloudBaseline.table, baselineVersion: cloudBaseline.version } : {}),
   };
   const operationalLoop = new OperationalLoop({
@@ -1155,11 +1182,11 @@ async function start(): Promise<void> {
     const setupFeesCents = finance.entries.filter(entry => entry.kind === "mission-setup-fee").reduce((sum, entry) => sum - entry.amountCents, 0);
     const operatingCostsCents = finance.operatingCostsCents - setupFeesCents;
     const spacecraftYield = operationalLoop.performance.getYieldSnapshot(fleet[0]!.id, images, cellMarket?.imageryRevision ?? 0);
-    const operationalTime = operationalLoop.performance.getOperationalTimeSnapshot(fleet[0]!.id, M01_MISSION.durationSeconds);
+    const operationalTime = operationalLoop.performance.getOperationalTimeSnapshot(fleet[0]!.id, selectedMission.durationSeconds);
     const attempts = operationalLoop.performance.getCaptureAttempts(fleet[0]!.id);
     const money = (cents: number): string => (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 2 });
     const outcome = missionRun.evaluate(finance.realizedRevenueCents);
-    elements.missionGateTitle.textContent = "First Delivery · Debrief";
+    elements.missionGateTitle.textContent = `${selectedMission.title} · Debrief`;
     elements.missionGateKicker.textContent = "MISSION COMPLETE";
     const targetLabel = (outcome.targetRevenueCents / 100).toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
     elements.missionGateCopy.textContent = `Delivered revenue ${outcome.success ? "met" : "did not meet"} the provisional ${targetLabel} target.`;
@@ -1185,7 +1212,7 @@ async function start(): Promise<void> {
       ? "No collection attempts finished before the deadline."
       : `Recorded outcomes: ${spacecraftYield.cloudRejectedCount} weather rejections and ${spacecraftYield.otherFailureCount} other failures${otherFailureText ? ` (${otherFailureText})` : ""}. ${onboardCount} image(s) remain onboard; undelivered imagery is not included in revenue.`;
     const rows: Array<[string, string]> = [
-      ["Elapsed", "24:00:00"],
+      ["Elapsed", formatDuration(selectedMission.durationSeconds)],
       ["Revenue target", money(outcome.targetRevenueCents)],
       ["Mission result", outcome.success ? "SUCCESS" : "TARGET MISSED"],
       ["Delivered revenue", money(finance.realizedRevenueCents)],
@@ -1209,6 +1236,8 @@ async function start(): Promise<void> {
       elements.missionDebrief.append(name, amount);
     }
     elements.missionGateAction.textContent = "RETRY MISSION";
+    elements.missionMenu.hidden = true;
+    elements.missionSetup.hidden = false;
     elements.missionGate.hidden = false;
     elements.missionGateTitle.focus();
     setSimulationRunning(false);
@@ -1284,9 +1313,12 @@ async function start(): Promise<void> {
     elements.missionGate.classList.remove("mission-debrief-mode");
     elements.missionGateCard.scrollTop = 0;
     setSimulationRunning(false);
-    elements.missionGateTitle.textContent = "First Delivery";
+    elements.missionGateTitle.textContent = selectedMission.title;
     elements.missionGateKicker.textContent = "MISSION SETUP · PROVISIONAL INPUTS";
-    elements.missionGateCopy.textContent = "Deliver $2,000 in imagery within 24 simulation hours. Select one spacecraft package and starting orbit before launch.";
+    elements.missionGateCopy.textContent = `Deliver $${(selectedMission.targetRevenueCents / 100).toLocaleString()} within ${selectedMission.durationSeconds / 3600} simulation hours. Configure one spacecraft and orbit.`;
+    elements.missionConstraint.textContent = selectedMission.constraint;
+    elements.missionMenu.hidden = true;
+    elements.missionSetup.hidden = false;
     elements.missionDebrief.hidden = true;
     elements.missionDebrief.replaceChildren();
     elements.missionDebriefFindings.hidden = true;
@@ -1307,6 +1339,7 @@ async function start(): Promise<void> {
         const market = cellMarket ??= createPrototypeCellMarket(grid, companyFinance);
         enableAutomaticPlanningForFleet(grid);
         elements.missionReadyStatus.textContent = "Market and weather inputs are ready.";
+        elements.missionReadyStatus.dataset.ready = "true";
         elements.missionMarketRetry.hidden = true;
         elements.missionMarketRetry.disabled = false;
         refreshMissionSetupQuote();
@@ -1327,6 +1360,7 @@ async function start(): Promise<void> {
       setStationRingsVisible: visible => globe.setStationRingsVisible(visible),
       onLoadError: retry => {
         elements.missionReadyStatus.textContent = "Cell-market data failed to load; M01 cannot start without it.";
+        elements.missionReadyStatus.dataset.ready = "false";
         elements.missionMarketRetry.disabled = false;
         elements.missionMarketRetry.hidden = false;
         elements.missionMarketRetry.onclick = retry;
@@ -1342,8 +1376,18 @@ async function start(): Promise<void> {
     },
   ));
 
+  let displayedGroundTrackStartSeconds = Number.NaN;
   const updateFleetViews = (snapshots: readonly WorldSnapshot[]) => {
     globe.update(snapshots);
+    const groundTrackStartSeconds = Math.floor(simulationRuntime.elapsedSeconds / (12 * 60 * 60)) * (12 * 60 * 60);
+    if (groundTrackStartSeconds !== displayedGroundTrackStartSeconds) {
+      displayedGroundTrackStartSeconds = groundTrackStartSeconds;
+      const startsUtc = new Date(WEATHER_EPOCH_UTC_MS + groundTrackStartSeconds * 1000).toISOString().slice(0, 16).replace("T", " ");
+      const endsUtc = new Date(WEATHER_EPOCH_UTC_MS + (groundTrackStartSeconds + 24 * 60 * 60) * 1000).toISOString().slice(0, 16).replace("T", " ");
+      const description = `Projected ground track: ${startsUtc} to ${endsUtc} UTC. Refreshes at 00:00 and 12:00 simulation UTC.`;
+      elements.trackToggle.title = description;
+      elements.trackToggle.setAttribute("aria-label", `Toggle ${description}`);
+    }
     updateMiniGlobe(snapshots);
     selectedSatelliteEarthFixedKm = snapshots.find(({ satelliteId }) => satelliteId === selectedSatelliteId)?.satelliteEarthFixedKm ?? null;
     renderSpacecraftTable(snapshots, groundOperations);
@@ -1388,7 +1432,14 @@ async function start(): Promise<void> {
     if (!selectedSnapshot || !selectedSatellite) return;
     const nextWindow = forecasts.get(selectedSatellite.id);
     renderSnapshot(selectedSnapshot, nextWindow);
-    renderSelectedSpacecraft(selectedSatellite, selectedSnapshot, operationalLoop.getPowerSnapshot(selectedSatellite.id), groundOperations, simulationRuntime, focusCellOnMap);
+    renderSelectedSpacecraft(
+      selectedSatellite,
+      selectedSnapshot,
+      operationalLoop.getPowerSnapshot(selectedSatellite.id),
+      groundOperations,
+      simulationRuntime,
+      focusCellOnMap,
+    );
   };
 
   const commitPurchase = (): void => {
@@ -1479,9 +1530,9 @@ async function start(): Promise<void> {
   refreshGrowth();
 
   elements.trackToggle.addEventListener("click", () => {
-    simulation.showTrack = !simulation.showTrack;
-    elements.trackToggle.setAttribute("aria-pressed", String(simulation.showTrack));
-    globe.setTrackVisible(simulation.showTrack);
+    simulation.showGroundTrack = !simulation.showGroundTrack;
+    elements.trackToggle.setAttribute("aria-pressed", String(simulation.showGroundTrack));
+    globe.setGroundTrackVisible(simulation.showGroundTrack);
   });
 
   elements.basemapToggle.addEventListener("click", () => {
@@ -1515,6 +1566,12 @@ async function start(): Promise<void> {
     }
     const option = getSpacecraftEquipmentOption(setupValidation.equipmentOptionId);
     operationalLoop.reset();
+    operationalLoop.configureInitialDownlinkRateMultiplier(selectedMission.downlinkRateMultiplier);
+    operationalLoop.configureUsableCloudThreshold(selectedMission.usableCloudThresholdPercent);
+    weatherConfiguration.usableThresholdPercent = selectedMission.usableCloudThresholdPercent;
+    surfaceObjects = operationalLoop.getStations();
+    globe.setSurfaceObjects(surfaceObjects);
+    renderGroundStationTable();
     const baseSatellite = fleet[0]!;
     operationalLoop.configureInitialSatellite({
       ...baseSatellite,
@@ -1570,6 +1627,7 @@ async function start(): Promise<void> {
       elements.missionGateAction.disabled = !cellMarket || !setupValidation.valid || ![elements.missionAltitude, elements.missionInclination, elements.missionNode, elements.missionPhase].every(field => field.checkValidity());
       if (!setupValidation.valid && setupValidation.reason) elements.missionGateCopy.textContent = setupValidation.reason;
       elements.missionReadyStatus.textContent = cellMarket ? "Market and weather inputs are ready." : "Preparing cell market data…";
+      elements.missionReadyStatus.dataset.ready = String(Boolean(cellMarket));
     } catch {
       elements.missionGateAction.disabled = true;
       elements.missionSetupQuote.textContent = "Choose a valid spacecraft package and orbit.";
@@ -1582,6 +1640,7 @@ async function start(): Promise<void> {
   elements.missionMarketRetry.addEventListener("click", () => {
     elements.missionMarketRetry.disabled = true;
     elements.missionReadyStatus.textContent = "Retrying cell-market data…";
+    elements.missionReadyStatus.dataset.ready = "false";
   });
   updateMissionQuote();
 
